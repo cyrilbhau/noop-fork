@@ -1,6 +1,10 @@
 #if os(iOS)
 import Foundation
 import WidgetKit
+import WhoopProtocol
+import WhoopStore
+import StrandAnalytics
+import StrandImport
 
 extension WidgetSnapshot {
     /// The ACTIVE device's charge for the widget (#2075).
@@ -98,6 +102,7 @@ extension WidgetSnapshot {
         // would decode the App Group blob twice on any publish that could not score, and this file
         // already went to the trouble of removing one such decode from the live path.
         let storedStress: WidgetSnapshot? = stress == nil ? load() : nil
+        let personal = await personalMetrics(from: model, now: now)
         let snap = WidgetSnapshot(
             recovery: day?.recovery.map { Int($0.rounded()) },
             bpm: model.bpm ?? model.live.heartRate,
@@ -114,9 +119,102 @@ extension WidgetSnapshot {
             // nil when the curve could not be scored at all, which must not blank a widget that already
             // has one: carry the stored values forward instead of publishing an absence.
             stressSeries: stressPoints ?? storedStress?.stressSeries,
-            stressDay: stress?.day ?? storedStress?.stressDay
+            stressDay: stress?.day ?? storedStress?.stressDay,
+            personal: personal
         )
         saveAndReloadIfChanged(snap)
+    }
+
+    // These iOS-only widgets consume existing analytics; they never mix phone steps into the band
+    // estimate, infer a default goal, or label a publication timestamp as a measurement timestamp.
+    @MainActor
+    private static func personalMetrics(from model: AppModel, now: Date) async -> PersonalWidgetMetrics {
+        let calendar = Calendar.current
+        let today = PersonalWidgetMetrics.dayKey(now, calendar: calendar)
+        let store = await model.repo.storeHandle()
+        var steps: PersonalStepReading?
+        if let store, let registry = model.deviceRegistry {
+            let from = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
+            let to = Int(now.timeIntervalSince1970)
+            let owner = await IntelligenceEngine.resolveDayOwner(
+                day: today, from: from, to: to, store: store, devices: registry.devices,
+                activeId: registry.activeDeviceId,
+                registry: DeviceRegistryStore(dbQueue: store.registryWriter),
+                fallbackDeviceId: model.deviceId
+            )
+            if let device = registry.devices.first(where: { $0.id == owner }),
+               DeviceFamily.confirmedRegistryFamily(model: device.model, brand: device.brand) == .whoop4 {
+                let estimates = await model.repo.resolvedSeries(
+                    key: "steps_est", source: Repository.whoopSource, from: today, to: today
+                )
+                // The resolver can fall through to another computed namespace. Only a point owned
+                // by the positively identified 4.0 source is safe to label as a WHOOP 4.0 estimate.
+                // A re-paired/legacy canonical estimate without that attribution stays unavailable.
+                if let point = estimates.points.first(where: {
+                    $0.day == today && $0.source == owner + "-noop" && $0.sourceKey == "steps_est"
+                }) {
+                    steps = PersonalStepReading.estimate(value: point.value, day: today)
+                }
+            }
+        }
+
+        let sessions = await model.repo.allSleepSessions(days: 3)
+        let habitual = await model.repo.habitualMidsleepSec(days: 30)
+        // Only the frontier is needed to withhold an open night. Use indexed MAX reads, never
+        // materialise two days of minute buckets on every full widget publication.
+        var newestHR = 0
+        if let store {
+            for id in model.repo.importedReadIds {
+                if let ts = try? await store.latestHRSampleTs(deviceId: id),
+                   ts <= Int(now.timeIntervalSince1970) { newestHR = max(newestHR, ts) }
+            }
+        }
+        let byDay = Dictionary(grouping: sessions.filter { $0.endTs <= Int(now.timeIntervalSince1970) }) {
+            PersonalWidgetMetrics.dayKey(Date(timeIntervalSince1970: TimeInterval($0.endTs)), calendar: calendar)
+        }
+        var sleep: PersonalSleepReading?
+        for day in byDay.keys.sorted().reversed() {
+            guard let blocks = byDay[day], let group = SleepStageTotals.mainNightGroupIndices(
+                blocks.map { .init(start: $0.effectiveStartTs, end: $0.endTs) },
+                offsetSec: calendar.timeZone.secondsFromGMT(for: now), habitualMidsleepSec: habitual
+            ) else { continue }
+            let selected = group.map { blocks[$0] }
+            let sources: [PersonalSleepReading.Source?] = selected.map { session in
+                guard let id = session.deviceId else { return nil }
+                if id.hasSuffix("-noop") { return .localEstimate }
+                return model.repo.importedReadIds.contains(id) ? .whoopImport : nil
+            }
+            guard let source = sources.first ?? nil, sources.allSatisfy({ $0 == source }),
+                  let start = selected.map(\.effectiveStartTs).min(),
+                  let end = selected.map(\.endTs).max() else { continue }
+            if source == .localEstimate,
+               HealthWriteback.nightIsStillOpen(endTs: end, newestHeartRateTs: newestHR,
+                                                now: Int(now.timeIntervalSince1970)) { continue }
+            let totals = selected.map {
+                SleepStageTotals.minutes(fromStagesJSON: SleepStageTotals.clampStagesToOnset(
+                    $0.stagesJSON, onsetSec: $0.effectiveStartTs
+                ))
+            }
+            guard totals.allSatisfy({ $0 != nil }) else { continue }
+            let reading = PersonalSleepReading.reading(
+                asleepMinutes: totals.compactMap { $0?.asleep }.reduce(0, +),
+                start: Date(timeIntervalSince1970: TimeInterval(start)),
+                end: Date(timeIntervalSince1970: TimeInterval(end)), source: source,
+                incomplete: selected.contains { $0.stagingSparse == true },
+                userEdited: selected.contains { $0.userEdited }
+            )
+            let candidate = PersonalWidgetMetrics(sleep: reading)
+            if let recent = candidate.recentSleep(now: now, calendar: calendar) {
+                sleep = recent
+                break
+            }
+        }
+        // Keep the chosen goal even when an estimate is unavailable. Missing steps are not zero
+        // progress, and absence of the estimate must not erase a target the user explicitly chose.
+        return PersonalWidgetMetrics(
+            steps: steps, sleep: sleep,
+            stepGoal: UserDefaults.standard.integer(forKey: PersonalWidgetMetrics.stepGoalKey)
+        )
     }
 
     /// Publish fields that come directly from the live BLE state without re-reading the Rest metric
@@ -137,10 +235,9 @@ extension WidgetSnapshot {
         // rewrote it between here and the save); hand it to the dedup so the live path reads the App Group
         // ONCE per tick instead of loading it again inside saveAndReloadIfChanged.
         let previous = snap
-        snap.bpm = model.bpm ?? model.live.heartRate
-        snap.batteryPct = Self.activeBatteryPct(from: model)
-        snap.bonded = model.live.bonded
-        snap.updated = now
+        snap = snap.updatingLive(bpm: model.bpm ?? model.live.heartRate,
+                                 batteryPct: Self.activeBatteryPct(from: model),
+                                 bonded: model.live.bonded, at: now)
         saveAndReloadIfChanged(snap, previous: previous)
     }
 

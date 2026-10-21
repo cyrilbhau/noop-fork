@@ -40,12 +40,15 @@ public struct WidgetSnapshot: Codable, Equatable {
     /// so the widget cannot show yesterday's afternoon under today's date while waiting for the first
     /// scorable hour after midnight.
     public var stressDay: Int?
+    // Optional personal-fork payload. Legacy snapshots decode with nil, keeping existing widgets
+    // and the upstream shared score contract intact.
+    public var personal: PersonalWidgetMetrics?
 
     public init(recovery: Int?, bpm: Int?, batteryPct: Int?, bonded: Bool, updated: Date,
                 effort: Int? = nil, rest: Int? = nil, hrv: Int? = nil, restingHr: Int? = nil,
                 effortDisplay: String? = nil, effortWhoop: Bool? = nil,
                 hrSeries: [HrPoint]? = nil, stressSeries: [StressPoint]? = nil,
-                stressDay: Int? = nil) {
+                stressDay: Int? = nil, personal: PersonalWidgetMetrics? = nil) {
         self.recovery = recovery
         self.bpm = bpm
         self.batteryPct = batteryPct
@@ -60,6 +63,7 @@ public struct WidgetSnapshot: Codable, Equatable {
         self.hrSeries = hrSeries
         self.stressSeries = stressSeries
         self.stressDay = stressDay
+        self.personal = personal
     }
 
     /// The curve to DRAW: what was published, unless it belongs to a day that is over.
@@ -229,6 +233,18 @@ public struct WidgetSnapshot: Codable, Equatable {
             // midnight still reaches WidgetKit even when the new day has no scored hour yet.
             || previous.stressSeries != next.stressSeries
             || previous.stressDay != next.stressDay
+            || previous.personal != next.personal
+    }
+
+    // The live publisher updates only the live fields. In particular, it cannot refresh a stored
+    // daily estimate's measurement time or drop its provenance while changing the app publish time.
+    func updatingLive(bpm: Int?, batteryPct: Int?, bonded: Bool, at: Date) -> WidgetSnapshot {
+        var next = self
+        next.bpm = bpm
+        next.batteryPct = batteryPct
+        next.bonded = bonded
+        next.updated = at
+        return next
     }
 
     /// A live-only update may reuse score fields only within the same local calendar day. At rollover,

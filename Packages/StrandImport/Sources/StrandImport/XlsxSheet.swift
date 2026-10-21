@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 import ZIPFoundation
 
 // A deliberately small `.xlsx` reader: enough to read a filled-in template, and nothing else.

@@ -87,6 +87,10 @@ export.xml
 export.zip
 *whoop_export*.zip
 *apple_health*.zip
+# Personal fork exports and device evidence stay private.
+*.noopbak
+*.noopbak.*
+/PersonalData/
 
 # Python bytecode
 __pycache__/

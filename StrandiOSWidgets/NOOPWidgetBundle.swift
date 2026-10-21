@@ -15,5 +15,7 @@ struct NOOPWidgetBundle: WidgetBundle {
         StressWidget()
         LiftLiveActivity()
         SyncLiveActivity()
+        PersonalStepsWidget()
+        PersonalSleepWidget()
     }
 }
