@@ -5,6 +5,12 @@ The pinned upstream baseline is `8e4b0c16e7640607600fa6bde5424095eba6034e`.
 No iOS build, signing, installation, or Bluetooth test has been performed in the Linux cloud machine.
 A Mac running Xcode is required for those checks; passing Linux package tests cannot substitute for them.
 
+**Current owner's Mac:** setup, baseline/personal builds, 94 relevant tests and the final unsigned
+iPhone-only build have passed. The app launched in Simulator. Physical installation is blocked by
+Apple Developer device status **Processing**. Use [MAC-CONTINUE.md](MAC-CONTINUE.md) to resume the
+existing task after **Enabled**, preserving its uncommitted source and private signing configuration.
+The steps below are the general setup reference, not a request to repeat completed setup.
+
 ## 1. Prepare the Mac
 
 1. Obtain this task's prepared source folder on the Mac. It is the folder containing `project.yml`,
@@ -17,7 +23,8 @@ A Mac running Xcode is required for those checks; passing Linux package tests ca
    Keep the hidden `.git` directory: the baseline helper needs the original commit. The bundle
    excludes build caches, local signing configuration, private data and toolchain downloads.
 2. Install **Xcode 26 or newer**, open it once, accept its terms, and install its iOS simulator SDK.
-   In **Xcode → Settings → Locations → Command Line Tools**, select this Xcode installation.
+   Prefer per-command `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` when the global
+   selection points elsewhere. The owner's existing Xcode 27.1 setup and global selection are preserved.
 3. In **Xcode → Settings → Accounts**, sign in to the paid Apple Developer account. Keep the
    password, signing certificates, and private keys on the Mac; do not paste them into chat.
 4. Install **XcodeGen 2.45 or newer**. If Homebrew is already installed, run `brew install xcodegen`.
@@ -31,22 +38,21 @@ A Mac running Xcode is required for those checks; passing Linux package tests ca
 The phone must run iOS 17 or newer and be supported by the installed Xcode. An iOS 26 SDK is a
 build prerequisite even when deploying to an older supported phone.
 
-## 2. Compile the original baseline first
+## 2. Original baseline gate — completed
 
-```bash
-bash Tools/personal/ios.sh baseline
-```
+The Mac already built the exact pinned original from a temporary Git archive, without signing,
+for both Simulator architectures. Its log is retained in ignored `build/personal/logs/baseline-ios.log`.
+That original included upstream watch targets before the owner's iPhone-only scope instruction.
+Do not repeat that watch work during the current resume. The personal target graph now contains
+only the iPhone app and widget; standalone upstream watch sources are retained but not embedded.
 
-This extracts the exact pinned Git commit into a temporary directory and builds the unmodified
-`NOOPiOS` scheme for iOS Simulator with signing disabled. It uses the committed package resolution.
-It does not install anything or use personal signing settings. Build products are under the ignored
-`build/personal/baseline-derived` directory; the temporary source is removed on exit.
-
-Only **“Pinned upstream iOS simulator compile passed”** is a successful result. Save a failure's error
-text without personal information. Do not proceed as though a failed baseline built. Simulator compilation
-cannot exercise Bluetooth, the strap, overnight collection, HealthKit provisioning, or widget signing.
+Simulator compilation cannot exercise Bluetooth, the strap, overnight collection, HealthKit
+provisioning or signed widget capabilities. Those remain separate gates after installation.
 
 ## 3. Give the personal app its own identity
+
+The owner's Mac already has its paid team and the ignored configuration set. Reuse them rather
+than asking for account/Team ID again. The following is a reference for an unconfigured installation.
 
 Find the 10-character **Team ID** in the Apple Developer account's Membership details. Choose a
 unique reverse-domain prefix for this project, such as `com.cyrilbhau.personalhealth` if it belongs to
@@ -69,14 +75,12 @@ For that example prefix, the project derives:
 | iPhone app | `com.cyrilbhau.personalhealth.noop` |
 | iPhone widgets | `com.cyrilbhau.personalhealth.noop.widgets` |
 | Shared App Group | `group.com.cyrilbhau.personalhealth.noop.staging` |
-| Embedded watch app | `com.cyrilbhau.personalhealth.noop.watch` |
-| Watch complications | `com.cyrilbhau.personalhealth.noop.watch.complications` |
 
 The `.staging` suffix on the App Group is intentional upstream configuration. Keep it consistent.
 The unique app identifier creates a separate app sandbox/database; the unique App Group separates
 widget snapshots. This does **not** isolate Apple Health, which remains the phone's shared health
-store. The personal app may still be labelled “NOOP” on the Home Screen, so check its bundle ID in
-Xcode rather than identifying it by its icon alone. Leave an existing installation and its data intact.
+store. The personal app and widget display **NOOP Cyril**. Also check their bundle IDs in Xcode;
+an icon or name alone does not establish identity. Leave existing installations and data intact.
 
 ## 4. Build the fork, then sign and run in Xcode
 
@@ -90,14 +94,15 @@ The second generates the project and opens Xcode; it does not build, provision, 
 Never commit the generated `Strand.xcodeproj` project or build output. The tracked package lockfile
 inside the generated project remains part of the source baseline.
 
-1. Connect the unlocked iPhone to the Mac with a cable. Choose **Trust** if asked.
+1. For the current owner, wait for **Enabled** in Apple Developer before retrying provisioning.
+   Then connect the unlocked iPhone to the Mac with a cable. Choose **Trust** only if asked again.
 2. Enable **Settings → Privacy & Security → Developer Mode** on the iPhone if Xcode requests it;
    follow the phone's restart prompt.
 3. In Xcode select the blue project icon, then **Signing & Capabilities**. Confirm the paid Team
-   and **Automatically manage signing** on `NOOPiOS`, `NOOPiOSWidgets`, `NOOPWatch`, and
-   `NOOPWatchComplications`. The watch targets are embedded even when an Apple Watch is not used.
+   and **Automatically manage signing** on `NOOPiOS` and `NOOPiOSWidgets` only. No watch target
+   should be built or embedded for this personal iPhone-only app.
 4. Confirm **HealthKit** and **HealthKit background delivery** on `NOOPiOS`, and the same App Group
-   on the app and widget targets. Preserve the embedded watch targets' generated capabilities too.
+   on the app and widget targets. Verify the signed profiles/entitlements once provisioning succeeds.
    If Xcode reports that an identifier belongs to another team, choose a different personal prefix;
    do not remove HealthKit, widgets, or entitlements to hide the error.
 5. Select the **NOOPiOS** scheme and the connected **physical iPhone** as the run destination.

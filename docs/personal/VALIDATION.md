@@ -1,8 +1,8 @@
 # Validation record — 21 October 2026
 
 Audited baseline: `8e4b0c16e7640607600fa6bde5424095eba6034e`. Linux x86_64, Swift 6.0.3,
-snapshot-enabled SQLite 3.53.4. This record separates engine checks from the unrun Apple app build.
-No health export, API credential, iPhone or WHOOP device was available.
+snapshot-enabled SQLite 3.53.4. The initial cloud checks below had no Apple SDK, signing access,
+iPhone or WHOOP device. Subsequent Mac results are recorded separately; see `MAC-STATUS.md`.
 
 ## Executed checks
 
@@ -30,22 +30,48 @@ Compression/raw-outbox tests compile out on Linux and are **unrun**, not passed 
 `StrandDesign`, other device-brand packages, Android, app-target `StrandTests`, simulator and hardware
 checks were not used as substitutes for the selected iPhone workflow.
 
-## Apple build and hardware gate
+## Subsequent Mac verification
+
+The owner's local task recorded the following completed work on 21 October 2026 (IST). The cloud
+read its command results/build-summary outputs and final source diff; it did not rerun Xcode.
+
+| Mac check | Recorded outcome |
+|---|---|
+| Unmodified pinned baseline | Build passed from an immutable temporary archive, signing disabled, arm64/x86_64 Simulator. Historical watch compilation preceded the later iPhone-only scope. |
+| Personal Simulator app/widgets | Build passed after the `FormRow` access-level fix. Widget views compiled. |
+| Relevant app-target tests | **94 passed, zero failures** across personal widget metrics, snapshots, settings defaults, HR/stress traces and widget telemetry. |
+| Simulator launch | Installed/launched and first-run agreement screen visually checked; no agreement/permissions accepted. This run preceded watch removal. |
+| Final iPhone-only iPhoneOS build | Build passed unsigned, with the iPhone app/widget only and no watch build/embedding. Compilation for hardware is not execution on the physical phone. |
+| Signed physical build | Two attempts blocked during provisioning. Owner confirmed device status **Processing** and profiles excluded this phone. No successful signed build/install/launch. |
+
+The cloud synchronized the exact four source changes shown by the Mac task. Resulting blob prefixes
+match `8103a08b` (shared Settings), `279494c3` (project), `3c2cc7fb` (iPhone plist) and `5347b66f`
+(widget plist). YAML/plist checks confirmed the iPhone/widget-only target graph, display names,
+App Group placeholders, background identifiers and retained HealthKit declarations. This does not
+establish signed entitlements; those require successful development provisioning.
+
+The source/property change and the Mac build/compiler fix are now recorded together. Future
+resumes must preserve the Mac's original uncommitted changes before merging the cloud branch;
+see `MAC-CONTINUE.md`. No local signing config, profile, device identifier or app inventory was
+transferred to the cloud source. The 94 Mac results are distinct from the earlier cloud counts.
+
+## Initial cloud-only Apple build boundary (historical)
 
 Before personal app-source changes, the baseline iOS build was attempted through the build tool
 entry point. `xcodebuild` was absent: the command could not execute, and no SDK or simulator exists
 on Linux. Recorded status: **blocked/unrun**, not a failed application compile or a successful build.
 The personal Mac preflight also correctly refused Linux with a clear explanation.
 
-The new UI is **implemented but uncompiled**. A Swift 6.0.3 parse of the app publisher also encounters
+At that earlier point, the new UI was **implemented but uncompiled**. A Swift 6.0.3 parse of the app publisher also encounters
 pre-existing argument trailing-comma syntax in the immutable baseline; Xcode 26's newer Swift/Apple
 SDK remains the required app check. Pure payload compilation cannot establish SwiftUI/WidgetKit or
 CoreBluetooth compatibility. `Tools/personal/ios.sh baseline` and `build` supply the exact Mac commands;
-they must both actually pass before calling the app build verified.
+the later Mac records above establish those completed builds.
 
 No app signing, provisioning, installation, live Bluetooth connection, locked-phone collection,
 step accuracy, sleep accuracy, HealthKit writes/deletions, widget refresh, real import or iPhone
-backup/restore test was performed. Keep all those outcomes **unverified**. The accepted first step
+backup/restore test was performed in the cloud. Physical signing/installation/launch and collection
+remain **unverified** after the Mac update. The accepted first step
 thresholds are ≤10% on each 500–1,000-step walk and ≤20 false steps in 30 seated minutes; no measured
 walk results exist yet. Other quantitative tolerances remain proposals in the device plan.
 

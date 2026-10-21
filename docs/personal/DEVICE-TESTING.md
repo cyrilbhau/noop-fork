@@ -1,6 +1,8 @@
 # WHOOP 4.0 device validation
 
-No hardware results are available yet. Use the personal app identity from [INSTALL.md](INSTALL.md).
+No WHOOP collection or accuracy results are available yet. The Mac builds passed, but physical
+installation waits for Apple to enable the phone; see [MAC-STATUS.md](MAC-STATUS.md).
+Use the personal app identity from [INSTALL.md](INSTALL.md).
 Keep the unchanged engine as the reference until collection passes. The target is a dependable
 replacement by **12 November 2026**, before the stated membership end on **19 November 2026**;
 these dates are planning targets, not evidence that the app is ready.

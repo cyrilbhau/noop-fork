@@ -1,8 +1,10 @@
 # Personal WHOOP 4.0 iPhone fork
 
-The source and Linux engine checks are prepared. **The iPhone app has not been built or tested on
-a device in this task.** The next gate is the unchanged baseline build on a Mac, followed by the
-phone-free step and overnight tests. A dependable replacement is not yet established.
+The original baseline, personal Simulator build and final unsigned iPhone-only build have passed
+on the owner's Mac, along with **94 relevant Mac tests**. The personal app launched in Simulator.
+**Installation on the physical iPhone is blocked by Apple Developer device status Processing.**
+The personal build contains the iPhone app and its widgets only; the owner has no Apple Watch.
+See [the Mac status and source synchronization record](docs/personal/MAC-STATUS.md).
 
 Start with [Mac build, signing and installation](docs/personal/INSTALL.md), then use
 [the short device procedure](docs/personal/DEVICE-TESTING.md).
@@ -17,7 +19,7 @@ Start with [Mac build, signing and installation](docs/personal/INSTALL.md), then
 | Offline SpO₂ percentage | Unsupported from the 4.0 sensor stream. Imported historical percentages are a separate source. |
 | Apple Health | Existing reads/writes and genuine SDNN export; no step writer. Keep writes off for the collection baseline. Reconciliation deletes/replaces app-authored samples and needs explicit approval before use. |
 | Hevy | Manual CSV import is implemented. Automatic synchronization and lossless set-level history are not implemented; preserve the original CSV. |
-| Widgets | Existing Charge/Effort/Rest widgets plus new source for estimated steps/goal and recent sleep. Pure payload tests pass; WidgetKit compilation, signing and refresh remain unverified. |
+| Widgets | Existing Charge/Effort/Rest widgets plus estimated steps/goal and recent sleep. Pure payload tests and Mac compilation passed; signed physical installation and refresh remain unverified. |
 | Local storage, export and backup | Existing SQLite and `.noopbak` workflows; storage tests pass. An iPhone backup/restore rehearsal remains unverified. |
 
 Full evidence: [collection](docs/personal/COLLECTION-AUDIT.md),
@@ -30,13 +32,16 @@ Full evidence: [collection](docs/personal/COLLECTION-AUDIT.md),
 Upstream: <https://github.com/ryanbr/noop> at
 `8e4b0c16e7640607600fa6bde5424095eba6034e` (12.1.0 testing, iOS build 438).
 This exact main commit was selected to audit current fixes. It is newer testing code, not the
-stable 12.0.0 release or a hardware-qualified version. The build helper compiles that immutable
-baseline from a temporary Git archive before compiling any personal changes.
+stable 12.0.0 release or a hardware-qualified version. The unchanged baseline was built from an
+immutable temporary Git archive on the Mac. That historical check is complete; do not repeat its
+watch compilation during the current iPhone-only provisioning resume.
 
 Personal additions are deliberately modular:
 
 - Reusable Linux setup and Mac build/signing helpers, private app identity, and device acceptance plan.
 - A conditional `FoundationXML` import repairing the baseline's Linux XLSX compilation failure.
+- Mac-validated shared form-row visibility fix, **NOOP Cyril** display names and an iPhone-only
+  dependency graph that keeps the phone widget while excluding watch compilation/embedding.
 - Additive optional widget payload, estimated-step/goal and sleep widgets, and a user-selected goal
   under **Settings → Profile → Daily step goal**. No goal is assumed; local steps remain labelled
   estimates with unknown freshness, and sleep carries its real end time and source.
@@ -51,7 +56,7 @@ The source remains under [PolyForm Noncommercial 1.0.0](LICENSE). Keep `LICENSE`
 `ATTRIBUTION.md` and `DISCLAIMER.md`; personal noncommercial use is permitted, commercial rights
 are not granted. Prepared source is now available on
 [`personal/iphone-baseline`](https://github.com/cyrilbhau/noop-fork/tree/personal/iphone-baseline).
-No app has been published or installed. Scheduled governance/branch-cleanup jobs are gated to the
+No app has been published or installed on the physical iPhone. Scheduled governance/branch-cleanup jobs are gated to the
 upstream repository; personal-fork runs remain manual. No hosted build service was started.
 
 For the authorized Mac-to-iPhone installation work, follow
@@ -60,7 +65,8 @@ Mac task, because this cloud task cannot execute Xcode or create the local task 
 
 ## Next milestones
 
-1. Compile the original and fork with Xcode 26+, then sign under a distinct personal identity.
+1. After Apple shows the phone as **Enabled**, resume the existing Mac task, preserve its local
+   source/configuration, refresh provisioning, then sign/install/launch the iPhone app and widget.
 2. Check two phone-free walks against the **agreed ≤10% error** limit and a seated trial against
    **≤20 false steps per 30 minutes**. If the estimate cannot meet the requirement, use an explicitly
    attributed measured pedometer source; carrying the iPhone is the smallest existing alternative.

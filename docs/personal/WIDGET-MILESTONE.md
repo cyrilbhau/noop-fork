@@ -6,7 +6,12 @@ protocol decoding, physiological algorithms, database schema, and existing widge
 baseline engine. This is an intentional iOS-only personal presentation preference and widget
 addition; it does not change the Swift/Kotlin analytics or stored-data parity contract.
 
-## Implemented, not yet built with Xcode or tested on an iPhone
+## Compiled on the Mac; physical widget behavior unverified
+
+Update, 21 October 2026: the owner's personal Simulator and final unsigned iPhone-only builds
+passed, including these widget views. Relevant Mac app tests also passed (94 cases). Signed
+physical installation and refresh remain blocked by Apple device processing. See `MAC-STATUS.md`;
+the Linux validation below describes the earlier cloud-only evidence.
 
 - **Band Steps** Home Screen and rectangular Lock Screen widgets read the optional personal payload
   in the existing App Group snapshot. The number is labelled **Estimated • WHOOP 4.0**. No iPhone or
