@@ -3422,7 +3422,7 @@ struct StepsCalibrationSheet: View {
 // MARK: - Two-column form row
 
 /// Label on the left, control on the right — the two-column form feel.
-private struct FormRow<Control: View>: View {
+struct FormRow<Control: View>: View {
     let label: LocalizedStringKey
     @ViewBuilder var control: () -> Control
 

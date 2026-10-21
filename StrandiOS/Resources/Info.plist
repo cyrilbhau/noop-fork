@@ -10,11 +10,12 @@
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).coachbrief</string>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).healthwriteback</string>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).rescore</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).stalebattery</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>NOOP</string>
+	<string>NOOP Cyril</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIcons</key>
