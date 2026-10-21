@@ -8,8 +8,10 @@ A Mac running Xcode is required for those checks; passing Linux package tests ca
 ## 1. Prepare the Mac
 
 1. Obtain this task's prepared source folder on the Mac. It is the folder containing `project.yml`,
-   `Packages`, and `Tools`. The originally empty `cyrilbhau/noop-fork` remote alone does not contain
-   these files until this work has been saved there.
+   `Packages`, and `Tools`. The prepared source is on the `personal/iphone-baseline` branch of
+   `cyrilbhau/noop-fork`. A local Codex task in **Noop for Cyril** can follow
+   [MAC-CONTINUE.md](MAC-CONTINUE.md) to clone that branch into an unused child directory and do
+   the Mac work. Preserve existing files and installations.
    The provided `noop-personal-source.tar.gz` bundle contains the prepared folder **and its pinned
    baseline Git history**. Double-click it in Finder to expand `noop-personal`, then use that folder.
    Keep the hidden `.git` directory: the baseline helper needs the original commit. The bundle

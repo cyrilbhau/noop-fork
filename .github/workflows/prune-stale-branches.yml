@@ -49,6 +49,8 @@ concurrency:
 
 jobs:
   prune:
+    # Branch cleanup remains opt-in outside the upstream repository.
+    if: github.event_name != 'schedule' || github.repository == 'ryanbr/noop'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -49,7 +49,14 @@ remain the baseline interface; the Today/Sleep/Health/Training redesign waits fo
 
 The source remains under [PolyForm Noncommercial 1.0.0](LICENSE). Keep `LICENSE`, `NOTICE`,
 `ATTRIBUTION.md` and `DISCLAIMER.md`; personal noncommercial use is permitted, commercial rights
-are not granted. No app has been published and no changes have been pushed to GitHub.
+are not granted. Prepared source is now available on
+[`personal/iphone-baseline`](https://github.com/cyrilbhau/noop-fork/tree/personal/iphone-baseline).
+No app has been published or installed. Scheduled governance/branch-cleanup jobs are gated to the
+upstream repository; personal-fork runs remain manual. No hosted build service was started.
+
+For the authorized Mac-to-iPhone installation work, follow
+[the local Codex continuation](docs/personal/MAC-CONTINUE.md). The next runtime must be a local
+Mac task, because this cloud task cannot execute Xcode or create the local task itself.
 
 ## Next milestones
 
