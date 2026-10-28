@@ -26,6 +26,7 @@ struct LiftLogView: View {
     /// The program being created or edited (nil = the editor is closed).
     @State private var editing: ProgramEditTarget?
     @State private var importing = false
+    @State private var pastingWorkout = false
     /// The live session, owned at the app root so it survives this screen going away.
     @EnvironmentObject private var session: LiftSessionController
     /// Recent finished sessions, newest first.
@@ -62,6 +63,9 @@ struct LiftLogView: View {
         .sheet(isPresented: $importing) {
             LiftProgramImportSheet { await load() }
         }
+        .sheet(isPresented: $pastingWorkout) {
+            WorkoutTextImportSheet { await repo.refresh(); await load() }
+        }
         .sheet(item: $viewing) { target in
             LiftSessionDetailSheet(session: target.session) { await load() }
         }
@@ -94,6 +98,10 @@ struct LiftLogView: View {
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Button { pastingWorkout = true } label: {
+                    Label("Paste workout text", systemImage: "doc.on.clipboard")
+                }
+                .buttonStyle(NoopButtonStyle(.primary))
             }
         }
     }
@@ -363,9 +371,9 @@ struct LiftLogView: View {
         programs = (try? await store.liftPrograms(deviceId: repo.deviceId)) ?? []
 
         let now = Int(Date().timeIntervalSince1970)
-        history = ((try? await store.liftSessions(deviceId: repo.deviceId,
-                                                  fromTs: now - 180 * 86_400,
-                                                  toTs: now)) ?? [])
+        let local = (try? await store.liftSessions(deviceId: repo.deviceId, fromTs: 0, toTs: now)) ?? []
+        let imported = (try? await store.liftSessions(deviceId: PersonalLiftingImport.deviceId, fromTs: 0, toTs: now)) ?? []
+        history = (local + (repo.deviceId == PersonalLiftingImport.deviceId ? [] : imported))
             .filter { $0.endTs != nil }                 // an abandoned session is not history
             .sorted { $0.startTs > $1.startTs }
         weekCounts = (try? await store.liftSetCounts(deviceId: repo.deviceId,

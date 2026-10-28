@@ -15,6 +15,23 @@ dependency, no telemetry, and **not a medical device** (see the
 The one explicit network-export exception is the default-off Experimental self-hosted push described
 below. Everything else on this page is a consequence of these constraints, not a separate rule.
 
+## Personal-fork exception: ChatGPT subscription on iPhone
+
+The owner explicitly authorizes an optional ChatGPT subscription provider for Coach on this
+personal, locally installed iPhone build. This narrow exception to the upstream bring-your-own-key
+coaching boundary does not change upstream scope or propose wider distribution.
+
+The integration uses the owner's OpenAI account and separately granted plan permission. Requests go
+directly to OpenAI; no NOOP account, operated backend, account sync, or telemetry is introduced.
+Local collection and analytics continue without the connection. Health-data consent remains
+independent, and existing API-key and Custom providers remain available. Android, Apple Watch, and
+macOS sign-in UI are excluded; shared Swift still compiles for the macOS target.
+
+OpenAI documents this flow for personal projects that run locally. Account eligibility, available
+models, and shared usage limits still apply. See the
+[official integration guide](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt)
+and [personal-fork network inventory](PRIVACY_SECURITY.md#personal-iphone-fork-optional-chatgpt-subscription).
+
 ## Out of scope
 
 These map to features visible in WHOOP-app reverse-engineering, but they conflict with the constraints
@@ -24,7 +41,7 @@ above. They are out of scope **unless the project deliberately changes its scope
 |---|---|---|
 | Possible-arrhythmia / diagnostic-style alerts | A medical-device-style claim. NOOP is explicitly **not a medical device** and must not tell a user they may have a health condition. | #752 |
 | Community feeds, team chat, social graph, leaderboards, cloud messaging | Require a **server, accounts, and an identity** — the opposite of anonymous and offline. | #755 |
-| Cloud- or account-dependent coaching / notification parity | Requires cloud identity and server sync. NOOP's coach is strictly bring-your-own-key and on-device. | — |
+| Cloud- or account-dependent coaching / notification parity | Requires cloud identity and server sync. Upstream Coach uses bring-your-own-key access. This personal fork has the explicit iPhone exception above. | — |
 | Anything requiring telemetry, an app-dependent/hosted server sync, user identity, or medical claims | Fails a hard constraint directly. The default-off self-hosted export below is the narrow exception: NOOP never depends on its receiver. | — |
 
 ## In scope — the local, non-diagnostic equivalents

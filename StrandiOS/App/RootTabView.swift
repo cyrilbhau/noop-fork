@@ -30,6 +30,8 @@ struct RootTabView: View {
     let homeScreenQuickActionsEnabled: Bool
 
     @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var coach: AICoachEngine
+    @Environment(\.scenePhase) private var scenePhase
     /// Cross-screen navigation requests (e.g. Live → "Manage devices"). Devices isn't a tab — it lives
     /// behind the More list — so a request presents it as a sheet, matching the quick-action screens.
     @EnvironmentObject private var router: NavRouter
@@ -145,7 +147,11 @@ struct RootTabView: View {
         // any more, which renders as an empty tab rather than as an error. Send that wearer to Today, and
         // only in that case, so a flip made from anywhere else does not move them.
         .onChangeCompat(of: coachEnabled) { enabled in
+            coach.applyCoachMasterSwitch()
             if !enabled && selectedTab == 3 { selectedTab = 0 }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { coach.resumeChatGPTConnection() }
         }
         // #1841: the same "Hide bar when scrolling" preference Android drives its own bar with. Here the
         // system owns the behaviour — iOS 26's tab bar MINIMISES to a pill on scroll down rather than

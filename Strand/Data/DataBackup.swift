@@ -34,6 +34,8 @@ enum DataBackup {
     /// `.deflate`d and the count is of bytes landing on disk. (#1807)
     static let maxBackupSQLiteBytes: Int64 = 2_147_483_648
     private static let maxBackupSettingsBytes: Int64 = 1_048_576
+    private static let coachHistoryOwnerKey = "ai.chatGPT.conversationProfile"
+    private static let coachHistoryPendingKey = "ai.coachHistoryWritePending"
 
     // MARK: - Result
 
@@ -406,7 +408,8 @@ enum DataBackup {
     /// same reason as `dbPath` (tests use a suite-scoped UserDefaults, never the runner's real domain).
     static func restore(from pickedSource: URL, toDatabaseAt dbPath: String,
                         settingsDefaults: UserDefaults = .standard,
-                        allowOversize: Bool = false) -> BackupResult {
+                        allowOversize: Bool = false,
+                        beforeReplacingDatabase: (() -> Void)? = nil) -> BackupResult {
         // If the picked file is a .noopbak ZIP, extract the SQLite entry to a temp dir first.
         // Legacy plain-SQLite files fall straight through. The extracted dir is cleaned up below.
         let fm = FileManager.default
@@ -481,6 +484,17 @@ enum DataBackup {
         }
 
         let dbURL = URL(fileURLWithPath: dbPath)
+        let previousHistoryOwner = settingsDefaults.object(forKey: coachHistoryOwnerKey)
+        let previousHistoryPending = settingsDefaults.object(forKey: coachHistoryPendingKey)
+        let hadLiveDatabase = fm.fileExists(atPath: dbPath)
+        let hadLiveSidecars = fm.fileExists(atPath: dbPath + "-wal") || fm.fileExists(atPath: dbPath + "-shm")
+        func restoreHistoryMetadataAfterRollback() {
+            if let previousHistoryOwner { settingsDefaults.set(previousHistoryOwner, forKey: coachHistoryOwnerKey) }
+            else { settingsDefaults.removeObject(forKey: coachHistoryOwnerKey) }
+            if let previousHistoryPending { settingsDefaults.set(previousHistoryPending, forKey: coachHistoryPendingKey) }
+            else { settingsDefaults.removeObject(forKey: coachHistoryPendingKey) }
+            settingsDefaults.synchronize()
+        }
 
         do {
             // Snapshot the current DB (+ sidecars) to a timestamped side file so the user can roll back.
@@ -495,6 +509,16 @@ enum DataBackup {
             }
 
             // Remove the live DB and its WAL/SHM siblings, then drop the backup in.
+            // The backup has no account ownership metadata. Persist the same write-ahead marker the
+            // Coach reader checks BEFORE the first live mutation, so process death cannot replay
+            // imported rows under this installation's preceding ChatGPT profile.
+            settingsDefaults.set(true, forKey: coachHistoryPendingKey)
+            guard settingsDefaults.synchronize() else {
+                restoreHistoryMetadataAfterRollback()
+                throw CocoaError(.fileWriteUnknown)
+            }
+            // Observation-only seam for the real-file restore tests; production callers omit it.
+            beforeReplacingDatabase?()
             removeIfPresent(dbURL)
             removeIfPresent(URL(fileURLWithPath: dbPath + "-wal"))
             removeIfPresent(URL(fileURLWithPath: dbPath + "-shm"))
@@ -509,7 +533,12 @@ enum DataBackup {
                 // block the restore.
                 if sidecar != dbURL, fm.fileExists(atPath: sidecar.path) {
                     removeIfPresent(dbURL)
-                    try? fm.copyItem(at: sidecar, to: dbURL)
+                    if (try? fm.copyItem(at: sidecar, to: dbURL)) != nil,
+                       !hadLiveSidecars, DatabaseIntegrity.quickCheckFailure(atPath: dbURL.path) == nil {
+                        restoreHistoryMetadataAfterRollback()
+                    }
+                } else if !hadLiveDatabase, !hadLiveSidecars, !fm.fileExists(atPath: dbURL.path) {
+                    restoreHistoryMetadataAfterRollback()
                 }
                 return .failure(String(localized: "Import failed. Your existing data was kept. \(error.localizedDescription)"))
             }
@@ -526,11 +555,17 @@ enum DataBackup {
             if let complaint = DatabaseIntegrity.quickCheckFailure(atPath: dbURL.path) {
                 removeIfPresent(dbURL)
                 if sidecar != dbURL, fm.fileExists(atPath: sidecar.path) {
-                    try? fm.copyItem(at: sidecar, to: dbURL)
+                    if (try? fm.copyItem(at: sidecar, to: dbURL)) != nil,
+                       !hadLiveSidecars, DatabaseIntegrity.quickCheckFailure(atPath: dbURL.path) == nil {
+                        restoreHistoryMetadataAfterRollback()
+                    }
                     return .failure(String(localized: "Import failed its post-restore integrity check (SQLite reports: \(DatabaseIntegrity.readableComplaint(complaint))). Your previous data was rolled back automatically and is unchanged."))
                 }
                 // Fresh install: there was no previous store to preserve, so removing the damaged
                 // file (done above) restores the exact pre-import state — an empty slate.
+                if !hadLiveDatabase, !hadLiveSidecars, !fm.fileExists(atPath: dbURL.path) {
+                    restoreHistoryMetadataAfterRollback()
+                }
                 return .failure(String(localized: "Import failed its post-restore integrity check (SQLite reports: \(DatabaseIntegrity.readableComplaint(complaint))). The damaged file was removed; there was no previous data to roll back."))
             }
 
@@ -569,7 +604,10 @@ enum DataBackup {
             }
             // #57 debug: record when a restore swapped the DB, so the export can correlate a restore with a
             // later write stall (a restore not followed by a relaunch is the #57 failure).
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "backup.lastRestoreAt")
+            settingsDefaults.removeObject(forKey: coachHistoryOwnerKey)
+            settingsDefaults.set(false, forKey: coachHistoryPendingKey)
+            settingsDefaults.set(Date().timeIntervalSince1970, forKey: "backup.lastRestoreAt")
+            settingsDefaults.synchronize()
             return .imported(sidecar: sidecar)
         } catch {
             return .failure(String(localized: "Import failed: \(error.localizedDescription)"))

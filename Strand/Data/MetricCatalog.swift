@@ -261,6 +261,24 @@ enum MetricCatalog {
         }
     }
 
+    /// Adapts legacy score names only when presenting engine output. Stored identifiers stay stable.
+    static func scoreDisplayName(_ name: String) -> String {
+        switch name {
+        case "Charge": return String(localized: "Charge")
+        case "Effort": return String(localized: "Effort")
+        case "Rest":   return String(localized: "Rest")
+        default:       return name
+        }
+    }
+
+    /// For score narration from the analytics engine; never apply to battery or workout-rest copy.
+    static func scoreDisplayText(_ text: String) -> String {
+        ["Charge", "Effort", "Rest"].reduce(text) { result, name in
+            result.replacingOccurrences(of: "\\b\(name)\\b", with: scoreDisplayName(name),
+                                        options: .regularExpression)
+        }
+    }
+
     private static func d(_ key: String, _ title: String, _ category: String, _ unit: String,
                           _ source: String, _ icon: String, _ decimals: Int,
                           _ higherIsBetter: Bool?, _ description: String? = nil) -> MetricDescriptor {

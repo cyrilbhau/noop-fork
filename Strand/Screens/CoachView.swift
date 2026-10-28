@@ -4,10 +4,9 @@ import StrandDesign
 
 /// Coach, the one feature in NOOP that talks to the network.
 ///
-/// It is strictly opt-in and bring-your-own-key: the user pastes their own OpenAI
-/// or Anthropic API key (stored in the macOS Keychain by `AICoachEngine`), and only
-/// a compact text summary of their metrics plus their question ever leaves the Mac.
-/// Nothing is sent until a key is saved and a question asked.
+/// Provider access is opt-in: iPhone can use a ChatGPT subscription; hosted API
+/// providers use a key. Health summaries require separate consent. Credentials
+/// stay in the Keychain; requests go directly to the selected provider.
 ///
 /// This screen compiles against `AICoachEngine`'s public API (the macos-core agent's
 /// contract): `hasKey`, `provider` / `provider.modelOptions`, `model`, `messages`,
@@ -47,6 +46,7 @@ struct CoachView: View {
     // `#if os(iOS)` guards — the shared file keeps compiling for both targets.
     #if os(iOS)
     @StateObject private var voiceInput = CoachVoiceInput()
+    @State private var showChatGPTConnection = false
     #endif
 
     /// Sentinel tag for the "Custom…" entry in the model Picker.
@@ -64,13 +64,23 @@ struct CoachView: View {
                        // tabs carry, so Coach sits in one atmosphere. Static + non-interactive; the frosted
                        // message/setup cards below sit on the opaque canvas and stay legible.
                        topBackground: liquidScaffoldSky()) {
+            #if os(iOS)
+            if coach.provider != .chatGPT {
+                NoopButton("ChatGPT subscription", systemImage: "person.crop.circle", kind: .secondary) {
+                    showChatGPTConnection = true
+                }
+            }
+            #endif
             if coach.isConfigured {
                 connectedHeader
+                #if os(iOS)
+                if coach.provider == .chatGPT { chatGPTPlanBar }
+                #endif
                 transcript
                 if let error = coach.errorText, !error.isEmpty {
                     errorBanner(error)
                 }
-                if coach.keyRejected || showKeyEditor { keyRepairPanel }
+                if coach.provider != .chatGPT && (coach.keyRejected || showKeyEditor) { keyRepairPanel }
                 // K7: show follow-up chips after each assistant reply (when the transcript is
                 // non-empty and the last message is from the assistant and not mid-send);
                 // otherwise show the initial contextual chips.
@@ -137,6 +147,19 @@ struct CoachView: View {
                 .environmentObject(coach)
                 .environmentObject(repo)
         }
+        #if os(iOS)
+        .sheet(isPresented: $showChatGPTConnection) {
+            ChatGPTConnectionView(
+                session: coach.chatGPTSession,
+                hasConversation: !coach.messages.isEmpty,
+                onUse: {
+                    coach.provider = .chatGPT
+                    Task { await coach.refreshModels() }
+                },
+                onProfileChanged: { coach.clearConversation() }
+            )
+        }
+        #endif
         .confirmationDialog(
             "Clear conversation?",
             isPresented: $showClearConfirm,
@@ -180,6 +203,10 @@ struct CoachView: View {
         .onChangeCompat(of: draft) { newValue in
             UserDefaults.standard.set(newValue, forKey: Self.draftKey)
         }
+        .onChangeCompat(of: coach.provider) { _ in
+            showKeyEditor = false
+            customModel = false
+        }
         // K14: haptic feedback when a reply arrives (sending goes true → false).
         .onChangeCompat(of: coach.sending) { isSending in
             if !isSending && !coach.messages.isEmpty {
@@ -208,7 +235,7 @@ struct CoachView: View {
                         .foregroundStyle(StrandPalette.textPrimary)
                 }
 
-                Text("Coach uses your own API key. Pick a provider, paste a key, and choose a model. Your key is stored securely in the Keychain and never leaves \(Platform.deviceNounPhrase) except as the request you make.")
+                providerIntroduction
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -217,83 +244,33 @@ struct CoachView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Provider").strandOverline()
                     Picker("Provider", selection: $coach.provider) {
-                        ForEach(AIProvider.allCases) { p in
+                        ForEach(AIProvider.selectableProviders) { p in
                             Text(p.displayName).tag(p)
                         }
                     }
                     .labelsHidden()
+                    #if os(iOS)
+                    .pickerStyle(.menu)
+                    #else
                     .pickerStyle(.segmented)
+                    #endif
                     .accessibilityLabel("Provider")
                 }
 
-                // Server URL (Custom / local LLM only)
-                if coach.provider == .custom {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Server URL").strandOverline()
-                        TextField("http://localhost:11434/v1", text: $coach.customBaseURL)
-                            .textFieldStyle(.plain)
-                            .font(StrandFont.body)
-                            .foregroundStyle(StrandPalette.textPrimary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .background(StrandPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(StrandPalette.hairline, lineWidth: 1))
-                            .disableAutocorrection(true)
-                            .accessibilityLabel("Server URL")
-                        Text("Any OpenAI-compatible server: Ollama, LM Studio, llama.cpp, or your own gateway. Stays on your network; nothing leaves \(Platform.deviceNounPhrase).")
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                if coach.provider == .chatGPT {
+                    #if os(iOS)
+                    NoopButton("Continue with ChatGPT", kind: .primary) {
+                        showChatGPTConnection = true
                     }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Key header").strandOverline()
-                        Picker("Key header", selection: $coach.customAuthHeader) {
-                            ForEach(CustomAIAuthHeader.allCases) { header in
-                                Text(header.displayName).tag(header)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .accessibilityLabel("Key header")
-                        Text("Use Bearer for most local servers; use x-api-key for gateways that require the key in that header.")
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                // Model
-                modelSelector
-
-                // Key
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(coach.provider == .custom ? "API key (optional)" : "API key").strandOverline()
-                    SecureField(coach.provider == .custom
-                                ? "Only if your server requires one"
-                                : "Paste your \(coach.provider.displayName) API key", text: $keyDraft)
-                        .textFieldStyle(.plain)
-                        .font(StrandFont.body)
-                        .foregroundStyle(StrandPalette.textPrimary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .background(StrandPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(StrandPalette.hairline, lineWidth: 1))
-                        .onSubmit { coach.provider == .custom ? connectCustom() : saveKey() }
-                        .accessibilityLabel("API key")
-                }
-
-                HStack {
-                    if coach.provider == .custom {
-                        NoopButton("Connect", systemImage: "link", kind: .primary, action: connectCustom)
-                            .disabled(coach.customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    } else {
-                        NoopButton("Save key", systemImage: "key.fill", kind: .primary, action: saveKey)
-                            .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                    Spacer()
+                    Link("Manage usage", destination: URL(string: "https://chatgpt.com/settings/usage")!)
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.accent)
+                    Text("Signing in does not grant access to your health data. Coach's data-sharing settings remain separate.")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textSecondary)
+                    #endif
+                } else {
+                    legacyProviderFields
                 }
 
                 // Whatever the last attempt from THIS card ran into. The setup card had no error line
@@ -308,6 +285,88 @@ struct CoachView: View {
                 Divider().overlay(StrandPalette.hairline)
                 privacyFootnote
             }
+        }
+    }
+
+    @ViewBuilder
+    private var providerIntroduction: some View {
+        #if os(iOS)
+        Text("Use your ChatGPT subscription or connect another provider with your own API key.")
+        #else
+        Text("Coach uses your own API key. Pick a provider, paste a key, and choose a model. Your key is stored securely in the Keychain and never leaves \(Platform.deviceNounPhrase) except as the request you make.")
+        #endif
+    }
+
+    @ViewBuilder
+    private var legacyProviderFields: some View {
+        // Server URL (Custom / local LLM only)
+        if coach.provider == .custom {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Server URL").strandOverline()
+                TextField("http://localhost:11434/v1", text: $coach.customBaseURL)
+                    .textFieldStyle(.plain)
+                    .font(StrandFont.body)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(StrandPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(StrandPalette.hairline, lineWidth: 1))
+                    .disableAutocorrection(true)
+                    .accessibilityLabel("Server URL")
+                Text("Any OpenAI-compatible server: Ollama, LM Studio, llama.cpp, or your own gateway. Stays on your network; nothing leaves \(Platform.deviceNounPhrase).")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Key header").strandOverline()
+                Picker("Key header", selection: $coach.customAuthHeader) {
+                    ForEach(CustomAIAuthHeader.allCases) { header in
+                        Text(header.displayName).tag(header)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Key header")
+                Text("Use Bearer for most local servers; use x-api-key for gateways that require the key in that header.")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+
+        // Model
+        modelSelector
+
+        // Key
+        VStack(alignment: .leading, spacing: 6) {
+            Text(coach.provider == .custom ? "API key (optional)" : "API key").strandOverline()
+            SecureField(coach.provider == .custom
+                        ? "Only if your server requires one"
+                        : "Paste your \(coach.provider.displayName) API key", text: $keyDraft)
+                .textFieldStyle(.plain)
+                .font(StrandFont.body)
+                .foregroundStyle(StrandPalette.textPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(StrandPalette.surfaceInset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(StrandPalette.hairline, lineWidth: 1))
+                .onSubmit { coach.provider == .custom ? connectCustom() : saveKey() }
+                .accessibilityLabel("API key")
+        }
+
+        HStack {
+            if coach.provider == .custom {
+                NoopButton("Connect", systemImage: "link", kind: .primary, action: connectCustom)
+                    .disabled(coach.customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } else {
+                NoopButton("Save key", systemImage: "key.fill", kind: .primary, action: saveKey)
+                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Spacer()
         }
     }
 
@@ -327,14 +386,14 @@ struct CoachView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(StrandPalette.accent)
-                .disabled(!coach.hasKey)
+                .disabled(!coach.canRefreshModels)
                 .help("Fetch the available models from \(coach.provider.displayName) using your saved key")
                 .accessibilityLabel("Refresh models from provider")
             }
 
             Picker("Model", selection: modelPickerSelection) {
                 ForEach(coach.availableModels, id: \.self) { m in
-                    Text(m).tag(m)
+                    Text(verbatim: coach.modelDisplayName(m)).tag(m)
                 }
                 Divider()
                 Text("Custom…").tag(customModelTag)
@@ -395,7 +454,7 @@ struct CoachView: View {
 
     private var connectedHeader: some View {
         HStack(spacing: 10) {
-            StatePill("\(coach.provider.displayName) · \(coach.model)", tone: .accent, showsDot: true)
+            StatePill("\(coach.provider.displayName) · \(coach.modelDisplayName(coach.model))", tone: .accent, showsDot: true)
             Spacer()
             if coach.sending {
                 StatePill("Thinking", tone: .accent, pulsing: true)
@@ -417,6 +476,25 @@ struct CoachView: View {
     }
 
     #if os(iOS)
+    private var chatGPTPlanBar: some View {
+        HStack(alignment: .top, spacing: NoopMetrics.gap) {
+            VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                Text("Using ChatGPT plan")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                if let profile = coach.chatGPTSession.activeProfile {
+                    Text(verbatim: profile.email.map { "\(profile.label) · \($0)" } ?? profile.label)
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
+            }
+            Spacer()
+            Link("Manage usage", destination: URL(string: "https://chatgpt.com/settings/usage")!)
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.accent)
+        }
+    }
+
     /// #2206: the same connection actions the toolbar above carries, drawn where iPhone can reach them.
     ///
     /// `RootTabView.tab(...)` wraps every primary tab root in a NavigationStack and applies
@@ -445,10 +523,18 @@ struct CoachView: View {
     /// since its toolbar button existed, so this is a latent edge being written down, not a new one.
     private var connectionMenu: some View {
         Menu {
-            Button {
-                toggleKeyEditor()
-            } label: {
-                Label("Update key", systemImage: "key.fill")
+            if coach.provider == .chatGPT {
+                Button {
+                    showChatGPTConnection = true
+                } label: {
+                    Label("ChatGPT subscription", systemImage: "person.crop.circle")
+                }
+            } else {
+                Button {
+                    toggleKeyEditor()
+                } label: {
+                    Label("Update key", systemImage: "key.fill")
+                }
             }
             Button {
                 showClearConfirm = true
@@ -883,9 +969,15 @@ struct CoachView: View {
 
     private var privacyFootnote: some View {
         Label {
-            Text(coach.provider == .custom
-                 ? "Coach talks only to the server URL you set. Point it at a local model (Ollama, LM Studio, llama.cpp) to keep everything on your own machine. Nothing is sent until you ask."
-                 : "This is the only feature that leaves \(Platform.deviceNounPhrase). It sends a summary of your metrics to \(coach.provider.displayName) using your own key. Nothing is sent until you ask.")
+            Group {
+                if coach.provider == .chatGPT {
+                    Text("ChatGPT requests use your plan allowance. Metric summaries require your separate data-sharing consent.")
+                } else {
+                    Text(coach.provider == .custom
+                         ? "Coach talks only to the server URL you set. Point it at a local model (Ollama, LM Studio, llama.cpp) to keep everything on your own machine. Nothing is sent until you ask."
+                         : "This is the only feature that leaves \(Platform.deviceNounPhrase). It sends a summary of your metrics to \(coach.provider.displayName) using your own key. Nothing is sent until you ask.")
+                }
+            }
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)

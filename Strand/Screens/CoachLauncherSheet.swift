@@ -101,9 +101,14 @@ struct CoachLauncherSheet: View {
 
     @ViewBuilder
     private var unconfigured: some View {
-        // The SAME explanation the Coach screen shows, so the bring-your-own-key model is described
-        // once. The button routes to that screen, which stays the only place a key is entered.
-        Text("Coach uses your own API key. Pick a provider, paste a key, and choose a model. Your key is stored securely in the Keychain and never leaves \(Platform.deviceNounPhrase) except as the request you make.")
+        // Reuse the Coach setup explanation and route to its provider connection screen.
+        Group {
+            #if os(iOS)
+            Text("Use your ChatGPT subscription or connect another provider with your own API key.")
+            #else
+            Text("Coach uses your own API key. Pick a provider, paste a key, and choose a model. Your key is stored securely in the Keychain and never leaves \(Platform.deviceNounPhrase) except as the request you make.")
+            #endif
+        }
             .font(StrandFont.footnote)
             .foregroundStyle(StrandPalette.textTertiary)
 

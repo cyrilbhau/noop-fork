@@ -54,6 +54,7 @@ these are features, not a count of individual requests or destinations.
 | Path / platforms | Default and trigger | What is sent | Destination |
 | --- | --- | --- | --- |
 | AI Coach / macOS, iOS, Android (§1.1a) | Unconfigured initially; requests after provider setup for chat, model refresh or enabled briefs | Provider authentication when required; conversation text; health summaries only with data consent; optional chart attachment on Apple/Gemini | Chosen provider or Custom server |
+| ChatGPT subscription / personal iPhone fork (§1.1a) | Explicit browser sign-in, model refresh, chat/test, or separately enabled briefs | OAuth transaction/client/host identifiers and credentials; conversation text; health summaries only with independent consent | `auth.openai.com`, `api.openai.com`; temporary callback on `127.0.0.1` |
 | Oura history import / opt-in macOS, iOS build (§1.1b) | Compiled out by default; user starts authorization/import | OAuth credentials, authorization/refresh tokens and history query parameters; no existing NOOP health data | `cloud.ouraring.com`, `api.ouraring.com` |
 | Update check / macOS, iOS, Android (§1.1c) | Automatic check **on by default**, at most daily after onboarding/Terms; manual check on tap | Public release `GET`; no health data or app-added user/account identifier | `api.github.com` |
 | Self-hosted push / Android (§1.1d) | Experimental, **off by default**; configured export after offload/launch or on tap; explicit connection test | Bearer authentication; capability `GET`; versioned health batches with local installation/device IDs on export | User-owned HTTP(S) endpoint |
@@ -92,8 +93,8 @@ importers. Neither opens a socket.
 
 The AI Coach sends requests directly to the provider you choose:
 
-- **Unconfigured until you set it up.** Hosted providers (Anthropic, OpenAI and Google Gemini)
-  require your API key. A Custom OpenAI-compatible server requires an explicit Connect action;
+- **Unconfigured until you set it up.** The hosted API providers (Anthropic, OpenAI and Google Gemini)
+  require your API key. The personal iPhone subscription option below uses an explicit OAuth grant. A Custom OpenAI-compatible server requires an explicit Connect action;
   its key is optional. A server on the same machine receives requests locally; a LAN or remote
   server receives them over that network. "Self-hosted" does not necessarily mean on-device.
 - **What triggers a request.** Sending a question, refreshing the provider's model list, or
@@ -113,6 +114,56 @@ The AI Coach sends requests directly to the provider you choose:
 
 Code: `Strand/AI/AICoach.swift`, `Strand/AI/AIProvider.swift`, `Strand/AI/Providers/`,
 `Strand/System/CoachBriefScheduler.swift`; Android `com.noop.ai` and `com.noop.ui.CoachViewModel`.
+
+### Personal iPhone fork: optional ChatGPT subscription
+
+This personal fork adds an iPhone-only ChatGPT subscription provider alongside the existing
+API-key and Custom options. It creates no NOOP account or NOOP-operated intermediary.
+
+- **Explicit authorization.** Continue with ChatGPT opens OpenAI's sign-in and consent page. The
+  request includes the app name for first registration, requested scopes, a random installation
+  host identifier, and OAuth transaction values. Returning authorization reuses the issued client
+  registration; account hints are sent only to OpenAI. Signing in and allowing ChatGPT plan usage
+  are separate permissions. Identity-only sign-in cannot make model requests.
+- **Local callback.** A short-lived listener accepts the authorization result only on IPv4 loopback
+  (`127.0.0.1`) at `/auth/callback`. It does not bind to the LAN. The callback carries a one-time
+  authorization code, state, and the issued client ID for initial registration; tokens are obtained
+  separately over HTTPS. State, PKCE, and verified OpenAI ID-token claims bind the result to the
+  pending attempt and selected account.
+- **Direct OpenAI requests.** The app contacts `auth.openai.com` for code exchange, token renewal,
+  discovery/JWKS verification, and renewable-session revocation. It contacts `api.openai.com/v1/models`
+  for the selected account's catalog and `api.openai.com/v1/responses` for inference. Browser sign-in
+  and Manage usage links use OpenAI's own pages. The explicit connection test sends a greeting with
+  no health data. Opening the connection screen alone does not send health data.
+- **Independent health consent.** Connecting a ChatGPT account does not enable health-data sharing.
+  Coach still requires its existing consent before attaching metric/workout summaries or generating
+  health-based briefs. Text typed into a conversation is sent as conversation context. The existing
+  on-device dictation path remains local; this provider does not call OpenAI's transcription API.
+- **Protected credentials.** Access, refresh, and retained ID tokens, verified account metadata,
+  registration mappings, and the host identifier are held in a dedicated Keychain record using
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Tokens are excluded from preferences, the local
+  conversation database, backups/exports, App Groups, widget snapshots, logs, and diagnostics.
+  Keychain being locked or temporarily unavailable does not authorize erasing the saved connection.
+- **Local conversation history.** Inference uses `store:false` and streamed Responses requests,
+  supplying the required conversation context from NOOP's local history. These request settings do
+  not override OpenAI's processing/retention policies. Sign-in grants no access to existing ChatGPT
+  conversations or memories. Model selection, cached briefs and transcript ownership use an opaque
+  local profile UUID in app preferences; account email/subject and credentials remain in the Keychain.
+  Confirmed account changes start a new conversation and discard the prior account's cached brief.
+- **Shared usage and disconnection.** Requests consume the account's existing eligible plan usage;
+  NOOP does not receive a separate allowance and does not silently fall back to API billing.
+  Manage usage opens ChatGPT settings. Disconnect stops active work, attempts to revoke the newest
+  refresh token, and removes local tokens while retaining account/registration and host mappings for
+  a future sign-in. Local chat deletion is separate. The UI reports when local removal or remote
+  revocation could not be confirmed.
+- **Background limits.** Existing morning briefs use the same authenticated stream during permitted
+  iOS background work and keep foreground catch-up. They never present browser authorization from a
+  background task. Expiration/cancellation cannot publish partial advice as a completed brief, and
+  iOS still determines when background work runs.
+
+Code: `Strand/AI/ChatGPT/`, `Strand/AI/Providers/ChatGPT.swift`,
+`StrandiOS/App/ChatGPTSignInCoordinator.swift`, and `StrandiOS/App/ChatGPTLoopbackListener.swift`.
+
 
 ### 1.1b The Oura history import (compiled out by default, bring your own OAuth app)
 
@@ -599,18 +650,17 @@ dedicated source id `nutrition-csv`, alongside your other metrics and entirely o
 ## 4. What NOOP does *not* collect or transmit
 
 - **No NOOP account, no NOOP login.** Nothing to sign into with NOOP itself; NOOP
-  issues no credentials of its own. The one exception is opt-in: the Oura history import
-  (§1.1b) has *you* sign into *your own* Oura account, at Oura's own login page, over
-  OAuth — NOOP never sees your Oura password, only the resulting tokens, kept in the
-  Keychain.
+  issues no credentials of its own. Optional third-party connections use the provider's own
+  account: the Oura history import (§1.1b), and this personal iPhone fork's ChatGPT subscription
+  (§1.1a). Sign-in happens at the provider's page; tokens are kept in the Keychain.
 - **No telemetry / analytics / crash reporting.** No third-party SDKs of that kind.
 - **No NOOP cloud, account sync, or operated remote backup.** The Oura history import (§1.1b) is
   **inbound only**. Android self-hosted push (§1.1d) is the sole standing outbound export: off by
   default, one-way, and directed only to the endpoint the user configured and owns.
 - **No advertising identifiers, no tracking.**
 - **No WHOOP account or API credentials.** NOOP talks only to the strap over local
-  BLE; it does not authenticate against, or pull from, any WHOOP server. (Oura is the
-  one account-based exception — see above and §1.1b.)
+  BLE; it does not authenticate against, or pull from, any WHOOP server. Optional third-party
+  account connections are described above and in §1.1.
 
 ---
 

@@ -69,6 +69,8 @@ struct WorkoutDetailView: View {
     /// import). nil = not an on-foot sport, or no step source had data for the window.
     private struct StepReadout { let count: Int; let fromStrap: Bool }
     @State private var steps: StepReadout?
+    @State private var importedLift: LiftSessionRow?
+    @State private var showingLift = false
 
     var body: some View {
         ScreenScaffold(title: "\(WorkoutSource.displaySport(row.sport))",
@@ -85,6 +87,10 @@ struct WorkoutDetailView: View {
                        topBackground: liquidScaffoldSky()) {
             headerCard
             statStrip
+            if importedLift != nil {
+                Button { showingLift = true } label: { Label("Exercises and sets", systemImage: "dumbbell.fill") }
+                    .buttonStyle(NoopButtonStyle(.secondary))
+            }
             routeCard
             hrCurveCard
             zonesCard
@@ -100,11 +106,20 @@ struct WorkoutDetailView: View {
             }
         }
         .task { await load() }
+        .sheet(isPresented: $showingLift) {
+            if let importedLift { LiftSessionDetailSheet(session: importedLift) { await repo.refresh(); await load() } }
+        }
     }
 
     // MARK: - Load
 
     private func load() async {
+        if WorkoutSource.sportKey(row.sport) == WorkoutSource.sportKey(LiftingImporter.sport),
+           let store = await repo.storeHandle() {
+            let matches = (try? await store.liftSessions(deviceId: PersonalLiftingImport.deviceId,
+                                                       fromTs: row.startTs - 120, toTs: row.startTs + 120)) ?? []
+            importedLift = matches.count == 1 ? matches[0] : nil
+        }
         // #524: the GPS route, if this session recorded one on-device. A cheap UserDefaults read keyed
         // by the row's natural key (startTs + sport); decoded to points only when ≥2 were captured so the
         // map only ever draws a real route.

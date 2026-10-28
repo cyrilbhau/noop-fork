@@ -3384,6 +3384,26 @@ final class Repository: ObservableObject {
             to: Self.dayString(now.addingTimeInterval(86_400)))) ?? []
     }
 
+    /// Workout imports do not change daily/vital caches, so refresh() alone can leave their views stale.
+    func invalidateWorkoutViews() {
+        appleHealthCache = nil
+        appleHealthLoadedSeq = -1
+        refreshSeq += 1
+    }
+
+    /// Count stored Health imports before the activity list merges them with richer captured sessions.
+    private func appleHealthWorkoutRows() async -> [WorkoutRow] {
+        guard let store = await ensureStore() else { return [] }
+        let now = Int(Date().timeIntervalSince1970)
+        var rows: [WorkoutRow] = []
+        for id in Self.workoutNamespaces(rawIds: rawPhysiologyReadIds(store: store)) {
+            let stored = (try? await store.workouts(deviceId: id, from: now - 4000 * 86_400,
+                                                   to: now + 86_400, limit: 5000)) ?? []
+            rows += stored.filter { WorkoutSource.isAppleHealth($0.source) }
+        }
+        return Self.dedupWorkoutsByNaturalKey(rows)
+    }
+
     /// #833/v7.7.2 (Apple Health per-source freeze): the SHARED heavy-load seam behind `AppleHealthView.load()`.
     /// It owns the cache short-circuit, the DEBUG fire tally, the whole-history store reads, and the write-back,
     /// so the freeze fix lives in ONE testable place instead of the view's `@State` (which can't be driven
@@ -3413,7 +3433,7 @@ final class Repository: ObservableObject {
         #endif
 
         async let rows = appleDailyRows()
-        async let workouts = workoutRows()
+        async let workouts = appleHealthWorkoutRows()
 
         // The per-source page's data contract: ALL history is loaded ONCE and the range control windows it
         // client-side, anchored to the latest data point (not "now"). The client-side widen therefore needs the
@@ -3426,7 +3446,7 @@ final class Repository: ObservableObject {
         }
 
         let loadedRows = await rows
-        let appleWorkouts = await workouts.filter { WorkoutSource.isAppleHealth($0.source) }
+        let appleWorkouts = await workouts
 
         let snapshot = AppleHealthLoadCache(appleRows: loadedRows.sorted { $0.day < $1.day },
                                             workoutCount: appleWorkouts.count,

@@ -377,12 +377,12 @@ struct StrandiOSApp: App {
                 Task {
                     health.refreshAuthIfPreviouslyGranted()
                     HealthWritebackBackgroundScheduler.updateSchedule(
-                        isAuthorized: health.auth == .authorized)
+                        isAuthorized: health.auth == .authorized && !health.readsWorkoutsOnly)
                     await HealthSyncRefreshCoordinator.run(
                         sync: { await health.sync() },
                         refresh: {
                             await model.refreshAfterAppleHealthSync(
-                                authorized: health.auth == .authorized)
+                                authorized: health.auth == .authorized, workoutsOnly: health.readsWorkoutsOnly)
                         }
                     )
                     await WidgetSnapshot.publish(from: model)
@@ -394,7 +394,7 @@ struct StrandiOSApp: App {
             } else if phase == .background {
                 // Re-submit on every transition because iOS may discard an old best-effort request.
                 HealthWritebackBackgroundScheduler.updateSchedule(
-                    isAuthorized: health.auth == .authorized)
+                    isAuthorized: health.auth == .authorized && !health.readsWorkoutsOnly)
                 // #1538: same reasoning for the re-score continuation, plus one case of its own. A pass
                 // can be left owed with NOTHING scheduled — a foreground pass killed by a force-quit
                 // never runs the deferral path that submits the request, and iOS can discard a request

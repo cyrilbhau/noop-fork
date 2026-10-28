@@ -23,6 +23,9 @@ struct CoachSettingsView: View {
     @State private var briefMinutes: Int = CoachBriefScheduler.timeMinutes
     @State private var briefGenerating = false
     @State private var briefStatus: String?
+    #if os(iOS)
+    @State private var showChatGPTConnection = false
+    #endif
 
     /// The coach-instructions editor, collapsed until asked for.
     @State private var promptExpanded: Bool = false
@@ -48,6 +51,13 @@ struct CoachSettingsView: View {
                                .accessibilityLabel("Close coach settings")
                        }) {
             modelBar
+            #if os(iOS)
+            if coach.provider == .chatGPT {
+                NoopButton("ChatGPT subscription", systemImage: "person.crop.circle", kind: .secondary) {
+                    showChatGPTConnection = true
+                }
+            }
+            #endif
             consentBar
             // v5: a SECOND opt-in, only meaningful once data access is on, folds a summary of the
             // new on-device signals (your strongest patterns + Lab Book) into the coach context.
@@ -59,13 +69,20 @@ struct CoachSettingsView: View {
         // Opening this screen is the moment a stale catalogue is worth refreshing: a key exists here by
         // definition, and the picker above is about to be read. Rate-limited and silent on failure.
         .task { await coach.refreshModelsIfStale() }
+        #if os(iOS)
+        .sheet(isPresented: $showChatGPTConnection) {
+            ChatGPTConnectionView(session: coach.chatGPTSession,
+                                  hasConversation: !coach.messages.isEmpty,
+                                  onProfileChanged: { coach.clearConversation() })
+        }
+        #endif
     }
 
     /// Which model answers, and the control that refreshes the list of them.
     ///
     /// This lives HERE rather than on the setup card because of where a key exists. `setupCard` renders
     /// only while `isConfigured` is false, which for a cloud provider means no key is stored, and the
-    /// Refresh control is `.disabled(!coach.hasKey)` — gated on having a key inside a screen that only
+    /// Refresh control is `.disabled(!coach.canRefreshModels)` — gated on having a key inside a screen that only
     /// appears when there is none. So for OpenAI, Anthropic and Gemini that button was permanently
     /// disabled and the live catalogue those three publish was unreachable. A key exists by definition
     /// on this screen, so the picker and the refresh both work.
@@ -77,7 +94,7 @@ struct CoachSettingsView: View {
         NoopCard(padding: 14, tint: StrandPalette.chargeColor) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("\(coach.provider.displayName) · \(coach.model)")
+                    Text("\(coach.provider.displayName) · \(coach.modelDisplayName(coach.model))")
                         .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
                     Spacer(minLength: 8)
                     Button {
@@ -89,12 +106,12 @@ struct CoachSettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(StrandPalette.accent)
-                    .disabled(!coach.hasKey)
+                    .disabled(!coach.canRefreshModels)
                     .accessibilityLabel("Refresh models from provider")
                 }
                 Picker("Model", selection: $coach.model) {
                     ForEach(coach.availableModels, id: \.self) { m in
-                        Text(m).tag(m)
+                        Text(verbatim: coach.modelDisplayName(m)).tag(m)
                     }
                 }
                 .labelsHidden()
@@ -265,7 +282,7 @@ struct CoachSettingsView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Morning brief").font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
                         Text(briefEnabled
-                             ? "A local notification with today's readiness + training plan, generated on-device each morning."
+                             ? "Your selected provider generates a readiness and training brief, delivered as a local notification."
                              : "Off: nothing is generated or sent on a schedule.")
                             .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -293,7 +310,13 @@ struct CoachSettingsView: View {
                             .labelsHidden()
                             .accessibilityLabel("Morning brief time")
                     }
-                    Text("At \(Platform.deviceNounPhrase == "Mac" ? "this time" : "or soon after"), NOOP will use your key to generate today's brief. Best-effort: \(Platform.deviceNounPhrase) decides exactly when a backgrounded app wakes.")
+                    Group {
+                        #if os(iOS)
+                        Text("NOOP uses your selected Coach connection to generate the brief. iPhone decides when background work runs, so delivery may be later than the selected time.")
+                        #else
+                        Text("At \(Platform.deviceNounPhrase == "Mac" ? "this time" : "or soon after"), NOOP will use your key to generate today's brief. Best-effort: \(Platform.deviceNounPhrase) decides exactly when a backgrounded app wakes.")
+                        #endif
+                    }
                         .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                     NoopButton(briefGenerating ? "Generating…" : "Generate now", systemImage: "sparkles", kind: .secondary) {
@@ -334,7 +357,7 @@ struct CoachSettingsView: View {
             if let text {
                 coach.appendGeneratedBrief(text)
             } else {
-                briefStatus = "Couldn't generate a brief right now — check your key and data access."
+                briefStatus = "Couldn't generate a brief right now — check your connection and data access."
             }
         }
     }

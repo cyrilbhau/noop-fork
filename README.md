@@ -193,8 +193,14 @@ shared cross-platform code.
 | **Data Sources** | One-tap import of a WHOOP CSV export, an Apple Health export, or a **nutrition CSV** (Cronometer / MacroFactor), plus live-strap status. "Bring your history in once, then it's yours." |
 | **Notifications** | Configure local notifications and thresholds (`Strand/Data/NotificationSettingsStore.swift`). |
 | **Automations** | Turn the strap's physical inputs and live biometrics into Mac actions — all on-device (see below). |
-| **Coach** | An optional **AI Coach** you can ask about your data in plain language. It is off until you add your own key — Anthropic, OpenAI, or any OpenAI-compatible endpoint including a local/self-hosted model (Ollama, LM Studio) — and it sends only a short text summary of recent metrics plus your question, never raw streams or identifiers. With a local model the conversation never leaves your machine. Available on macOS, Android, and iOS. See [`docs/PRIVACY_SECURITY.md`](docs/PRIVACY_SECURITY.md). |
+| **Coach** | An optional **AI Coach** you can ask about your data in plain language. Connect a provider with your own key — Anthropic, OpenAI, or an OpenAI-compatible endpoint including a local/self-hosted model (Ollama, LM Studio). This personal iPhone fork also offers ChatGPT subscription sign-in, described below. Health summaries require separate consent; raw sensor streams are not included. With a local model the conversation never leaves your machine. Available on macOS, Android, and iOS. See [`docs/PRIVACY_SECURITY.md`](docs/PRIVACY_SECURITY.md). |
 | **Settings** | Profile, preferences, **step calibration** (tune the stride/step estimate to your own walking), unit choices, the in-app **What's new** changelog, and an opt-in **Experimental** section (WHOOP 5/MG protocol probes). On **iOS**, also **Export for Shortcuts** — a HealthKit-free path that hands your metrics to Apple Health via the Shortcuts app. |
+
+**Personal iPhone fork:** Coach also supports an eligible ChatGPT Plus or Pro subscription through
+**Continue with ChatGPT**, without an API key. It uses the account's existing plan allowance and
+keeps health-data consent separate from sign-in. Existing API-key and Custom providers remain
+available. This is an iPhone-only personal addition; see
+[the network inventory](docs/PRIVACY_SECURITY.md#personal-iphone-fork-optional-chatgpt-subscription).
 
 There is also a **menu-bar extra** (`Strand/MenuBar/MenuBarContent.swift`) with a
 glanceable live HR readout and a compact popover, a first-run **onboarding wizard**

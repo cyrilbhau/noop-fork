@@ -27,6 +27,10 @@ struct AppleHealthLoadCache {
     let appleRows: [AppleDaily]
     let workoutCount: Int
     let series: [String: [(day: String, value: Double)]]
+
+    var hasAnyData: Bool {
+        workoutCount > 0 || !appleRows.isEmpty || series.values.contains { !$0.isEmpty }
+    }
 }
 
 /// #833/v7.7.2: `.task(id:)` key for the Apple Health load, the data-refresh seq PLUS today's local day-key, so
@@ -202,7 +206,18 @@ struct AppleHealthView: View {
                        // (the scaffold stack is 20pt), so the lazy win is partial until those sections are
                        // promoted to direct children — kept as one node here to stay pixel-identical.
                        lazy: true) {
-            if loaded && !hasAnyData {
+            if loaded && showsWorkoutsOnly {
+                VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                    #if os(iOS)
+                    liveSyncCard
+                    #endif
+                    workoutsTile
+                    NavigationLink("Workouts") { WorkoutsView() }
+                    Text("Workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text.")
+                        .font(StrandFont.caption)
+                        .foregroundStyle(StrandPalette.textSecondary)
+                }
+            } else if loaded && !hasAnyData {
                 #if os(iOS)
                 // No data yet, but iOS can grant live access right here — keep the Enable card above
                 // the (now live-aware) empty-state copy so the richer path isn't hidden behind a
@@ -252,10 +267,17 @@ struct AppleHealthView: View {
         windowedRowsCache = computeWindowedRows()
     }
 
-    /// True if ANY series or per-day row holds data (drives the empty state).
+    private var showsWorkoutsOnly: Bool {
+        #if os(iOS)
+        return health.readsWorkoutsOnly
+        #else
+        return false
+        #endif
+    }
+
+    /// Workout-only consent can produce useful data without any daily or vital rows.
     private var hasAnyData: Bool {
-        if !appleRows.isEmpty { return true }
-        return series.values.contains { !$0.isEmpty }
+        AppleHealthLoadCache(appleRows: appleRows, workoutCount: workoutCount, series: series).hasAnyData
     }
 
     // MARK: - Load
@@ -320,6 +342,7 @@ struct AppleHealthView: View {
 
     /// Header subtitle reflects the windowed (visible) per-day span.
     private var spanSubtitle: String? {
+        if showsWorkoutsOnly { return String(localized: "Workouts") }
         let rows = loaded ? windowedRows : appleRows
         guard let first = rows.first?.day, let last = rows.last?.day,
               let lo = date(first), let hi = date(last) else {
@@ -384,7 +407,7 @@ struct AppleHealthView: View {
                         .foregroundStyle(StrandPalette.textPrimary)
                     Spacer()
                     if health.auth == .authorized {
-                        StatePill(health.syncing ? "Syncing" : "Connected",
+                        StatePill(health.syncing ? "Syncing" : "Read only",
                                   tone: .positive, pulsing: health.syncing)
                     }
                 }
@@ -412,7 +435,7 @@ struct AppleHealthView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                 case .unknown, .denied:
-                    Text("Read your heart rate, HRV, blood oxygen, respiratory rate, sleep, steps and energy straight from Apple Health, and write NOOP's strap data back: sleep with full stages, continuous heart rate, workouts, and nightly vitals. Everything stays on \(Platform.deviceNounPhrase).")
+                    Text("Import workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build.")
                         .font(StrandFont.caption)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -423,7 +446,7 @@ struct AppleHealthView: View {
                                 sync: { await health.sync() },
                                 refresh: {
                                     await model.refreshAfterAppleHealthSync(
-                                        authorized: health.auth == .authorized)
+                                        authorized: health.auth == .authorized, workoutsOnly: health.readsWorkoutsOnly)
                                 }
                             )
                             await load()
@@ -446,7 +469,7 @@ struct AppleHealthView: View {
                             .font(StrandFont.subhead)
                             .foregroundStyle(StrandPalette.textSecondary)
                     } else {
-                        Text("Connected. New strap data is written automatically, with periodic background refresh when iOS allows it.")
+                        Text("Workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text.")
                             .font(StrandFont.subhead)
                             .foregroundStyle(StrandPalette.textSecondary)
                     }
@@ -456,7 +479,7 @@ struct AppleHealthView: View {
                                 sync: { await health.sync() },
                                 refresh: {
                                     await model.refreshAfterAppleHealthSync(
-                                        authorized: health.auth == .authorized)
+                                        authorized: health.auth == .authorized, workoutsOnly: health.readsWorkoutsOnly)
                                 }
                             )
                             await load()

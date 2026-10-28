@@ -52,6 +52,10 @@ struct LiftSessionDetailSheet: View {
                 } else {
                     figuresSection
                     exercisesSection
+                    if let note = session.note, !note.isEmpty {
+                        SectionHeader("Notes")
+                        NoopCard { Text(note).font(StrandFont.body).textSelection(.enabled) }
+                    }
                     if !performed.isEmpty {
                         muscleSection
                         rpeSection
@@ -218,6 +222,17 @@ struct LiftSessionDetailSheet: View {
             }
             ForEach(LiftMetrics.perExercise(performed), id: \.exercise) { summary in
                 exerciseCard(summary)
+            }
+            if session.deviceId == PersonalLiftingImport.deviceId {
+                ForEach(sets.filter { !LiftMetrics.isPerformed(reps: $0.reps) }, id: \.id) { set in
+                    NoopCard {
+                        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+                            Text(set.exercise).font(StrandFont.subhead)
+                            Text("\(set.setIndex): \(set.weightKg.map { LiftFormat.trim($0) + " kg" } ?? "—") × \(set.reps.map(String.init) ?? "—")")
+                            if let note = set.note { Text(note).font(StrandFont.caption) }
+                        }
+                    }
+                }
             }
         }
     }

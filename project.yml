@@ -46,6 +46,10 @@ packages:
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     exactVersion: 2.4.1
+  # Verifies ChatGPT OpenID signatures and JWK keys using Apple cryptography.
+  JOSESwift:
+    url: https://github.com/airsidemobile/JOSESwift.git
+    exactVersion: 3.0.0
   WhoopProtocol:
     path: Packages/WhoopProtocol
   WhoopStore:
@@ -149,6 +153,7 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         COMBINE_HIDPI_IMAGES: YES
     dependencies:
+      - package: JOSESwift
       - package: WhoopProtocol
       - package: WhoopStore
       - package: StrandAnalytics
@@ -164,6 +169,8 @@ targets:
     deploymentTarget: "13.0"
     sources:
       - StrandTests
+      # The iPhone callback listener has no UIKit dependency; compile its parser into the tests.
+      - StrandiOS/App/ChatGPTLoopbackListener.swift
       # Compile the exact cross-target snapshot source into the test bundle so the AltStore App Group
       # resolver is covered without adding this iOS/widget-only type to the macOS application module.
       - StrandiOSShared/WidgetSnapshot.swift
@@ -186,6 +193,7 @@ targets:
       Debug: Strand/Oura/OuraConfig.xcconfig
       Release: Strand/Oura/OuraConfig.xcconfig
     dependencies:
+      - package: JOSESwift
       - target: Strand
       - package: WhoopProtocol
       - package: WhoopStore
@@ -357,6 +365,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_EMIT_LOC_STRINGS: YES
     dependencies:
+      - package: JOSESwift
       - package: WhoopProtocol
       - package: WhoopStore
       - package: StrandAnalytics

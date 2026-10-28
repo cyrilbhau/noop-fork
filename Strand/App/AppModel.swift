@@ -1262,7 +1262,8 @@ final class AppModel: ObservableObject {
     /// Materialize Apple Health as a device and update the source that feeds Today.
     /// Only replaces the seeded WHOOP row while it is still a placeholder with no strap and no data;
     /// a physical or user-selected source always keeps priority.
-    func refreshAfterAppleHealthSync(authorized: Bool, now: Date = Date()) async {
+    func refreshAfterAppleHealthSync(authorized: Bool, now: Date = Date(), workoutsOnly: Bool = false) async {
+        if workoutsOnly { await repo.refresh(); return }
         await wireSourceCoordinator()
         guard let registry = deviceRegistry, let store = await repo.storeHandle() else {
             await repo.refresh()

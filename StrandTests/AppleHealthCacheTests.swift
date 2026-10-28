@@ -50,6 +50,68 @@ final class AppleHealthCacheTests: XCTestCase {
         "weight", "body_fat", "lean_mass", "bmi"
     ]
 
+    func testWorkoutsOnlyImportIsDataAndSurvivesCapturedActivityMerge() async throws {
+        let store = try await WhoopStore.inMemory()
+        let start = Int(Date().timeIntervalSince1970) - 7200
+        let health = WorkoutRow(startTs: start, endTs: start + 3600, sport: "Strength Training",
+                                source: "apple-health", durationS: 3600, energyKcal: nil,
+                                avgHr: nil, maxHr: nil, strain: nil, distanceM: nil,
+                                zonesJSON: nil, notes: nil, steps: nil)
+        let captured = WorkoutRow(startTs: start, endTs: start + 3600, sport: "Strength Training",
+                                  source: "manual", durationS: 3600, energyKcal: nil,
+                                  avgHr: 120, maxHr: 155, strain: 25, distanceM: nil,
+                                  zonesJSON: nil, notes: nil, steps: nil)
+        try await store.upsertWorkouts([health], deviceId: appleSource)
+        try await store.upsertWorkouts([captured], deviceId: "my-whoop")
+        let repo = Repository(deviceId: "my-whoop")
+        repo.setStoreForTesting(store)
+
+        let activities = await repo.workoutRows()
+        XCTAssertEqual(activities.count, 1, "the activity list still merges the same workout")
+        XCTAssertEqual(activities.first?.source, "manual")
+        let snapshot = await repo.performAppleHealthLoad(seriesKeys: seriesKeys, allowCache: false)
+        XCTAssertEqual(snapshot.workoutCount, 1, "the source page must still report the stored Health import")
+        XCTAssertTrue(snapshot.appleRows.isEmpty)
+        XCTAssertTrue(snapshot.series.values.allSatisfy(\.isEmpty))
+        XCTAssertTrue(snapshot.hasAnyData, "workout-only access must not show the generic empty state")
+    }
+
+    func testNoHealthWorkoutsIsEmptyEvenWithAnUnrelatedCapturedWorkout() async throws {
+        let store = try await WhoopStore.inMemory()
+        let start = Int(Date().timeIntervalSince1970) - 7200
+        let captured = WorkoutRow(startTs: start, endTs: start + 3600, sport: "Strength Training",
+                                  source: "manual", durationS: 3600, energyKcal: nil,
+                                  avgHr: 120, maxHr: 155, strain: 25, distanceM: nil,
+                                  zonesJSON: nil, notes: nil, steps: nil)
+        try await store.upsertWorkouts([captured], deviceId: "my-whoop")
+        let repo = Repository(deviceId: "my-whoop")
+        repo.setStoreForTesting(store)
+        let snapshot = await repo.performAppleHealthLoad(seriesKeys: seriesKeys, allowCache: false)
+        XCTAssertEqual(snapshot.workoutCount, 0)
+        XCTAssertFalse(snapshot.hasAnyData)
+    }
+
+    func testWorkoutImportInvalidatesCachedCountWithoutDailyMetricChanges() async throws {
+        let store = try await WhoopStore.inMemory()
+        let repo = Repository(deviceId: "my-whoop")
+        repo.setStoreForTesting(store)
+        let empty = await repo.performAppleHealthLoad(seriesKeys: seriesKeys, allowCache: true)
+        XCTAssertEqual(empty.workoutCount, 0)
+        let previousSequence = repo.refreshSeq
+        let start = Int(Date().timeIntervalSince1970) - 7200
+        let row = WorkoutRow(startTs: start, endTs: start + 3600, sport: "Strength Training",
+                             source: "apple-health", durationS: 3600, energyKcal: nil,
+                             avgHr: nil, maxHr: nil, strain: nil, distanceM: nil,
+                             zonesJSON: nil, notes: nil, steps: nil)
+        try await store.upsertWorkouts([row], deviceId: appleSource)
+        repo.invalidateWorkoutViews()
+
+        XCTAssertGreaterThan(repo.refreshSeq, previousSequence)
+        let updated = await repo.performAppleHealthLoad(seriesKeys: seriesKeys, allowCache: true)
+        XCTAssertEqual(updated.workoutCount, 1)
+        XCTAssertTrue(updated.hasAnyData)
+    }
+
     /// The core regression guard: two same-state re-mount loads run the heavy store read ONCE. The second call
     /// (unchanged `refreshSeq`, same dayKey, cache present) must short-circuit and NOT bump the fire tally.
     func testSecondLoadAtUnchangedSeqShortCircuitsFromCache() async throws {

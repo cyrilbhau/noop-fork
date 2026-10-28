@@ -13,6 +13,24 @@ import java.time.ZoneId
  * strain. Kotlin twin of the macOS LiftingImporterTests — same arithmetic, same labels.
  */
 class LiftingImporterTest {
+    @Test fun sourceSetMetadataMatchesSwiftOracle() {
+        val session = hevy("""
+            title,start_time,end_time,exercise_title,set_type,weight_lb,reps,rpe,exercise_notes,duration_seconds,distance_meters
+            Example,2026-01-01 10:00,2026-01-01 11:00,Press,warmup,10,5,8,"Pause, then press",30,200
+            Example,2026-01-01 10:00,2026-01-01 11:00,Press,normal,20,6,99,Steady,,
+            Example,2026-01-01 10:00,2026-01-01 11:00,Row,normal,,,,Timed,60,500
+        """).sessions.single()
+        val actual = session.loggedSets.joinToString("\n") { set ->
+            listOf(set.exercise, set.setIndex, set.weightKg, set.reps, set.setType, set.rpe,
+                set.note, set.durationSeconds, set.distanceMeters).joinToString("|") { it?.toString() ?: "_" }
+        }
+        // Exact stdout from Swift LiftingImporterTests.testHevyKeepsSourceSetsAndNotesAlongsideTheSummary.
+        assertEquals("""
+            Press|1|4.535923700000001|5|warmup|8.0|Pause, then press|30.0|200.0
+            Press|2|9.071847400000001|6|normal|_|Steady|_|_
+            Row|1|_|_|normal|_|Timed|60.0|500.0
+        """.trimIndent(), actual)
+    }
 
     private fun hevy(csv: String) =
         LiftingImporter.parseHevy(CsvTable.fromData(csv.trimIndent().toByteArray()))

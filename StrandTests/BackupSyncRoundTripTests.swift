@@ -51,7 +51,7 @@ final class BackupSyncRoundTripTests: XCTestCase {
 
         // Restore into a DIFFERENT, throwaway live-DB path (so the user's real store is never touched).
         let liveDB = tmp.appendingPathComponent("live.sqlite")
-        let result = DataBackup.restore(from: backup, toDatabaseAt: liveDB.path)
+        let result = DataBackup.restore(from: backup, toDatabaseAt: liveDB.path, settingsDefaults: try freshDefaults())
 
         guard case .imported = result else {
             return XCTFail("Restore should succeed for a valid NOOP backup, got \(result)")
@@ -138,6 +138,83 @@ final class BackupSyncRoundTripTests: XCTestCase {
         XCTAssertEqual(try deviceRows(in: liveDB), ["original"], "Live DB untouched")
     }
 
+    func testRestoreInvalidatesPriorCoachOwnerBeforeAnyLiveDatabaseMutation() throws {
+        let sourceDB = tmp.appendingPathComponent("coach-source.sqlite")
+        try makeNoopDatabase(at: sourceDB, deviceRows: ["imported"])
+        try addCoachHistory(at: sourceDB)
+        let backup = tmp.appendingPathComponent("coach-history.noopbak")
+        try DataBackup.writeBackupForTesting(databaseAt: sourceDB, to: backup)
+        let liveDB = tmp.appendingPathComponent("coach-live.sqlite")
+        try makeNoopDatabase(at: liveDB, deviceRows: ["original"])
+
+        let defaults = try freshDefaults()
+        let suiteName = try XCTUnwrap(suites.last)
+        defaults.set("previous-local-profile", forKey: "ai.chatGPT.conversationProfile")
+        defaults.set(false, forKey: "ai.coachHistoryWritePending")
+        defaults.set("chatGPT", forKey: "ai.provider")
+        var observedBoundary = false
+        let result = DataBackup.restore(from: backup, toDatabaseAt: liveDB.path, settingsDefaults: defaults,
+                                        beforeReplacingDatabase: {
+            observedBoundary = true
+            XCTAssertTrue(defaults.bool(forKey: "ai.coachHistoryWritePending"))
+            XCTAssertEqual(defaults.string(forKey: "ai.chatGPT.conversationProfile"), "previous-local-profile")
+            XCTAssertEqual(try? self.deviceRows(in: liveDB), ["original"], "Marker precedes the first live DB mutation")
+            let persisted = defaults.persistentDomain(forName: suiteName)
+            XCTAssertEqual(persisted?["ai.coachHistoryWritePending"] as? Bool, true,
+                           "A process death at this boundary must leave history replay disabled")
+        })
+        guard case .imported = result else { return XCTFail("Expected successful restore, got \(result)") }
+        XCTAssertTrue(observedBoundary)
+        XCTAssertEqual(try deviceRows(in: liveDB), ["imported"])
+        XCTAssertNil(defaults.object(forKey: "ai.chatGPT.conversationProfile"),
+                     "Imported Coach rows cannot inherit this installation's preceding account")
+        XCTAssertFalse(defaults.bool(forKey: "ai.coachHistoryWritePending"))
+        XCTAssertEqual(defaults.string(forKey: "ai.provider"), "chatGPT", "Connection preferences remain untouched")
+        let reopened = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        XCTAssertNil(reopened.object(forKey: "ai.chatGPT.conversationProfile"))
+        XCTAssertFalse(reopened.bool(forKey: "ai.coachHistoryWritePending"))
+    }
+
+    func testRejectedRestoreLeavesCoachHistoryOwnershipUntouched() throws {
+        let source = tmp.appendingPathComponent("foreign-coach.sqlite")
+        try makeForeignDatabase(at: source)
+        let liveDB = tmp.appendingPathComponent("unchanged-coach.sqlite")
+        try makeNoopDatabase(at: liveDB, deviceRows: ["original"])
+        let defaults = try freshDefaults()
+        defaults.set("retained-local-profile", forKey: "ai.chatGPT.conversationProfile")
+        defaults.set(false, forKey: "ai.coachHistoryWritePending")
+        let result = DataBackup.restore(from: source, toDatabaseAt: liveDB.path, settingsDefaults: defaults,
+                                        beforeReplacingDatabase: { XCTFail("Validation must reject before mutation") })
+        guard case .failure = result else { return XCTFail("Expected validation rejection") }
+        XCTAssertEqual(defaults.string(forKey: "ai.chatGPT.conversationProfile"), "retained-local-profile")
+        XCTAssertEqual(defaults.object(forKey: "ai.coachHistoryWritePending") as? Bool, false)
+        XCTAssertEqual(try deviceRows(in: liveDB), ["original"])
+    }
+
+    func testFullyRolledBackRestoreRestoresPriorCoachMetadataIncludingAbsentMarker() throws {
+        for (index, oldPending) in [nil, false, true].enumerated() {
+            let liveDB = tmp.appendingPathComponent("rollback-coach-\(index).sqlite")
+            try makeNoopDatabase(at: liveDB, deviceRows: ["original-\(index)"])
+            let defaults = try freshDefaults()
+            defaults.set("retained-local-profile", forKey: "ai.chatGPT.conversationProfile")
+            if let oldPending { defaults.set(oldPending, forKey: "ai.coachHistoryWritePending") }
+            var reachedMutation = false
+            // Restoring a plain source onto itself passes validation, then its source disappears
+            // at the live-removal boundary. This forces the real copy-failure rollback path.
+            let result = DataBackup.restore(from: liveDB, toDatabaseAt: liveDB.path, settingsDefaults: defaults,
+                                            beforeReplacingDatabase: {
+                reachedMutation = true
+                XCTAssertTrue(defaults.bool(forKey: "ai.coachHistoryWritePending"))
+            })
+            guard case .failure = result else { return XCTFail("Expected post-validation copy failure") }
+            XCTAssertTrue(reachedMutation)
+            XCTAssertEqual(try deviceRows(in: liveDB), ["original-\(index)"])
+            XCTAssertEqual(defaults.string(forKey: "ai.chatGPT.conversationProfile"), "retained-local-profile")
+            XCTAssertEqual(defaults.object(forKey: "ai.coachHistoryWritePending") as? Bool, oldPending,
+                           "A fully restored original DB retains exactly its original ownership state")
+        }
+    }
+
     // MARK: - Foreign SQLite is rejected, live DB untouched
 
     func testForeignSqliteIsRejectedAndLiveDbIntact() throws {
@@ -151,7 +228,7 @@ final class BackupSyncRoundTripTests: XCTestCase {
         try makeNoopDatabase(at: liveDB, deviceRows: ["original"])
         let before = try Data(contentsOf: liveDB)
 
-        let result = DataBackup.restore(from: foreign, toDatabaseAt: liveDB.path)
+        let result = DataBackup.restore(from: foreign, toDatabaseAt: liveDB.path, settingsDefaults: try freshDefaults())
         guard case .failure = result else {
             return XCTFail("A foreign SQLite must be rejected, got \(result)")
         }
@@ -170,7 +247,7 @@ final class BackupSyncRoundTripTests: XCTestCase {
         try makeNoopDatabase(at: liveDB, deviceRows: ["original"])
         let before = try Data(contentsOf: liveDB)
 
-        let result = DataBackup.restore(from: corrupt, toDatabaseAt: liveDB.path)
+        let result = DataBackup.restore(from: corrupt, toDatabaseAt: liveDB.path, settingsDefaults: try freshDefaults())
         guard case .failure = result else {
             return XCTFail("A corrupt file must be rejected, got \(result)")
         }
@@ -192,7 +269,7 @@ final class BackupSyncRoundTripTests: XCTestCase {
         try makeNoopDatabase(at: liveDB, deviceRows: ["original"])
         let before = try Data(contentsOf: liveDB)
 
-        let result = DataBackup.restore(from: wrong, toDatabaseAt: liveDB.path)
+        let result = DataBackup.restore(from: wrong, toDatabaseAt: liveDB.path, settingsDefaults: try freshDefaults())
         guard case .failure = result else {
             return XCTFail("A zip without noop-backup.sqlite must be rejected, got \(result)")
         }
@@ -220,7 +297,7 @@ final class BackupSyncRoundTripTests: XCTestCase {
         try makeNoopDatabase(at: liveDB, deviceRows: ["original"])
         let before = try Data(contentsOf: liveDB)
 
-        let result = DataBackup.restore(from: backup, toDatabaseAt: liveDB.path)
+        let result = DataBackup.restore(from: backup, toDatabaseAt: liveDB.path, settingsDefaults: try freshDefaults())
         guard case .failure = result else {
             return XCTFail("A structurally damaged backup must be rejected, got \(result)")
         }
@@ -251,7 +328,7 @@ final class BackupSyncRoundTripTests: XCTestCase {
         try makeNoopDatabase(at: liveDB, deviceRows: ["original"])
         let before = try Data(contentsOf: liveDB)
 
-        let result = DataBackup.restore(from: sourceDB, toDatabaseAt: liveDB.path)
+        let result = DataBackup.restore(from: sourceDB, toDatabaseAt: liveDB.path, settingsDefaults: try freshDefaults())
         guard case .failure = result else {
             return XCTFail("A truncated backup must be rejected, got \(result)")
         }
@@ -307,6 +384,14 @@ final class BackupSyncRoundTripTests: XCTestCase {
         for id in deviceRows {
             try exec(db, "INSERT INTO device (id) VALUES ('\(id)')")
         }
+    }
+
+    private func addCoachHistory(at url: URL) throws {
+        var db: OpaquePointer?
+        guard sqlite3_open(url.path, &db) == SQLITE_OK else { throw TestError("open coach fixture failed") }
+        defer { sqlite3_close(db) }
+        try exec(db, "CREATE TABLE coachMessage (id TEXT PRIMARY KEY, role TEXT, text TEXT, provider TEXT, createdAt INTEGER, orderIndex INTEGER)")
+        try exec(db, "INSERT INTO coachMessage VALUES ('fixture', 'assistant', 'Imported account advice', 'chatGPT', 1, 0)")
     }
 
     /// Build a valid GRDB-origin NOOP DB that spans MULTIPLE pages, so a truncation fixture can cut

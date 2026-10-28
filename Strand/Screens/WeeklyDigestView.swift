@@ -343,7 +343,7 @@ struct WeeklyDigestContent: View {
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.accent)
                 .accessibilityHidden(true)
-            Text(line)
+            Text(MetricCatalog.scoreDisplayText(line))
                 .font(StrandFont.subhead)
                 .foregroundStyle(StrandPalette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -406,7 +406,7 @@ struct WeeklyDigestContent: View {
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
             }
-            Text(digest.balance.sentence)
+            Text(MetricCatalog.scoreDisplayText(digest.balance.sentence))
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)

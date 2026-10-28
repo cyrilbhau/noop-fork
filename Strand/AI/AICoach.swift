@@ -161,6 +161,33 @@ enum AICoachError: LocalizedError {
 @MainActor
 final class AICoachEngine: ObservableObject {
 
+    /// One account session for every presentation of Coach. Laziness avoids reading the
+    /// subscription Keychain when the feature is unused, including on the macOS target.
+    lazy var chatGPTSession: ChatGPTSession = {
+        let value = injectedChatGPTSession ?? ChatGPTSession()
+        observeChatGPT(value)
+        return value
+    }()
+
+    private let injectedChatGPTSession: ChatGPTSession?
+    private let chatGPTClient: ChatGPTClient
+    private var sessionObservation: AnyCancellable?
+    private var defaultsObservation: AnyCancellable?
+    private var observedSessionGeneration: UInt64 = 0
+    private var observedProfileID: String?
+    private var observedSessionState: ChatGPTSessionState = .signedOut
+    private var requestEpoch: UInt64 = 0
+    private var cancellationActions: [UUID: () -> Void] = [:]
+    private var foregroundID: UUID?
+    private var streamingMessageID: UUID?
+    private var lastMasterEnabled = CoachBriefScheduler.coachMasterEnabled
+    private var chatGPTCatalog: [ChatGPTModel] = []
+    private var catalogProfileID: String?
+    private var catalogRefreshID: UUID?
+    private var historyWriteTask: Task<Void, Never>?
+    private var historyWriteGeneration: UInt64 = 0
+    private var conversationProfileID: String?
+
     // Published state the UI binds to.
     @Published var messages: [ChatMessage] = []
 
@@ -194,23 +221,43 @@ final class AICoachEngine: ObservableObject {
     @Published var provider: AIProvider {
         didSet {
             guard provider != oldValue else { return }
+            invalidateConnection()
+            if sessionObservation != nil {
+                chatGPTSession.invalidateRequests()
+                observedSessionGeneration = chatGPTSession.requestGeneration
+            }
             UserDefaults.standard.set(provider.rawValue, forKey: Self.providerKey)
+            if provider == .chatGPT {
+                restoreChatGPTCatalog()
+                if isConfigured { Task { await self.refreshModels(silent: true) } }
+                errorText = nil
+                keyRejected = false
+                alignBriefOwner()
+                return
+            }
             // Reset the model list to the new provider's built-in options.
             availableModels = provider.modelOptions
             // Keep the model valid for the newly-selected provider.
-            if !provider.modelOptions.contains(model) {
-                model = provider.defaultModel
-            }
+            model = UserDefaults.standard.string(forKey: Self.providerModelKey(provider)) ?? provider.defaultModel
+            if !model.isEmpty, !availableModels.contains(model) { availableModels.insert(model, at: 0) }
             // The message names a provider ("That API key was rejected", after a request only THIS
             // provider saw), so it cannot survive switching to a different one. Harmless while only the
             // chat rendered it; wrong now that the setup card does too, which is where switching
             // happens. Twin of the Kotlin `selectProvider`.
             errorText = nil
             keyRejected = false
+            alignBriefOwner()
         }
     }
     @Published var model: String {
-        didSet { UserDefaults.standard.set(model, forKey: Self.modelKey) }
+        didSet {
+            if provider == .chatGPT {
+                if let id = catalogProfileID { UserDefaults.standard.set(model, forKey: Self.chatGPTModelKey(id)) }
+            } else {
+                UserDefaults.standard.set(model, forKey: Self.modelKey)
+                UserDefaults.standard.set(model, forKey: Self.providerModelKey(provider))
+            }
+        }
     }
     /// The model ids offered in the picker. Seeded from `provider.modelOptions`, reset when the
     /// provider changes, and optionally extended by `refreshModels()` with the provider's live list.
@@ -218,15 +265,24 @@ final class AICoachEngine: ObservableObject {
     /// Explicit permission for the coach to read & transmit the user's biometric data. OFF by
     /// default, until this is true, NO metrics are included in any request (only the question).
     @Published var dataConsent: Bool {
-        didSet { UserDefaults.standard.set(dataConsent, forKey: Self.consentKey) }
+        didSet {
+            UserDefaults.standard.set(dataConsent, forKey: Self.consentKey)
+            if dataConsent != oldValue { invalidateConnection() }
+        }
     }
     /// Base URL for the Custom (OpenAI-compatible) provider, e.g. `http://localhost:11434/v1` for a
     /// local LLM server. Only used when `provider == .custom`. Persisted so it survives relaunch.
     @Published var customBaseURL: String {
-        didSet { UserDefaults.standard.set(customBaseURL, forKey: AIProvider.customBaseURLKey) }
+        didSet {
+            UserDefaults.standard.set(customBaseURL, forKey: AIProvider.customBaseURLKey)
+            if customBaseURL != oldValue { invalidateConnection() }
+        }
     }
     @Published var customAuthHeader: CustomAIAuthHeader {
-        didSet { UserDefaults.standard.set(customAuthHeader.rawValue, forKey: AIProvider.customAuthHeaderKey) }
+        didSet {
+            UserDefaults.standard.set(customAuthHeader.rawValue, forKey: AIProvider.customAuthHeaderKey)
+            if customAuthHeader != oldValue { invalidateConnection() }
+        }
     }
     /// Whether the user has committed the Custom provider (tapped Connect with a base URL). Lets the
     /// keyless local path reach the chat without a stored key, while avoiding a flip mid-typing.
@@ -238,7 +294,10 @@ final class AICoachEngine: ObservableObject {
     /// `dataConsent` too, so it never adds anything without both consents. Summary-only: a few one-line
     /// sentences, NEVER raw readings, the anonymity / no-raw-egress posture is preserved.
     @Published var includeOnDeviceSignals: Bool {
-        didSet { UserDefaults.standard.set(includeOnDeviceSignals, forKey: Self.onDeviceSignalsKey) }
+        didSet {
+            UserDefaults.standard.set(includeOnDeviceSignals, forKey: Self.onDeviceSignalsKey)
+            if includeOnDeviceSignals != oldValue { invalidateConnection() }
+        }
     }
 
     /// K11: THIRD opt-in — send a chart image alongside the text when using Gemini's multimodal
@@ -246,7 +305,10 @@ final class AICoachEngine: ObservableObject {
     /// Gemini (the only provider with multimodal support in the app). When on, the Coach composer
     /// shows an "Attach chart" toggle; the rendered chart is sent as inline_data to Gemini.
     @Published var multimodalChartEnabled: Bool {
-        didSet { UserDefaults.standard.set(multimodalChartEnabled, forKey: Self.multimodalChartKey) }
+        didSet {
+            UserDefaults.standard.set(multimodalChartEnabled, forKey: Self.multimodalChartKey)
+            if multimodalChartEnabled != oldValue { invalidateConnection() }
+        }
     }
 
     private let repo: Repository
@@ -258,6 +320,11 @@ final class AICoachEngine: ObservableObject {
     private static let customConnectedKey = "ai.customConnected"
     private static let onDeviceSignalsKey = "ai.includeOnDeviceSignals"
     private static let multimodalChartKey = "ai.multimodalChartEnabled"
+    private static let conversationProfileKey = "ai.chatGPT.conversationProfile"
+    private static let historyPendingKey = "ai.coachHistoryWritePending"
+    private static func providerModelKey(_ provider: AIProvider) -> String { "ai.model.\(provider.rawValue)" }
+    private static func chatGPTCatalogKey(_ id: String) -> String { "ai.chatGPT.catalog.\(id)" }
+    private static func chatGPTModelKey(_ id: String) -> String { "ai.chatGPT.model.\(id)" }
     /// UserDefaults key holding the user's EDITED system prompt. Absent (or blank) means "use the
     /// built-in default". Small text key, never a secret, so plain UserDefaults is fine. Read FRESH
     /// per request (see `systemPrompt`) so an edit takes effect on the very next message.
@@ -366,16 +433,21 @@ final class AICoachEngine: ObservableObject {
     them to enable "Let the coach use my data" for guidance tailored to their real numbers.
     """
 
-    init(repo: Repository, session: URLSession = .shared) {
+    init(repo: Repository, session: URLSession = .shared, chatGPTSession: ChatGPTSession? = nil,
+         chatGPTHTTP: URLSession? = nil) {
         self.repo = repo
         self.session = session
+        self.injectedChatGPTSession = chatGPTSession
+        self.chatGPTClient = ChatGPTClient(session: chatGPTHTTP ?? ChatGPTAuth.makeURLSession())
 
         // Restore persisted provider / model (falling back to sane defaults).
         let storedProvider = UserDefaults.standard.string(forKey: Self.providerKey)
             .flatMap(AIProvider.init(rawValue:)) ?? .openAI
         self.provider = storedProvider
 
-        let storedModel = UserDefaults.standard.string(forKey: Self.modelKey)
+        let storedModel = storedProvider == .chatGPT ? nil :
+            UserDefaults.standard.string(forKey: Self.providerModelKey(storedProvider))
+                ?? UserDefaults.standard.string(forKey: Self.modelKey)
         // A persisted custom id is honoured even if it's not in the built-in list.
         if let storedModel, !storedModel.isEmpty {
             self.model = storedModel
@@ -396,6 +468,15 @@ final class AICoachEngine: ObservableObject {
         self.customConnected = UserDefaults.standard.bool(forKey: Self.customConnectedKey)
         self.includeOnDeviceSignals = UserDefaults.standard.bool(forKey: Self.onDeviceSignalsKey)
         self.multimodalChartEnabled = UserDefaults.standard.bool(forKey: Self.multimodalChartKey)
+        defaultsObservation = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main).sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.applyCoachMasterSwitch() }
+            }
+        if chatGPTSession != nil || storedProvider == .chatGPT {
+            _ = self.chatGPTSession
+            if storedProvider == .chatGPT { restoreChatGPTCatalog() }
+        }
+        alignBriefOwner()
     }
 
     // MARK: Key management
@@ -406,11 +487,149 @@ final class AICoachEngine: ObservableObject {
     /// True once the coach can actually send: a stored key for the cloud providers, or, for the
     /// Custom (local) provider, a committed base URL (a key is optional there, as local servers
     /// usually need none). Gates the setup card vs. the live chat.
-    var isConfigured: Bool { provider == .custom ? customConnected : hasKey }
+    var isConfigured: Bool {
+        if provider == .chatGPT {
+            guard chatGPTSession.activeProfileID != nil else { return false }
+            switch chatGPTSession.state {
+            case .ready, .refreshing, .usageLimited, .unavailable: return true
+            default: return false
+            }
+        }
+        return provider == .custom ? customConnected : resolvedKey != nil
+    }
+
+    var canRefreshModels: Bool { provider == .chatGPT ? isConfigured : resolvedKey != nil }
+    var chatGPTIsBusy: Bool { chatGPTSession.state == .authorizing || chatGPTSession.state == .refreshing }
+    var chatGPTNeedsReconnect: Bool {
+        switch chatGPTSession.state {
+        case .signedOut, .signedInWithoutPlanPermission, .reauthorizationRequired: return true
+        default: return false
+        }
+    }
+
+    func modelDisplayName(_ slug: String) -> String {
+        guard provider == .chatGPT else { return slug }
+        return chatGPTCatalog.first { $0.slug == slug }?.displayName ?? slug
+    }
+
+    func applyCoachMasterSwitch() {
+        let enabled = CoachBriefScheduler.coachMasterEnabled
+        guard enabled != lastMasterEnabled else { return }
+        lastMasterEnabled = enabled
+        if !enabled {
+            invalidateConnection()
+            if sessionObservation != nil { chatGPTSession.invalidateRequests() }
+        }
+    }
+
+    /// Retry a temporarily locked credential store when work or the foreground resumes.
+    func resumeChatGPTConnection() {
+        guard provider == .chatGPT || sessionObservation != nil else { return }
+        let connection = chatGPTSession
+        guard connection.state == .unavailable else { return }
+        connection.retryStorageIfUnavailable()
+        chatGPTSessionChanged(connection)
+    }
+
+    private func alignBriefOwner() {
+        var owner: String? = provider.rawValue
+        if provider == .chatGPT {
+            if let id = chatGPTSession.activeProfileID,
+               chatGPTSession.state != .signedOut, chatGPTSession.state != .signedInWithoutPlanPermission {
+                owner = "chatGPT:" + id
+            } else { owner = nil }
+        }
+        CoachBriefScheduler.alignStoredBriefOwner(owner)
+    }
+
+    func disconnectChatGPT() async {
+        invalidateConnection()
+        await chatGPTSession.disconnect()
+        if provider == .chatGPT { objectWillChange.send() }
+    }
+
+    private func invalidateConnection() {
+        requestEpoch &+= 1
+        for cancel in Array(cancellationActions.values) { cancel() }
+        if let id = streamingMessageID, let index = messages.firstIndex(where: { $0.id == id }) {
+            let text = messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty || text == "Today's brief" { messages.remove(at: index) }
+            else { messages[index] = ChatMessage(id: id, role: .assistant, text: text + "\n\n*(stream interrupted)*") }
+        }
+        streamingMessageID = nil
+        foregroundID = nil
+        sending = false
+        pendingPrompt = nil
+        pendingChartImage = nil
+    }
+
+    private func observeChatGPT(_ value: ChatGPTSession) {
+        observedSessionGeneration = value.requestGeneration
+        observedProfileID = value.activeProfileID
+        observedSessionState = value.state
+        sessionObservation = value.objectWillChange.sink { [weak self, weak value] _ in
+            // @Published emits before assignment. Read the coherent final session on the next turn.
+            Task { @MainActor [weak self, weak value] in
+                guard let self, let value else { return }
+                self.chatGPTSessionChanged(value)
+            }
+        }
+    }
+
+    private func chatGPTSessionChanged(_ value: ChatGPTSession) {
+        let oldProfile = observedProfileID
+        let oldState = observedSessionState
+        let profileChanged = oldProfile != value.activeProfileID
+        if observedSessionGeneration != value.requestGeneration || profileChanged {
+            observedSessionGeneration = value.requestGeneration
+            observedProfileID = value.activeProfileID
+            if provider == .chatGPT {
+                invalidateConnection()
+                if profileChanged {
+                    if oldProfile != nil, !messages.isEmpty { clearConversation() }
+                    droppedSummary = nil
+                    droppedSummaryKey = []
+                    restoreChatGPTCatalog()
+                }
+            }
+        }
+        observedSessionState = value.state
+        if provider == .chatGPT { alignBriefOwner() }
+        objectWillChange.send()
+        if provider == .chatGPT, value.state == .ready,
+           profileChanged || [.signedOut, .authorizing, .signedInWithoutPlanPermission, .reauthorizationRequired].contains(oldState) {
+            Task { await self.refreshModels(silent: true) }
+        }
+    }
+
+    private func restoreChatGPTCatalog() {
+        let id = chatGPTSession.activeProfileID
+        catalogProfileID = id
+        chatGPTCatalog = id.flatMap { UserDefaults.standard.data(forKey: Self.chatGPTCatalogKey($0)) }
+            .flatMap { try? JSONDecoder().decode([ChatGPTModel].self, from: $0) } ?? []
+        availableModels = chatGPTCatalog.map(\.slug)
+        let selected = id.flatMap { UserDefaults.standard.string(forKey: Self.chatGPTModelKey($0)) }
+        model = selected.flatMap { availableModels.contains($0) ? $0 : nil } ?? availableModels.first ?? ""
+        if let prior = UserDefaults.standard.string(forKey: Self.conversationProfileKey),
+           let id, prior != id { clearConversation() }
+    }
+
+    private func tracked<T>(_ operation: @escaping @MainActor () async throws -> T) async throws -> T {
+        let id = UUID()
+        let task = Task { @MainActor in try await operation() }
+        cancellationActions[id] = { task.cancel() }
+        defer { cancellationActions[id] = nil }
+        return try await withTaskCancellationHandler(operation: {
+            let value = try await task.value
+            try Task.checkCancellation()
+            return value
+        }, onCancel: { task.cancel() })
+    }
 
     /// The key to send with a request: the stored key, or an empty string for the keyless Custom
     /// provider. `nil` means "not configured", the caller surfaces `.noKey`.
     private var resolvedKey: String? {
+        guard provider != .chatGPT else { return nil }
         if let k = AIKeyStore.read() {
             // Only send the stored key to the provider it was SAVED for, never Bearer one provider's
             // key (e.g. a cloud OpenAI/Anthropic secret) to another provider's endpoint, above all the
@@ -443,6 +662,12 @@ final class AICoachEngine: ObservableObject {
     /// Disconnect entirely: forget any stored key and un-commit the Custom provider. The base URL is
     /// kept so reconnecting pre-fills it.
     func disconnect() {
+        if provider == .chatGPT {
+            invalidateConnection()
+            Task { await self.disconnectChatGPT() }
+            return
+        }
+        invalidateConnection()
         AIKeyStore.clear()
         customConnected = false
         // Retire the transcript with the connection. Kotlin has done this since the method existed
@@ -464,11 +689,13 @@ final class AICoachEngine: ObservableObject {
     /// Store the user's pasted key securely. Clears any prior error. If the Keychain write fails the
     /// key is NOT saved, so surface that to the UI instead of silently proceeding (#872).
     func setKey(_ key: String) {
+        guard provider != .chatGPT else { return }
         guard AIKeyStore.save(key, owner: provider.rawValue) else {
             errorText = AICoachError.keySaveFailed.errorDescription
             objectWillChange.send()
             return
         }
+        invalidateConnection()
         errorText = nil
         // A stored key is no longer the rejected one. Deliberately leaves the transcript alone:
         // correcting a mistyped key is not a reason to lose the conversation, which is what routing
@@ -484,6 +711,8 @@ final class AICoachEngine: ObservableObject {
 
     /// Forget the stored key.
     func clearKey() {
+        guard provider != .chatGPT else { disconnect(); return }
+        invalidateConnection()
         AIKeyStore.clear()
         // Same reasoning as `disconnect`: clearing the key returns the user to the setup screen, and
         // Kotlin empties the transcript when it does. Leaving it meant a "clear my key" on Apple removed
@@ -504,6 +733,7 @@ final class AICoachEngine: ObservableObject {
 
     /// Set a custom model id (any string). Adds it to the picker if it isn't already listed.
     func setCustomModel(_ id: String) {
+        guard provider != .chatGPT else { return }
         let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if !availableModels.contains(trimmed) {
@@ -517,6 +747,8 @@ final class AICoachEngine: ObservableObject {
     /// below is byte-identical in release builds.
     #if DEBUG
     var fetchModelsOverride: ((_ provider: AIProvider, _ key: String) async throws -> [String])?
+    var fullContextOverride: (() async -> String)?
+    func waitForHistoryWritesForTesting() async { await historyWriteTask?.value }
     #endif
 
     /// Best-effort: GET the chosen provider's models endpoint with the saved key and merge the
@@ -558,8 +790,11 @@ final class AICoachEngine: ObservableObject {
     /// Only the LIST moves. The selected model is never changed underneath the user. Kotlin twin:
     /// `CoachViewModel.refreshModelsIfStale`.
     func refreshModelsIfStale() async {
-        guard provider != .custom, hasKey else { return }
-        let last = UserDefaults.standard.double(forKey: Self.modelsRefreshedKey(provider))
+        resumeChatGPTConnection()
+        guard provider != .custom, canRefreshModels else { return }
+        let key = provider == .chatGPT ? Self.modelsRefreshedKey(provider) + "." + (chatGPTSession.activeProfileID ?? "")
+            : Self.modelsRefreshedKey(provider)
+        let last = UserDefaults.standard.double(forKey: key)
         guard Self.isCatalogueStale(last: last, now: Date().timeIntervalSince1970) else { return }
         await refreshModels(silent: true)
     }
@@ -568,66 +803,87 @@ final class AICoachEngine: ObservableObject {
     /// neither wipe a message the user is still reading nor raise one they never asked for. Kotlin twin:
     /// the `silent` parameter on `CoachViewModel.refreshModels`.
     func refreshModels(silent: Bool = false) async {
-        guard let key = resolvedKey else {
+        resumeChatGPTConnection()
+        guard CoachBriefScheduler.coachMasterEnabled, !Task.isCancelled else { return }
+        let capturedProvider = provider
+        let epoch = requestEpoch
+        let refreshID = UUID()
+        catalogRefreshID = refreshID
+        if !silent { errorText = nil; keyRejected = false }
+        if capturedProvider == .chatGPT {
+            guard let profile = chatGPTSession.activeProfileID, isConfigured else {
+                if !silent { errorText = ChatGPTAuthError.signInRequired.localizedDescription }
+                return
+            }
+            let generation = chatGPTSession.requestGeneration
+            let current = { self.provider == .chatGPT && self.requestEpoch == epoch
+                && self.catalogRefreshID == refreshID
+                && self.chatGPTSession.activeProfileID == profile
+                && self.chatGPTSession.requestGeneration == generation
+                && CoachBriefScheduler.coachMasterEnabled && !Task.isCancelled }
+            do {
+                let models = try await tracked {
+                    var token = try await self.chatGPTSession.validAccessToken(profileID: profile)
+                    guard current() else { throw CancellationError() }
+                    do { return try await self.chatGPTClient.fetchModels(accessToken: token) }
+                    catch let error as ChatGPTRequestError where error.kind == .auth && !error.outputStarted {
+                        guard current() else { throw CancellationError() }
+                        token = try await self.chatGPTSession.validAccessToken(profileID: profile, forceRefresh: true)
+                        guard current() else { throw CancellationError() }
+                        return try await self.chatGPTClient.fetchModels(accessToken: token)
+                    }
+                }
+                guard current() else { return }
+                let previous = UserDefaults.standard.string(forKey: Self.chatGPTModelKey(profile))
+                catalogProfileID = profile
+                chatGPTCatalog = models
+                availableModels = models.map(\.slug)
+                model = previous.flatMap { availableModels.contains($0) ? $0 : nil } ?? availableModels.first ?? ""
+                if let data = try? JSONEncoder().encode(models) {
+                    UserDefaults.standard.set(data, forKey: Self.chatGPTCatalogKey(profile))
+                }
+                if models.isEmpty, !silent {
+                    errorText = "No models are currently available for this ChatGPT account."
+                }
+                UserDefaults.standard.set(Date().timeIntervalSince1970,
+                                          forKey: Self.modelsRefreshedKey(capturedProvider) + "." + profile)
+            } catch {
+                guard current(), !(error is CancellationError) else { return }
+                if let typed = error as? ChatGPTRequestError {
+                    chatGPTSession.reportRequestFailure(typed, profileID: profile, generation: generation)
+                }
+                if !silent { setProviderError(error) }
+            }
+            return
+        }
+        guard let key = resolvedKey, let client = capturedProvider.legacyClient else {
             if !silent { errorText = AICoachError.noKey.errorDescription }
             return
         }
-        if !silent { errorText = nil }
-
-        // Snapshot the provider BEFORE the await. The Picker isn't disabled during a refresh, so the
-        // user can switch providers mid-flight (#873). We fetch this provider's ids, then re-check on
-        // resume that it's still the live one, and merge against THIS same snapshot, so the guard and
-        // the merge always use one consistent provider, never a stale/mixed list for the wrong one.
-        let capturedProvider = provider
-
         do {
             let ids: [String]
             #if DEBUG
-            if let override = fetchModelsOverride {
-                ids = try await override(capturedProvider, key)
-            } else {
-                ids = try await capturedProvider.client.fetchModels(key: key, session: session)
-            }
+            if let override = fetchModelsOverride { ids = try await override(capturedProvider, key) }
+            else { ids = try await client.fetchModels(key: key, session: session) }
             #else
-            ids = try await capturedProvider.client.fetchModels(key: key, session: session)
+            ids = try await client.fetchModels(key: key, session: session)
             #endif
-
-            // The user switched providers while we were awaiting, so these ids belong to the old one.
-            // Drop them rather than write a list for a provider that's no longer selected.
-            guard provider == capturedProvider else { return }
-
+            guard provider == capturedProvider, requestEpoch == epoch, !Task.isCancelled,
+                  CoachBriefScheduler.coachMasterEnabled else { return }
             guard !ids.isEmpty else {
                 if !silent { errorText = AICoachError.decode.errorDescription }
                 return
             }
-
-            // Merge: keep the captured provider's built-in options on top, append any newly-discovered
-            // ids (sorted), and preserve a current custom selection if it isn't otherwise present.
             let builtin = capturedProvider.modelOptions
-            let discovered = Set(ids).subtracting(builtin).sorted()
-            var merged = builtin + discovered
+            var merged = builtin + Set(ids).subtracting(builtin).sorted()
             if !merged.contains(model) { merged.insert(model, at: 0) }
             availableModels = merged
-            // Stamp only on a SUCCESSFUL pull, so a provider that is down does not buy itself a week
-            // of silence from `refreshModelsIfStale()`.
             UserDefaults.standard.set(Date().timeIntervalSince1970,
                                       forKey: Self.modelsRefreshedKey(capturedProvider))
-        } catch let e as AICoachError {
-            // A switch mid-flight makes any error moot for the old provider, so don't surface it.
-            guard provider == capturedProvider, !silent else { return }
-            // Typed first, because this used to report EVERY failure as a network problem, including a
-            // key the provider had just turned away. Refresh is one of the two places a wrong key shows
-            // itself, and it was the one that blamed the wrong thing: the wearer read "Network problem"
-            // and went looking at their connection. It now says what happened and, for a rejection,
-            // opens the field to fix it.
-            errorText = e.errorDescription
-            if case .badKey = e { keyRejected = true } else { keyRejected = false }
-            return
         } catch {
-            guard provider == capturedProvider, !silent else { return }
-            errorText = AICoachError.network(error.localizedDescription).errorDescription
-            keyRejected = false
-            return
+            guard provider == capturedProvider, requestEpoch == epoch, !silent,
+                  !(error is CancellationError), CoachBriefScheduler.coachMasterEnabled else { return }
+            setProviderError(error)
         }
     }
 
@@ -658,10 +914,22 @@ final class AICoachEngine: ObservableObject {
     /// which is synchronous and runs for every screen the app builds, not just Coach. Best-effort: a
     /// store failure just leaves the transcript empty, matching pre-K2 behaviour — never crashes.
     func loadPersistedMessagesIfNeeded() async {
+        resumeChatGPTConnection()
+        alignBriefOwner()
         guard !didLoadPersistedMessages else { return }
         didLoadPersistedMessages = true
-        guard messages.isEmpty, let store = await repo.storeHandle() else { return }
-        guard let rows = try? await store.coachMessages(), !rows.isEmpty else { return }
+        let epoch = requestEpoch
+        guard !UserDefaults.standard.bool(forKey: Self.historyPendingKey),
+              messages.isEmpty, let store = await repo.storeHandle() else { return }
+        guard let rows = try? await store.coachMessages(), !rows.isEmpty,
+              epoch == requestEpoch, messages.isEmpty,
+              !UserDefaults.standard.bool(forKey: Self.historyPendingKey) else { return }
+        let owner = UserDefaults.standard.string(forKey: Self.conversationProfileKey)
+        if provider == .chatGPT, rows.contains(where: { $0.provider == AIProvider.chatGPT.rawValue }) {
+            guard let owner, owner == chatGPTSession.activeProfileID else { return }
+        }
+        if provider == .chatGPT, let owner, owner != chatGPTSession.activeProfileID { return }
+        conversationProfileID = owner
         // Recover the day this transcript was last written on FROM THE ROWS. `conversationDay` lives in
         // memory, so a process restart brought it back nil, and `isStaleConversation(nil, ...)` is false
         // by design (nothing sent yet is never stale), which meant a restored conversation from any
@@ -687,33 +955,64 @@ final class AICoachEngine: ObservableObject {
     /// in-memory transcript (what the user sees) is unaffected either way.
     private func persistMessages() {
         let snapshot = messages
-        let providerId = provider.rawValue
-        Task {
+        let providerID = provider.rawValue
+        let owner = conversationProfileID
+        historyWriteGeneration &+= 1
+        let generation = historyWriteGeneration
+        // Metadata is committed after SQLite, with a durable tombstone before it. A process death
+        // between those writes must never relabel the preceding account's transcript as the new one.
+        UserDefaults.standard.set(true, forKey: Self.historyPendingKey)
+        UserDefaults.standard.synchronize()
+        let previous = historyWriteTask
+        historyWriteTask = Task {
+            await previous?.value
             guard let store = await repo.storeHandle() else { return }
-            let rows = snapshot.enumerated().map { index, m in
-                CoachMessageRow(id: m.id.uuidString, role: m.role.rawValue, text: m.text,
-                                 provider: providerId, createdAt: Int(Date().timeIntervalSince1970),
-                                 orderIndex: index)
+            let rows = snapshot.enumerated().map { index, message in
+                CoachMessageRow(id: message.id.uuidString, role: message.role.rawValue, text: message.text,
+                                 provider: providerID, createdAt: Int(Date().timeIntervalSince1970), orderIndex: index)
             }
-            try? await store.replaceCoachMessages(rows)
+            do { try await store.replaceCoachMessages(rows) } catch { return }
+            guard historyWriteGeneration == generation else { return }
+            if let owner { UserDefaults.standard.set(owner, forKey: Self.conversationProfileKey) }
+            else { UserDefaults.standard.removeObject(forKey: Self.conversationProfileKey) }
+            UserDefaults.standard.set(false, forKey: Self.historyPendingKey)
+            UserDefaults.standard.synchronize()
         }
     }
 
     /// The Coach toolbar's "Clear conversation" action: wipes both the in-memory transcript and the
     /// persisted table. Fire-and-forget on the store side; the in-memory clear is immediate.
     func clearConversation() {
+        invalidateConnection()
+        didLoadPersistedMessages = true
         messages = []
         conversationDay = nil
-        droppedSummary = nil      // K13: reset the summary cache on clear
+        conversationProfileID = nil
+        droppedSummary = nil
         droppedSummaryKey = []
-        Task { try? await repo.storeHandle()?.clearCoachMessages() }
+        historyWriteGeneration &+= 1
+        let generation = historyWriteGeneration
+        UserDefaults.standard.set(true, forKey: Self.historyPendingKey)
+        UserDefaults.standard.synchronize()
+        let previous = historyWriteTask
+        historyWriteTask = Task {
+            await previous?.value
+            guard let store = await repo.storeHandle() else { return }
+            do { try await store.clearCoachMessages() } catch { return }
+            guard historyWriteGeneration == generation else { return }
+            UserDefaults.standard.removeObject(forKey: Self.conversationProfileKey)
+            UserDefaults.standard.set(false, forKey: Self.historyPendingKey)
+            UserDefaults.standard.synchronize()
+        }
     }
 
     /// K5: surface a brief generated by the SCHEDULED morning-brief notification as the first Coach
     /// message, with no network call — called once when the app opens via a tap on that notification.
     /// No-op if a conversation already exists, so it never duplicates into an active chat.
     func surfaceScheduledBrief(_ text: String) {
+        alignBriefOwner()
         guard messages.isEmpty else { return }
+        conversationProfileID = provider == .chatGPT ? chatGPTSession.activeProfileID : nil
         appendMessage(ChatMessage(role: .assistant, text: "Today's brief\n\n" + text))
         conversationDay = Self.localEpochDay()
         persistMessages()
@@ -737,6 +1036,7 @@ final class AICoachEngine: ObservableObject {
     /// mid-conversation tap still shows the fresh brief.
     func appendGeneratedBrief(_ text: String) {
         retireStaleConversationIfNeeded()
+        conversationProfileID = provider == .chatGPT ? chatGPTSession.activeProfileID : nil
         appendMessage(ChatMessage(role: .assistant, text: "Today's brief\n\n" + text))
         conversationDay = Self.localEpochDay()
         persistMessages()
@@ -753,173 +1053,117 @@ final class AICoachEngine: ObservableObject {
     func send(_ userText: String) async {
         let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { errorText = AICoachError.emptyQuestion.errorDescription; return }
-        // The master switch, checked at the EGRESS rather than only on the routes in. Every way into Coach
-        // is gated, but "gated everywhere I thought of" is what #2254 got wrong once: a revoked consent
-        // survived in memory because the conversation never re-read it. A wearer can be STANDING on this
-        // screen when the switch goes off, and that path passes no tab. Refusing here makes "the AI is off"
-        // true however the screen was reached.
-        guard CoachBriefScheduler.coachMasterEnabled else { return }
-        guard let key = resolvedKey else { errorText = AICoachError.noKey.errorDescription; return }
-
-        // A transcript from an earlier local day is retired before the new turn is appended (#1542,
-        // Kotlin twin merged first). `messages` outlives a night — the engine is held for the app's
-        // lifetime — so without this the coach answers TODAY's question inside YESTERDAY's
-        // conversation. The DATA was never stale: buildFullContext() re-reads on every send. It is the
-        // assistant's own earlier turns stating yesterday's figures, and the model staying consistent
-        // with them, which reads as "the coach only talks about my imported data" after a night of
-        // fresh strap data.
-        //
-        // Placed AFTER the guards on purpose: a send that never happens must not wipe a transcript.
-        retireStaleConversationIfNeeded()
-        conversationDay = Self.localEpochDay()
-
-        errorText = nil
-        appendMessage(ChatMessage(role: .user, text: trimmed))
+        guard !sending, CoachBriefScheduler.coachMasterEnabled, !Task.isCancelled else { return }
+        if provider == .chatGPT { chatGPTSessionChanged(chatGPTSession) }
+        let ticket = UUID()
+        foregroundID = ticket
         sending = true
-        // K2: persist once the turn is fully settled (success, mid-stream error, or empty-stream
-        // removal) — not per streamed chunk, so a long reply doesn't hammer the store.
-        defer { sending = false; persistMessages() }
-
-        // Build the data context once and prepend it to the FIRST user turn we send. We send the
-        // full running history so follow-ups stay coherent; the context only needs to ride the
-        // earliest user message.
-        // Include the user's data ONLY with explicit consent; otherwise send a note instead of numbers.
-        let context = dataConsent ? await buildFullContext() : noConsentNote
-        // K13: if the conversation overflows the sliding window, summarize the dropped middle so
-        // the model retains context continuity. Best-effort; failure degrades to the old gap.
-        await summarizeDroppedMiddleIfNeeded(key: key)
-        var wire = wireMessages(context: context)
-
-        // K11: If a chart image is pending and the provider is Gemini, attach it to the last
-        // user turn as inline_data. Non-Gemini providers can't accept images, so the image is
-        // silently dropped (the text question still goes through). Cleared after consumption.
-        let imageBase64 = pendingChartImage
-        pendingChartImage = nil
-
-        // K1: Stream the reply. Append a placeholder assistant message, then mutate its text as
-        // chunks arrive by replacing the last element in `messages`. The transcript re-renders on
-        // each update (SwiftUI binds to `messages`). On error mid-stream, keep the partial text and
-        // append a "(stream interrupted)" marker — never a crash.
-        let placeholder = ChatMessage(role: .assistant, text: "")
-        appendMessage(placeholder)
-        var accumulated = ""
-
+        var changedTranscript = false
+        defer {
+            if foregroundID == ticket {
+                foregroundID = nil
+                sending = false
+                if changedTranscript { persistMessages() }
+            }
+        }
         do {
-            try await streamProvider(key: key, messages: wire, inlineImage: imageBase64) { delta in
-                accumulated += delta
-                // Replace the last message's text with the accumulated stream so far.
-                if let lastIdx = self.messages.indices.last,
-                   self.messages[lastIdx].role == .assistant {
-                    self.messages[lastIdx] = ChatMessage(
-                        id: placeholder.id, role: .assistant, text: accumulated
-                    )
-                }
-            }
-            // Finalize: trim whitespace. If the stream produced nothing, show "(no reply)".
-            let clean = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                messages[lastIdx] = ChatMessage(
-                    id: placeholder.id, role: .assistant,
-                    text: clean.isEmpty ? "(no reply)" : clean
-                )
-            }
-        } catch let e as AICoachError {
-            // Mid-stream error: keep the partial text + an interrupted marker (PRD K1 acceptance).
-            let partial = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !partial.isEmpty, let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                messages[lastIdx] = ChatMessage(
-                    id: placeholder.id, role: .assistant,
-                    text: partial + "\n\n*(stream interrupted)*"
-                )
-            } else if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                // No text received at all — remove the empty placeholder.
-                messages.remove(at: lastIdx)
-            }
-            errorText = e.errorDescription
-            // Typed, never text-matched: the message is localized and the case is not.
-            if case .badKey = e { keyRejected = true } else { keyRejected = false }
-        } catch {
-            let partial = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !partial.isEmpty, let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                messages[lastIdx] = ChatMessage(
-                    id: placeholder.id, role: .assistant,
-                    text: partial + "\n\n*(stream interrupted)*"
-                )
-            } else if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                messages.remove(at: lastIdx)
-            }
-            errorText = AICoachError.network(error.localizedDescription).errorDescription
+            let connection = try await captureConnection()
+            try requireCurrent(connection)
+            retireStaleConversationIfNeeded()
+            conversationDay = Self.localEpochDay()
+            errorText = nil
             keyRejected = false
+            appendMessage(ChatMessage(role: .user, text: trimmed))
+            changedTranscript = true
+            conversationProfileID = connection.profileID
+            let context = await contextFor(connection)
+            try requireCurrent(connection)
+            try await summarizeDroppedMiddleIfNeeded(connection: connection)
+            try requireCurrent(connection)
+            let wire = wireMessages(context: context)
+            let image = connection.provider == .gemini && connection.consent && multimodalChartEnabled ? pendingChartImage : nil
+            pendingChartImage = nil
+            await foregroundResponse(connection: connection, messages: wire, inlineImage: image)
+        } catch {
+            guard foregroundID == ticket, CoachBriefScheduler.coachMasterEnabled,
+                  !(error is CancellationError), !Task.isCancelled else { return }
+            setProviderError(error)
         }
     }
 
-    /// Proactively generate "Today's brief" the first time the Coach opens, readiness + a training
-    /// prescription + one recovery tip, without the user typing. Requires a key + data consent.
-    /// K1: streams the brief the same way `send` does.
+    /// Opening Coach can generate a brief only with the same master/data/connection gates as a send.
     func startBriefIfNeeded() async {
-        guard isConfigured, dataConsent, messages.isEmpty, !sending else { return }
-        guard let key = resolvedKey else { return }
-        errorText = nil
+        resumeChatGPTConnection()
+        if provider == .chatGPT { chatGPTSessionChanged(chatGPTSession) }
+        guard CoachBriefScheduler.coachMasterEnabled, isConfigured, dataConsent,
+              messages.isEmpty, !sending, !Task.isCancelled else { return }
+        if provider == .chatGPT, chatGPTSession.state == .usageLimited { return }
+        let ticket = UUID()
+        foregroundID = ticket
         sending = true
-        defer { sending = false; persistMessages() }
+        var changedTranscript = false
+        defer {
+            if foregroundID == ticket {
+                foregroundID = nil
+                sending = false
+                if changedTranscript { persistMessages() }
+            }
+        }
+        do {
+            let connection = try await captureConnection()
+            let context = await contextFor(connection)
+            try requireCurrent(connection)
+            guard messages.isEmpty else { return }
+            errorText = nil
+            keyRejected = false
+            conversationDay = Self.localEpochDay()
+            conversationProfileID = connection.profileID
+            changedTranscript = true
+            await foregroundResponse(connection: connection,
+                                     messages: [(.user, context + "\n\n---\n\n" + Self.briefInstruction)],
+                                     prefix: "Today's brief\n\n")
+        } catch {
+            guard foregroundID == ticket, CoachBriefScheduler.coachMasterEnabled,
+                  !(error is CancellationError), !Task.isCancelled else { return }
+            setProviderError(error)
+        }
+    }
 
-        let context = await buildFullContext()
-        let wire: [(role: ChatMessage.Role, content: String)] =
-            [(.user, context + "\n\n---\n\n" + Self.briefInstruction)]
-
-        let prefix = "Today's brief\n\n"
+    private func foregroundResponse(connection: CoachConnection,
+                                    messages wire: [(role: ChatMessage.Role, content: String)],
+                                    inlineImage: String? = nil, prefix: String = "") async {
+        guard connectionIsCurrent(connection) else { return }
         let placeholder = ChatMessage(role: .assistant, text: prefix)
         appendMessage(placeholder)
+        streamingMessageID = placeholder.id
         var accumulated = ""
-
         do {
-            try await streamProvider(key: key, messages: wire) { delta in
+            try await streamProvider(connection: connection, messages: wire, inlineImage: inlineImage) { delta in
+                guard self.connectionIsCurrent(connection) else { return }
                 accumulated += delta
-                if let lastIdx = self.messages.indices.last,
-                   self.messages[lastIdx].role == .assistant {
-                    self.messages[lastIdx] = ChatMessage(
-                        id: placeholder.id, role: .assistant, text: prefix + accumulated
-                    )
+                if let index = self.messages.firstIndex(where: { $0.id == placeholder.id }) {
+                    self.messages[index] = ChatMessage(id: placeholder.id, role: .assistant, text: prefix + accumulated)
                 }
             }
+            try requireCurrent(connection)
             let clean = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if clean.isEmpty {
-                if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                    messages.remove(at: lastIdx)
-                }
-            } else if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                messages[lastIdx] = ChatMessage(id: placeholder.id, role: .assistant, text: prefix + clean)
+            if let index = messages.firstIndex(where: { $0.id == placeholder.id }) {
+                if clean.isEmpty { messages.remove(at: index) }
+                else { messages[index] = ChatMessage(id: placeholder.id, role: .assistant, text: prefix + clean) }
             }
-        } catch let e as AICoachError {
-            let partial = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if partial.isEmpty {
-                if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                    messages.remove(at: lastIdx)
-                }
-            } else if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                messages[lastIdx] = ChatMessage(
-                    id: placeholder.id, role: .assistant,
-                    text: prefix + partial + "\n\n*(stream interrupted)*"
-                )
-            }
-            errorText = e.errorDescription
-            // Typed, never text-matched: the message is localized and the case is not.
-            if case .badKey = e { keyRejected = true } else { keyRejected = false }
         } catch {
+            guard connectionIsCurrent(connection) else { return }
             let partial = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
-            if partial.isEmpty {
-                if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                    messages.remove(at: lastIdx)
+            if let index = messages.firstIndex(where: { $0.id == placeholder.id }) {
+                if partial.isEmpty { messages.remove(at: index) }
+                else {
+                    messages[index] = ChatMessage(id: placeholder.id, role: .assistant,
+                                                  text: prefix + partial + "\n\n*(stream interrupted)*")
                 }
-            } else if let lastIdx = messages.indices.last, messages[lastIdx].role == .assistant {
-                messages[lastIdx] = ChatMessage(
-                    id: placeholder.id, role: .assistant,
-                    text: prefix + partial + "\n\n*(stream interrupted)*"
-                )
             }
-            errorText = AICoachError.network(error.localizedDescription).errorDescription
-            keyRejected = false
+            if !(error is CancellationError), !Task.isCancelled { setProviderError(error) }
         }
+        if streamingMessageID == placeholder.id { streamingMessageID = nil }
     }
 
     /// K5: The brief instruction shared by the interactive `startBriefIfNeeded()` (streamed into the
@@ -938,17 +1182,19 @@ final class AICoachEngine: ObservableObject {
     /// context has no UI to stream into). Returns nil when not configured/consented, on any network
     /// failure, or when the reply is empty — the caller treats nil as "brief unavailable"; never throws.
     func generateBrief() async -> String? {
-        // Same master-switch gate as `send`, because this entry has NO UI at all: it is what the scheduler
-        // calls, and a caller that skipped the scheduler's own gate would otherwise reach a provider with
-        // the AI switched off.
-        guard CoachBriefScheduler.coachMasterEnabled else { return nil }
-        guard isConfigured, dataConsent, let key = resolvedKey else { return nil }
-        let context = await buildFullContext()
-        let wire: [(role: ChatMessage.Role, content: String)] =
-            [(.user, context + "\n\n---\n\n" + Self.briefInstruction)]
-        guard let reply = try? await callProvider(key: key, messages: wire) else { return nil }
-        let clean = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-        return clean.isEmpty ? nil : clean
+        resumeChatGPTConnection()
+        guard CoachBriefScheduler.coachMasterEnabled, isConfigured, dataConsent, !Task.isCancelled else { return nil }
+        if provider == .chatGPT, chatGPTSession.state == .usageLimited { return nil }
+        do {
+            let connection = try await captureConnection()
+            let context = await contextFor(connection)
+            try requireCurrent(connection)
+            let reply = try await callProvider(connection: connection,
+                                               messages: [(.user, context + "\n\n---\n\n" + Self.briefInstruction)])
+            try requireCurrent(connection)
+            let clean = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+            return clean.isEmpty ? nil : clean
+        } catch { return nil }
     }
 
     /// Full data context = the metrics summary + recent workouts (+ an OPT-IN on-device-signals summary
@@ -1042,35 +1288,161 @@ final class AICoachEngine: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    /// Dispatch to the user's chosen provider client.
-    private func callProvider(key: String,
-                              messages: [(role: ChatMessage.Role, content: String)]) async throws -> String {
-        try await provider.client.send(
-            key: key,
-            model: model,
-            systemPrompt: systemPrompt,
-            messages: messages,
-            session: session
-        )
+    private enum CoachBackend {
+        case legacy(any AIProviderClient, key: String)
+        case chatGPT(profileID: String, generation: UInt64)
     }
 
-    /// K1: Dispatch to the user's chosen provider client's streaming method. The default
-    /// `AIProviderClient.stream` falls back to `send` + a single delta, so providers without
-    /// streaming still work. K11: when an inline image is present, dispatches to
-    /// `streamWithImage` instead (Gemini overrides it; others ignore the image).
-    private func streamProvider(key: String,
+    private struct CoachConnection {
+        let provider: AIProvider
+        let model: String
+        let instructions: String
+        let epoch: UInt64
+        let consent: Bool
+        let signals: Bool
+        let backend: CoachBackend
+        var profileID: String? {
+            if case let .chatGPT(profileID, _) = backend { return profileID }
+            return nil
+        }
+    }
+
+    private func captureConnection() async throws -> CoachConnection {
+        resumeChatGPTConnection()
+        applyCoachMasterSwitch()
+        try Task.checkCancellation()
+        guard CoachBriefScheduler.coachMasterEnabled else { throw CancellationError() }
+        let selected = provider
+        let epoch = requestEpoch
+        let backend: CoachBackend
+        if selected == .chatGPT {
+            guard isConfigured, let profile = chatGPTSession.activeProfileID else {
+                throw chatGPTNeedsReconnect && chatGPTSession.state == .signedInWithoutPlanPermission
+                    ? ChatGPTAuthError.planPermissionRequired : ChatGPTAuthError.signInRequired
+            }
+            let generation = chatGPTSession.requestGeneration
+            if availableModels.isEmpty || model.isEmpty { await refreshModels() }
+            try Task.checkCancellation()
+            guard provider == selected, requestEpoch == epoch,
+                  chatGPTSession.activeProfileID == profile, chatGPTSession.requestGeneration == generation,
+                  CoachBriefScheduler.coachMasterEnabled else { throw CancellationError() }
+            guard availableModels.contains(model), !model.isEmpty else {
+                throw ChatGPTRequestError(kind: .model, code: "no_available_models")
+            }
+            backend = .chatGPT(profileID: profile, generation: generation)
+        } else {
+            guard let key = resolvedKey, let client = selected.legacyClient else { throw AICoachError.noKey }
+            backend = .legacy(client, key: key)
+        }
+        return CoachConnection(provider: selected, model: model, instructions: systemPrompt, epoch: epoch,
+                               consent: dataConsent, signals: includeOnDeviceSignals, backend: backend)
+    }
+
+    private func connectionIsCurrent(_ connection: CoachConnection) -> Bool {
+        guard provider == connection.provider, requestEpoch == connection.epoch,
+              CoachBriefScheduler.coachMasterEnabled, dataConsent == connection.consent,
+              includeOnDeviceSignals == connection.signals else { return false }
+        if case let .chatGPT(profile, generation) = connection.backend {
+            return chatGPTSession.activeProfileID == profile && chatGPTSession.requestGeneration == generation
+        }
+        return true
+    }
+
+    private func requireCurrent(_ connection: CoachConnection) throws {
+        try Task.checkCancellation()
+        guard connectionIsCurrent(connection) else { throw CancellationError() }
+    }
+
+    private func contextFor(_ connection: CoachConnection) async -> String {
+        guard connection.consent else { return noConsentNote }
+        #if DEBUG
+        if let override = fullContextOverride { return await override() }
+        #endif
+        return await buildFullContext()
+    }
+
+    private func setProviderError(_ error: Error) {
+        keyRejected = false
+        if let typed = error as? AICoachError {
+            errorText = typed.localizedDescription
+            if case .badKey = typed { keyRejected = true }
+        } else if error is ChatGPTRequestError || error is ChatGPTAuthError {
+            errorText = error.localizedDescription
+        } else {
+            errorText = AICoachError.network("The connection was interrupted").localizedDescription
+        }
+    }
+
+    private func callProvider(connection: CoachConnection,
+                              messages: [(role: ChatMessage.Role, content: String)]) async throws -> String {
+        try requireCurrent(connection)
+        switch connection.backend {
+        case let .legacy(client, key):
+            return try await tracked {
+                try self.requireCurrent(connection)
+                let reply = try await client.send(key: key, model: connection.model,
+                                                  systemPrompt: connection.instructions,
+                                                  messages: messages, session: self.session)
+                try self.requireCurrent(connection)
+                return reply
+            }
+        case .chatGPT:
+            var text = ""
+            try await streamProvider(connection: connection, messages: messages) { text += $0 }
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func streamProvider(connection: CoachConnection,
                                 messages: [(role: ChatMessage.Role, content: String)],
                                 inlineImage: String? = nil,
-                                onDelta: (String) -> Void) async throws {
-        try await provider.client.streamWithImage(
-            key: key,
-            model: model,
-            systemPrompt: systemPrompt,
-            messages: messages,
-            inlineImage: inlineImage,
-            session: session,
-            onDelta: onDelta
-        )
+                                onDelta: @escaping (String) -> Void) async throws {
+        try requireCurrent(connection)
+        let auth = connection.provider == .chatGPT ? chatGPTSession : nil
+        try await tracked {
+            try self.requireCurrent(connection)
+            switch connection.backend {
+            case let .legacy(client, key):
+                try await client.streamWithImage(key: key, model: connection.model,
+                                                  systemPrompt: connection.instructions, messages: messages,
+                                                  inlineImage: inlineImage, session: self.session) { delta in
+                    guard self.connectionIsCurrent(connection), !Task.isCancelled else { return }
+                    onDelta(delta)
+                }
+            case let .chatGPT(profile, generation):
+                guard let auth else { throw ChatGPTAuthError.signInRequired }
+                var emitted = false
+                do {
+                    var token = try await auth.validAccessToken(profileID: profile)
+                    try self.requireCurrent(connection)
+                    let deliver = { (delta: String) in
+                        guard self.connectionIsCurrent(connection), !Task.isCancelled else { return }
+                        emitted = true
+                        onDelta(delta)
+                    }
+                    do {
+                        try await self.chatGPTClient.stream(accessToken: token, model: connection.model,
+                                                           instructions: connection.instructions, messages: messages,
+                                                           onDelta: deliver)
+                    } catch let error as ChatGPTRequestError where error.kind == .auth && !error.outputStarted && !emitted {
+                        try self.requireCurrent(connection)
+                        token = try await auth.validAccessToken(profileID: profile, forceRefresh: true)
+                        try self.requireCurrent(connection)
+                        try await self.chatGPTClient.stream(accessToken: token, model: connection.model,
+                                                           instructions: connection.instructions, messages: messages,
+                                                           onDelta: deliver)
+                    }
+                    try self.requireCurrent(connection)
+                    auth.reportRequestSuccess(profileID: profile, generation: generation)
+                } catch {
+                    if self.connectionIsCurrent(connection), let typed = error as? ChatGPTRequestError {
+                        auth.reportRequestFailure(typed, profileID: profile, generation: generation)
+                    }
+                    throw error
+                }
+            }
+            try self.requireCurrent(connection)
+        }
     }
 
     /// Sliding window over the chat: the FIRST user turn (it carries the metrics context) plus the most
@@ -1138,7 +1510,7 @@ final class AICoachEngine: ObservableObject {
     /// K13: When the conversation overflows the sliding window, summarize the dropped middle turns
     /// into a single system message. Called before each send when the window would drop messages.
     /// Best-effort: on any failure, leaves `droppedSummary` nil (the old gap behaviour).
-    private func summarizeDroppedMiddleIfNeeded(key: String) async {
+    private func summarizeDroppedMiddleIfNeeded(connection: CoachConnection) async throws {
         guard messages.count > Self.maxHistoryMessages + 1,
               let firstUser = messages.firstIndex(where: { $0.role == .user }) else { return }
         let recentStart = messages.count - Self.maxHistoryMessages
@@ -1149,7 +1521,6 @@ final class AICoachEngine: ObservableObject {
         let dropped = Array(messages[(firstUser + 1)..<recentStart])
         let keySignature = dropped.map { "\($0.role.rawValue):\($0.text)" }
         guard droppedSummaryKey != keySignature else { return }
-        droppedSummaryKey = keySignature
 
         // Build a compact transcript of the dropped turns for the summarizer.
         let transcript = dropped.map { m in
@@ -1164,8 +1535,16 @@ final class AICoachEngine: ObservableObject {
         let wire: [(role: ChatMessage.Role, content: String)] = [
             (.user, "You are a concise summarizer. Summarize the conversation in 2-3 sentences.\n\n\(summaryPrompt)"),
         ]
-        if let summary = try? await callProvider(key: key, messages: wire) {
+        do {
+            let summary = try await callProvider(connection: connection, messages: wire)
+            try requireCurrent(connection)
+            droppedSummaryKey = keySignature
             droppedSummary = "Summary of earlier conversation: \(summary.trimmingCharacters(in: .whitespacesAndNewlines))"
+        } catch {
+            if error is CancellationError { throw error }
+            if let typed = error as? ChatGPTRequestError,
+               [.auth, .permission, .usage].contains(typed.kind) { throw typed }
+            // A transient summarizer failure can still use the existing local history window.
         }
     }
 

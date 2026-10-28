@@ -63,6 +63,10 @@ final class HealthKitBridge: ObservableObject {
     @Published private(set) var lastError: String?
 
     private let store = HKHealthStore()
+    // Personal iPhone build: workout summaries only. No Health writes or physiological imports.
+    private let importsWorkoutsOnly = true
+    var readsWorkoutsOnly: Bool { importsWorkoutsOnly }
+    private static let workoutReadRequestKey = "personal.health.workoutReadRequested"
     private let repo: Repository
     /// Source id imported HealthKit data lands under (matches `AppModel.appleDeviceId`).
     private let appleDeviceId: String
@@ -92,6 +96,7 @@ final class HealthKitBridge: ObservableObject {
     // MARK: - Types
 
     private var readTypes: Set<HKObjectType> {
+        if importsWorkoutsOnly { return [HKObjectType.workoutType()] }
         var s = Set<HKObjectType>()
         for id in HealthKitBridge.quantityReadIds { if let t = HKObjectType.quantityType(forIdentifier: id) { s.insert(t) } }
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { s.insert(sleep) }
@@ -105,6 +110,7 @@ final class HealthKitBridge: ObservableObject {
     }
 
     private var writeTypes: Set<HKSampleType> {
+        if importsWorkoutsOnly { return [] }
         var s = Set<HKSampleType>()
         for id in HealthKitBridge.quantityWriteIds + HealthKitBridge.highResQuantityWriteIds
             where !HealthKitBridge.writeDenied.contains(id) {
@@ -206,6 +212,7 @@ final class HealthKitBridge: ObservableObject {
         do {
             try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
             persistAuthorizationTypeSignature()
+            if importsWorkoutsOnly { UserDefaults.standard.set(true, forKey: Self.workoutReadRequestKey) }
         } catch {
             // Leave the signature unset so the next sync tries again. Not surfaced in `lastError`: the
             // user did not ask for this, and the rest of the sync is unaffected.
@@ -236,6 +243,7 @@ final class HealthKitBridge: ObservableObject {
             auth = .authorized
             // Record the current read and share sets — see `requestNewAuthorizationTypesIfNeeded`.
             persistAuthorizationTypeSignature()
+            if importsWorkoutsOnly { UserDefaults.standard.set(true, forKey: Self.workoutReadRequestKey) }
         } catch {
             // A thrown error here is on a build that carries the entitlement (guarded above), so it's a
             // genuine denial / request failure — keep the normal `.denied` "enable in Settings" path,
@@ -257,6 +265,14 @@ final class HealthKitBridge: ObservableObject {
     /// status, so no system permission sheet is shown.
     func refreshAuthIfPreviouslyGranted() {
         guard auth == .unknown, HKHealthStore.isHealthDataAvailable() else { return }
+        if importsWorkoutsOnly {
+            // HealthKit hides read grants. Remember that consent was requested; never infer it from a write grant.
+            if UserDefaults.standard.bool(forKey: Self.workoutReadRequestKey) {
+                auth = .authorized
+                enableLiveDelivery()
+            }
+            return
+        }
         // Share authorization is per type. Resume when at least one write type is granted so a person
         // who intentionally declined (for example) workouts still gets sleep/vitals exported after a
         // relaunch. Requiring every legacy type made partial grants look wholly disconnected.
@@ -310,10 +326,10 @@ final class HealthKitBridge: ObservableObject {
         guard auth == .authorized, HKHealthStore.isHealthDataAvailable() else { return }
 
         var types: [HKSampleType] = []
-        for id in HealthKitBridge.liveQuantityIds {
+        for id in (importsWorkoutsOnly ? [] : HealthKitBridge.liveQuantityIds) {
             if let t = HKObjectType.quantityType(forIdentifier: id) { types.append(t) }
         }
-        if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.append(sleep) }
+        if !importsWorkoutsOnly, let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.append(sleep) }
         // Workouts, for the same reason the scored reads are here: without an observer a Watch workout
         // reached NOOP only at the next foreground open, or whenever an unrelated type happened to wake
         // the app, so up to an hour late and sometimes longer (#2265).
@@ -502,6 +518,24 @@ final class HealthKitBridge: ObservableObject {
         let end = Date()
         guard let start = cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: end)) else { return false }
 
+        if importsWorkoutsOnly {
+            guard let rows = await collectWorkouts(start: start, end: end) else {
+                lastError = String(localized: "Couldn't read workouts from Apple Health.")
+                return false
+            }
+            do {
+                let prior = try await store.workouts(deviceId: appleDeviceId,
+                                                     from: Int(start.timeIntervalSince1970), to: Int(end.timeIntervalSince1970), limit: 10_000)
+                try await store.upsertWorkouts(HealthWorkoutReadMerge.merge(rows, prior: prior), deviceId: appleDeviceId)
+                if !rows.isEmpty { repo.invalidateWorkoutViews() }
+                lastSync = Date(); lastSyncDays = days; lastError = nil
+                return true
+            } catch {
+                lastError = String(localized: "Apple Health sync failed: \(error.localizedDescription)")
+                return false
+            }
+        }
+
         var byDay: [String: DayAgg] = [:]
         func agg(_ day: String) -> DayAgg { byDay[day] ?? DayAgg() }
         // #2561 follow-up: every aggregate below feeds an upsert that writes `column = excluded.column`,
@@ -672,7 +706,7 @@ final class HealthKitBridge: ObservableObject {
         // imports these from a static Health export and Android reads them from Health Connect; iOS now
         // reads them live on-device too, so the platforms reach parity. ON-DEVICE ONLY: this is a plain
         // HealthKit read of workouts NOOP did NOT author, never any cloud/3rd-party API. (#835)
-        let workoutRows = await collectWorkouts(start: start, end: end)
+        guard let workoutRows = await collectWorkouts(start: start, end: end) else { return false }
 
         // Persist all the apple-health rows AND write back, advancing lastSync only when the WHOLE
         // round-trip succeeds. The three read-side upserts used to be swallowed by `try?`, so a failed
@@ -780,6 +814,7 @@ final class HealthKitBridge: ObservableObject {
     /// being dropped until the next app open.
     @discardableResult
     func writeBackAfterNewData() async -> Bool {
+        guard !importsWorkoutsOnly else { return true }
         // A backfill routinely completes in a process that was never foregrounded (a background offload,
         // or a BLE relaunch) - the case this exists for. `auth` is still `.unknown` there, because the
         // only resume runs on scenePhase == .active, so without this the guard below would silently drop
@@ -833,6 +868,7 @@ final class HealthKitBridge: ObservableObject {
     ///
     /// Throws on save failure so the caller can decide whether to advance `lastSync`.
     private func writeBack(whoopStore: WhoopStore, days: Int = 14) async throws {
+        guard !importsWorkoutsOnly else { return }
         guard auth == .authorized else { return }
         let now = Date()
         guard let fromDate = Calendar.current.date(byAdding: .day, value: -days, to: now) else { return }
@@ -1630,7 +1666,7 @@ final class HealthKitBridge: ObservableObject {
         }
     }
 
-    private func collectWorkouts(start: Date, end: Date) async -> [WorkoutRow] {
+    private func collectWorkouts(start: Date, end: Date) async -> [WorkoutRow]? {
         let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate),
             Self.notNoopAuthored,
@@ -1640,14 +1676,16 @@ final class HealthKitBridge: ObservableObject {
         // with each workout; they cannot be read inside the sample query's completion handler
         // (HealthKit does not allow nested queries on the same store), so we hold the workouts and
         // fetch routes in a second pass below.
-        let workoutsAndRows: [HKWorkout] = await withCheckedContinuation { (cont: CheckedContinuation<[HKWorkout], Never>) in
+        let read: [HKWorkout]? = await withCheckedContinuation { (cont: CheckedContinuation<[HKWorkout]?, Never>) in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
             let q = HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate,
-                                  limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, _ in
+                                  limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, error in
+                guard error == nil else { cont.resume(returning: nil); return }
                 cont.resume(returning: (samples ?? []).compactMap { $0 as? HKWorkout })
             }
             store.execute(q)
         }
+        guard let workoutsAndRows = read else { return nil }
         // #1205: fetch and store GPS routes for each workout. Best-effort — a route read failure
         // (permission not granted, no route data, HealthKit error) leaves the workout intact with
         // no map, which is exactly the pre-change behaviour. Stored via RouteStore under the same
@@ -1658,7 +1696,7 @@ final class HealthKitBridge: ObservableObject {
         // a gigabyte of JSON through UserDefaults. `storeAll` applies the same eviction, once.
         var importedRoutes: [(route: WorkoutRoute, startTs: Int, sport: String)] = []
         for workout in workoutsAndRows {
-            if let route = await Self.fetchWorkoutRoute(for: workout, store: store),
+            if !importsWorkoutsOnly, let route = await Self.fetchWorkoutRoute(for: workout, store: store),
                route.count >= 2 {
                 let latLngs = route.map { RouteMath.LatLng($0.lat, $0.lon) }
                 let polyline = RouteMath.encode(latLngs)
@@ -1675,8 +1713,8 @@ final class HealthKitBridge: ObservableObject {
         for workout in workoutsAndRows {
             let startTs = Int(workout.startDate.timeIntervalSince1970)
             let endTs = max(Int(workout.endDate.timeIntervalSince1970), startTs)
-            let appleSamples = await Self.fetchWorkoutHeartRate(for: workout, store: store)
-            let steps = await Self.fetchWorkoutSteps(for: workout, store: store)
+            let appleSamples = importsWorkoutsOnly ? [] : await Self.fetchWorkoutHeartRate(for: workout, store: store)
+            let steps = importsWorkoutsOnly ? nil : await Self.fetchWorkoutSteps(for: workout, store: store)
             // Prefer the HR stream HealthKit associates with this workout (for example, Apple Watch).
             // If that stream is absent or too sparse to score, fall back to the locally stored strap
             // trace for this exact workout window — the same trace that backs the detail chart.

@@ -1192,7 +1192,7 @@ struct InsightsView: View {
                     Spacer(minLength: 8)
                     ScoreStatePill(scoreState)
                 }
-                Text(cost.sentence())
+                Text(MetricCatalog.scoreDisplayText(cost.sentence()))
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

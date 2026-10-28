@@ -18,8 +18,30 @@ import Foundation
 // and Liftosaur's `lb` unit convert). The parser is tolerant in the house style: a malformed set or
 // record is skipped and counted, never fatal.
 
-/// One imported strength session — the shape the app layer maps 1:1 onto a `WorkoutRow`
-/// (sport "Strength Training", source "lifting"). All weights are kilograms.
+/// A source set, kept separately from the unchanged working-volume summary. Weights are kilograms.
+public struct ImportedLiftSet: Sendable, Equatable {
+    public var exercise: String
+    public var setIndex: Int
+    public var weightKg: Double?
+    public var reps: Int?
+    public var setType: String
+    public var rpe: Double?
+    public var note: String?
+    public var durationSeconds: Double?
+    public var distanceMeters: Double?
+
+    public init(exercise: String, setIndex: Int, weightKg: Double?, reps: Int?,
+                setType: String = "normal", rpe: Double? = nil, note: String? = nil,
+                durationSeconds: Double? = nil, distanceMeters: Double? = nil) {
+        self.exercise = exercise; self.setIndex = setIndex
+        self.weightKg = weightKg; self.reps = reps; self.setType = setType
+        self.rpe = rpe; self.note = note
+        self.durationSeconds = durationSeconds; self.distanceMeters = distanceMeters
+    }
+
+    public var isWarmup: Bool { ["warmup", "warm_up", "warm-up"].contains(setType) }
+}
+
 public struct LiftingSession: Sendable, Equatable {
     /// Session start (UTC). Primary key component for the workout row.
     public var start: Date
@@ -37,6 +59,9 @@ public struct LiftingSession: Sendable, Equatable {
     public var topSetKg: Double?
     /// Optional workout title from the export (e.g. "Push Day"). Surfaced in the note, never the sport.
     public var title: String?
+    /// Individual source sets, including warmups. Summary arithmetic remains unchanged.
+    public var loggedSets: [ImportedLiftSet]
+    public var note: String?
 
     public init(
         start: Date,
@@ -46,7 +71,9 @@ public struct LiftingSession: Sendable, Equatable {
         exerciseCount: Int,
         totalReps: Int,
         topSetKg: Double?,
-        title: String?
+        title: String?,
+        loggedSets: [ImportedLiftSet] = [],
+        note: String? = nil
     ) {
         self.start = start
         self.end = end
@@ -56,6 +83,8 @@ public struct LiftingSession: Sendable, Equatable {
         self.totalReps = totalReps
         self.topSetKg = topSetKg
         self.title = title
+        self.loggedSets = loggedSets
+        self.note = note
     }
 
     /// Duration in seconds, or nil when start == end (no real interval to claim).
@@ -174,6 +203,16 @@ public enum LiftingImporter {
                 order.append(key)
             }
             byKey[key]?.endRaw = row.cell("end_time", "end") ?? byKey[key]?.endRaw
+            byKey[key]?.note = row.cell("description", "workout_notes", "workout_note") ?? byKey[key]?.note
+            if !exercise.isEmpty {
+                let ordinal = (byKey[key]?.loggedSets.filter { $0.exercise == exercise }.count ?? 0) + 1
+                byKey[key]?.loggedSets.append(ImportedLiftSet(
+                    exercise: exercise, setIndex: ordinal, weightKg: weightKg, reps: reps,
+                    setType: setType, rpe: row.double("rpe").flatMap { $0.isFinite && (0...10).contains($0) ? $0 : nil },
+                    note: row.cell("exercise_notes", "exercise_note", "notes"),
+                    durationSeconds: row.double("duration_seconds", "duration_s").flatMap { $0.isFinite && $0 >= 0 ? $0 : nil },
+                    distanceMeters: row.double("distance_meters", "distance_m").flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }))
+            }
             byKey[key]?.add(exercise: exercise, setType: setType, weightKg: weightKg, reps: reps)
         }
 
@@ -224,6 +263,8 @@ public enum LiftingImporter {
         var reps = 0
         var top: Double?
         var exercises = Set<String>()
+        var loggedSets: [ImportedLiftSet] = []
+        var note: String?
 
         init(start: Date, title: String?, zone: TimeZone) {
             self.start = start
@@ -246,7 +287,7 @@ public enum LiftingImporter {
         }
 
         var session: LiftingSession? {
-            guard sets > 0 else { return nil }
+            guard sets > 0 || !loggedSets.isEmpty else { return nil }
             let end = endRaw.flatMap { LiftingImporter.parseDate($0, zone: zone) } ?? start
             return LiftingSession(
                 start: start,
@@ -256,7 +297,9 @@ public enum LiftingImporter {
                 exerciseCount: exercises.count,
                 totalReps: reps,
                 topSetKg: top,
-                title: title
+                title: title,
+                loggedSets: loggedSets,
+                note: note
             )
         }
     }

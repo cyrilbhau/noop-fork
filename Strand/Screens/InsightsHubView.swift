@@ -122,7 +122,7 @@ struct InsightsHubView: View {
                 }
 
                 // The engine's sign-aware sentence (includes the lead/lag clause).
-                Text(r.sentence())
+                Text(MetricCatalog.scoreDisplayText(r.sentence()))
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -161,7 +161,7 @@ struct InsightsHubView: View {
         }
         .accessibilityElement(children: .combine)
         // One whole-string key; the args are complete sentences, never concatenated tails.
-        .accessibilityLabel(String(localized: "\(r.sentence()) Cohen's d \(String(format: "%.2f", e.cohensD)). \(Self.scoreState(r.confidence).accessibilityWord)"))
+        .accessibilityLabel(String(localized: "\(MetricCatalog.scoreDisplayText(r.sentence())) Cohen's d \(String(format: "%.2f", e.cohensD)). \(Self.scoreState(r.confidence).accessibilityWord)"))
     }
 
     // MARK: - Alcohol / caffeine dose-response
@@ -268,7 +268,7 @@ private struct DoseResponseCardView: View {
                 header(r)
 
                 // The engine's honest read sentence (prior / yours / contradicts-prior).
-                Text(r.sentence())
+                Text(MetricCatalog.scoreDisplayText(r.sentence()))
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -679,7 +679,7 @@ final class InsightsHubViewModel: ObservableObject {
         let latestOutcome: Double?
 
         var id: String { behavior.rawValue }
-        var outcomeName: String { response.outcome }
+        var outcomeName: String { MetricCatalog.scoreDisplayName(response.outcome) }
 
         var title: String {
             switch behavior {

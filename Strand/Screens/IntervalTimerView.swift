@@ -294,7 +294,7 @@ struct IntervalTimerView: View {
 
                 HStack(spacing: 0) {
                     overviewStat(String(localized: "Work"), "\(workSeconds)s", StrandPalette.effortColor)
-                    overviewStat(String(localized: "Rest"), "\(restSeconds)s", StrandPalette.restColor)
+                    overviewStat(String(localized: "Rest period"), "\(restSeconds)s", StrandPalette.restColor)
                     overviewStat(String(localized: "Rounds"), "\(rounds)", StrandPalette.textPrimary)
                     overviewStat(String(localized: "Remaining"), timeString(max(0, totalPlanned - elapsed)), StrandPalette.textSecondary)
                 }
@@ -340,7 +340,7 @@ struct IntervalTimerView: View {
                 configStepper(title: String(localized: "Work"), unit: String(localized: "sec"), value: $workSeconds,
                               range: 5...600, step: 5, tint: StrandPalette.effortColor)
                 Divider().overlay(StrandPalette.hairline)
-                configStepper(title: String(localized: "Rest"), unit: String(localized: "sec"), value: $restSeconds,
+                configStepper(title: String(localized: "Rest period"), unit: String(localized: "sec"), value: $restSeconds,
                               range: 5...600, step: 5, tint: StrandPalette.restColor)
                 Divider().overlay(StrandPalette.hairline)
                 configStepper(title: String(localized: "Rounds"), unit: nil, value: $rounds,

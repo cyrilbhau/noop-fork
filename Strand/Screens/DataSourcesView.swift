@@ -242,7 +242,7 @@ struct DataSourcesView: View {
     private var liftingCard: some View {
         card(title: String(localized: "Lifting log (Hevy / Liftosaur)"), icon: "dumbbell.fill",
              tint: DomainTheme.effort.color,
-             subtitle: String(localized: "Import your strength-training history from a Hevy CSV export or a Liftosaur JSON export. Each workout becomes a Strength session with a training-volume estimate (weight × reps). It's a volume figure, not a measured strain. It never changes your Effort.")) {
+             subtitle: String(localized: "Hevy CSV imports keep exercises, sets, reps, weights and notes in Lift Log. Existing logs are kept. Liftosaur imports remain workout summaries.")) {
             HStack(spacing: NoopMetrics.space3) {
                 Button { presentImporter(.lifting) } label: {
                     Label(liftingImporting ? "Importing…" : "Choose export…", systemImage: "tray.and.arrow.down")
@@ -460,7 +460,7 @@ struct DataSourcesView: View {
                     liftingImporting = false
                     return
                 }
-                let rows = result.sessions.map { s in
+                let rows = result.sessions.filter { $0.loggedSets.isEmpty }.map { s in
                     WorkoutRow(
                         startTs: Int(s.start.timeIntervalSince1970),
                         endTs: Int(s.end.timeIntervalSince1970),
@@ -475,6 +475,12 @@ struct DataSourcesView: View {
                         zonesJSON: nil,
                         notes: s.volumeLoadNote(), steps: nil
                     )
+                }
+                var detailedAdded = 0
+                var detailedExisting = 0
+                for session in result.sessions where !session.loggedSets.isEmpty {
+                    if try await PersonalLiftingImport.save(session, store: store) { detailedAdded += 1 }
+                    else { detailedExisting += 1 }
                 }
                 try await store.upsertWorkouts(rows, deviceId: LiftingImporter.sourceId)
                 await repo.refresh()
@@ -492,7 +498,9 @@ struct DataSourcesView: View {
                     if lo != hi { msg += " · \(lo)-\(hi)" }
                 }
                 if result.skipped > 0 { msg += " · " + String(localized: "\(result.skipped) skipped") }
-                liftingSummary = msg
+                liftingSummary = detailedAdded + detailedExisting > 0
+                    ? String(localized: "Saved \(detailedAdded) workouts; \(detailedExisting) already in Lift Log.")
+                    : msg
                 liftingFailed = false
                 logImport("Lifting log: \(result.sessionCount) workouts, \(result.skipped) rejected")
             } catch {

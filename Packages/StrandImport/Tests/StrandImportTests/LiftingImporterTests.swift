@@ -5,6 +5,36 @@ import XCTest
 /// session per workout, with a TRANSPARENT volume-load = Σ(weight × reps). Warm-up sets are excluded
 /// from the working volume, lb columns convert to kg, and the note never claims a strain.
 final class LiftingImporterTests: XCTestCase {
+    func testHevyKeepsSourceSetsAndNotesAlongsideTheSummary() {
+        let csv = """
+        title,start_time,end_time,exercise_title,set_type,weight_lb,reps,rpe,exercise_notes,duration_seconds,distance_meters
+        Example,2026-01-01 10:00,2026-01-01 11:00,Press,warmup,10,5,8,"Pause, then press",30,200
+        Example,2026-01-01 10:00,2026-01-01 11:00,Press,normal,20,6,99,Steady,,
+        Example,2026-01-01 10:00,2026-01-01 11:00,Row,normal,,,,Timed,60,500
+        """
+        let session = LiftingImporter.parseHevy(text: csv, zone: TimeZone(secondsFromGMT: 0)!).sessions[0]
+        XCTAssertEqual(session.loggedSets.count, 3)
+        XCTAssertEqual(session.loggedSets.map(\.setIndex), [1, 2, 1])
+        XCTAssertEqual(session.loggedSets[0].note, "Pause, then press")
+        XCTAssertTrue(session.loggedSets[0].isWarmup)
+        XCTAssertNil(session.loggedSets[1].rpe)
+        XCTAssertEqual(session.loggedSets[2].durationSeconds, 60)
+        XCTAssertEqual(session.loggedSets[2].distanceMeters, 500)
+        XCTAssertEqual(session.volumeLoadKg, 20 * 0.45359237 * 6, accuracy: 0.000001)
+        func v<T>(_ value: T?) -> String { value.map { String(describing: $0) } ?? "_" }
+        let oracle = session.loggedSets.map { s in
+            [s.exercise, String(s.setIndex), v(s.weightKg), v(s.reps), s.setType, v(s.rpe),
+             v(s.note), v(s.durationSeconds), v(s.distanceMeters)].joined(separator: "|")
+        }.joined(separator: "\n")
+        print("HEVY_SET_ORACLE_BEGIN\n\(oracle)\nHEVY_SET_ORACLE_END")
+    }
+
+    func testWarmupOnlyLogIsRetainedWithoutWorkingVolume() {
+        let session = LiftingImporter.parseHevy(text: "title,start_time,exercise_title,set_type,weight_kg,reps\nWarmup,2026-01-01 10:00,Press,warmup,10,5").sessions[0]
+        XCTAssertEqual(session.loggedSets.count, 1)
+        XCTAssertEqual(session.setCount, 0)
+        XCTAssertEqual(session.volumeLoadKg, 0)
+    }
 
     // MARK: - Hevy CSV
 

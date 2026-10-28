@@ -1,6 +1,69 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Your selected provider generates a readiness and training brief, delivered as a local notification.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Your selected provider generates a readiness and training brief, delivered as a local notification."}}, "de": {"stringUnit": {"state": "translated", "value": "Dein ausgewählter Anbieter erstellt einen Kurzbericht zu Trainingsbereitschaft und Training, der als lokale Mitteilung zugestellt wird."}}, "es": {"stringUnit": {"state": "translated", "value": "El proveedor seleccionado genera un resumen de preparación y entrenamiento que se entrega como una notificación local."}}, "fr": {"stringUnit": {"state": "translated", "value": "Le fournisseur sélectionné génère un bilan de préparation et d’entraînement, envoyé sous forme de notification locale."}}, "it": {"stringUnit": {"state": "translated", "value": "Il fornitore selezionato genera un riepilogo della prontezza e dell’allenamento, inviato come notifica locale."}}, "pl": {"stringUnit": {"state": "translated", "value": "Wybrany dostawca generuje podsumowanie gotowości i treningu, dostarczane jako powiadomienie lokalne."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "O fornecedor selecionado gera um resumo de prontidão e treino, entregue como notificação local."}}, "ru": {"stringUnit": {"state": "translated", "value": "Выбранный поставщик создаёт сводку о готовности и тренировках, которая доставляется в виде локального уведомления."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "所选提供商会生成身体准备状态和训练简报，并通过本地通知发送。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "所選供應商會產生身體準備狀態與訓練簡報，並透過本機通知傳送。"}}}},
+    "NOOP uses your selected Coach connection to generate the brief. iPhone decides when background work runs, so delivery may be later than the selected time.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "NOOP uses your selected Coach connection to generate the brief. iPhone decides when background work runs, so delivery may be later than the selected time."}}, "de": {"stringUnit": {"state": "translated", "value": "NOOP nutzt deine ausgewählte Coach-Verbindung, um den Kurzbericht zu erstellen. Das iPhone entscheidet, wann Hintergrundaufgaben ausgeführt werden. Die Zustellung kann daher später als zur gewählten Uhrzeit erfolgen."}}, "es": {"stringUnit": {"state": "translated", "value": "NOOP usa la conexión seleccionada de Coach para generar el resumen. El iPhone decide cuándo se ejecutan las tareas en segundo plano, por lo que la entrega puede producirse después de la hora seleccionada."}}, "fr": {"stringUnit": {"state": "translated", "value": "NOOP utilise la connexion Coach sélectionnée pour générer le bilan. L’iPhone décide quand les tâches en arrière-plan s’exécutent ; la notification peut donc arriver après l’heure choisie."}}, "it": {"stringUnit": {"state": "translated", "value": "NOOP usa la connessione Coach selezionata per generare il riepilogo. È l’iPhone a decidere quando eseguire le attività in background, quindi la consegna può avvenire dopo l’orario selezionato."}}, "pl": {"stringUnit": {"state": "translated", "value": "NOOP używa wybranego połączenia funkcji Coach do wygenerowania podsumowania. iPhone decyduje, kiedy uruchomić zadania w tle, więc powiadomienie może dotrzeć po wybranej godzinie."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "O NOOP usa a ligação selecionada do Coach para gerar o resumo. O iPhone decide quando executar as tarefas em segundo plano, pelo que a entrega pode ocorrer depois da hora selecionada."}}, "ru": {"stringUnit": {"state": "translated", "value": "NOOP использует выбранное подключение Coach для создания сводки. iPhone определяет время выполнения фоновых задач, поэтому уведомление может прийти позже выбранного времени."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "NOOP 使用所选的 Coach 连接生成简报。iPhone 会决定后台任务的运行时间，因此通知可能晚于所选时间送达。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "NOOP 使用所選的 Coach 連線產生簡報。iPhone 會決定背景工作的執行時間，因此通知可能晚於所選時間送達。"}}}},
+    "Couldn't generate a brief right now — check your connection and data access.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Couldn't generate a brief right now — check your connection and data access."}}, "de": {"stringUnit": {"state": "translated", "value": "Der Kurzbericht konnte gerade nicht erstellt werden. Prüfe deine Verbindung und den Datenzugriff."}}, "es": {"stringUnit": {"state": "translated", "value": "No se ha podido generar un resumen ahora. Comprueba la conexión y el acceso a los datos."}}, "fr": {"stringUnit": {"state": "translated", "value": "Impossible de générer un bilan pour le moment. Vérifiez votre connexion et l’accès aux données."}}, "it": {"stringUnit": {"state": "translated", "value": "Impossibile generare un riepilogo in questo momento. Controlla la connessione e l’accesso ai dati."}}, "pl": {"stringUnit": {"state": "translated", "value": "Nie udało się teraz wygenerować podsumowania. Sprawdź połączenie i dostęp do danych."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Não foi possível gerar um resumo neste momento. Verifique a ligação e o acesso aos dados."}}, "ru": {"stringUnit": {"state": "translated", "value": "Сейчас не удалось создать сводку. Проверьте подключение и доступ к данным."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "暂时无法生成简报，请检查连接和数据访问权限。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "暫時無法產生簡報，請檢查連線與資料存取權限。"}}}},
+    "ChatGPT requests use your plan allowance. Metric summaries require your separate data-sharing consent.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "ChatGPT requests use your plan allowance. Metric summaries require your separate data-sharing consent."}}, "de": {"stringUnit": {"state": "translated", "value": "ChatGPT-Anfragen nutzen das Kontingent deines Tarifs. Zusammenfassungen deiner Messwerte erfordern deine gesonderte Zustimmung zur Datenfreigabe."}}, "es": {"stringUnit": {"state": "translated", "value": "Las solicitudes de ChatGPT usan la cuota de tu plan. Los resúmenes de métricas requieren tu consentimiento independiente para compartir datos."}}, "fr": {"stringUnit": {"state": "translated", "value": "Les requêtes ChatGPT utilisent le quota de votre forfait. Les résumés de mesures nécessitent votre consentement distinct au partage des données."}}, "it": {"stringUnit": {"state": "translated", "value": "Le richieste ChatGPT usano la quota del tuo piano. I riepiloghi delle metriche richiedono il tuo consenso separato alla condivisione dei dati."}}, "pl": {"stringUnit": {"state": "translated", "value": "Żądania ChatGPT korzystają z limitu Twojego planu. Podsumowania wskaźników wymagają odrębnej zgody na udostępnianie danych."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Os pedidos ao ChatGPT usam a quota do seu plano. Os resumos de métricas exigem o seu consentimento separado para a partilha de dados."}}, "ru": {"stringUnit": {"state": "translated", "value": "Запросы ChatGPT используют квоту вашего тарифа. Для сводок показателей требуется ваше отдельное согласие на обмен данными."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "ChatGPT 请求会使用你的套餐额度。指标摘要需要你另行同意共享数据。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "ChatGPT 請求會使用你的方案額度。指標摘要需要你另行同意共享資料。"}}}},
+    "ChatGPT account": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "ChatGPT account"}}, "de": {"stringUnit": {"state": "translated", "value": "ChatGPT-Konto"}}, "es": {"stringUnit": {"state": "translated", "value": "Cuenta de ChatGPT"}}, "fr": {"stringUnit": {"state": "translated", "value": "Compte ChatGPT"}}, "it": {"stringUnit": {"state": "translated", "value": "Account ChatGPT"}}, "pl": {"stringUnit": {"state": "translated", "value": "Konto ChatGPT"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Conta ChatGPT"}}, "ru": {"stringUnit": {"state": "translated", "value": "Аккаунт ChatGPT"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "ChatGPT 账户"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "ChatGPT 帳號"}}}},
+    "Add another account": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Add another account"}}, "de": {"stringUnit": {"state": "translated", "value": "Weiteres Konto hinzufügen"}}, "es": {"stringUnit": {"state": "translated", "value": "Añadir otra cuenta"}}, "fr": {"stringUnit": {"state": "translated", "value": "Ajouter un autre compte"}}, "it": {"stringUnit": {"state": "translated", "value": "Aggiungi un altro account"}}, "pl": {"stringUnit": {"state": "translated", "value": "Dodaj kolejne konto"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Adicionar outra conta"}}, "ru": {"stringUnit": {"state": "translated", "value": "Добавить другой аккаунт"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "添加另一个账户"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "新增另一個帳號"}}}},
+    "Use for Coach": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Use for Coach"}}, "de": {"stringUnit": {"state": "translated", "value": "Für Coach verwenden"}}, "es": {"stringUnit": {"state": "translated", "value": "Usar con Coach"}}, "fr": {"stringUnit": {"state": "translated", "value": "Utiliser pour Coach"}}, "it": {"stringUnit": {"state": "translated", "value": "Usa per Coach"}}, "pl": {"stringUnit": {"state": "translated", "value": "Używaj w funkcji Coach"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Usar no Coach"}}, "ru": {"stringUnit": {"state": "translated", "value": "Использовать для Coach"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "用于 Coach"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "用於 Coach"}}}},
+    "Start a new Coach conversation?": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Start a new Coach conversation?"}}, "de": {"stringUnit": {"state": "translated", "value": "Neue Coach-Unterhaltung beginnen?"}}, "es": {"stringUnit": {"state": "translated", "value": "¿Iniciar una nueva conversación con Coach?"}}, "fr": {"stringUnit": {"state": "translated", "value": "Commencer une nouvelle conversation avec Coach ?"}}, "it": {"stringUnit": {"state": "translated", "value": "Iniziare una nuova conversazione con Coach?"}}, "pl": {"stringUnit": {"state": "translated", "value": "Rozpocząć nową rozmowę z funkcją Coach?"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Iniciar uma nova conversa com o Coach?"}}, "ru": {"stringUnit": {"state": "translated", "value": "Начать новый разговор с Coach?"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "开始新的 Coach 对话？"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "開始新的 Coach 對話？"}}}},
+    "Switching ChatGPT accounts starts a new conversation so earlier messages are not sent to the new account.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Switching ChatGPT accounts starts a new conversation so earlier messages are not sent to the new account."}}, "de": {"stringUnit": {"state": "translated", "value": "Beim Wechsel des ChatGPT-Kontos beginnt eine neue Unterhaltung, damit frühere Nachrichten nicht an das neue Konto gesendet werden."}}, "es": {"stringUnit": {"state": "translated", "value": "Al cambiar de cuenta de ChatGPT se inicia una nueva conversación para que los mensajes anteriores no se envíen a la nueva cuenta."}}, "fr": {"stringUnit": {"state": "translated", "value": "Changer de compte ChatGPT démarre une nouvelle conversation afin que les messages précédents ne soient pas envoyés au nouveau compte."}}, "it": {"stringUnit": {"state": "translated", "value": "Cambiando account ChatGPT si avvia una nuova conversazione, così i messaggi precedenti non vengono inviati al nuovo account."}}, "pl": {"stringUnit": {"state": "translated", "value": "Zmiana konta ChatGPT rozpoczyna nową rozmowę, aby wcześniejsze wiadomości nie zostały wysłane na nowe konto."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Ao mudar de conta ChatGPT, inicia-se uma nova conversa para que as mensagens anteriores não sejam enviadas para a nova conta."}}, "ru": {"stringUnit": {"state": "translated", "value": "При смене аккаунта ChatGPT начинается новый разговор, чтобы предыдущие сообщения не отправлялись в новый аккаунт."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "切换 ChatGPT 账户会开始新对话，之前的消息不会发送到新账户。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "切換 ChatGPT 帳號會開始新對話，先前的訊息不會傳送至新帳號。"}}}},
+    "Use your ChatGPT subscription or connect another provider with your own API key.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Use your ChatGPT subscription or connect another provider with your own API key."}}, "de": {"stringUnit": {"state": "translated", "value": "Nutze dein ChatGPT-Abonnement oder verbinde einen anderen Anbieter mit deinem eigenen API-Schlüssel."}}, "es": {"stringUnit": {"state": "translated", "value": "Usa tu suscripción de ChatGPT o conecta otro proveedor con tu propia clave de API."}}, "fr": {"stringUnit": {"state": "translated", "value": "Utilisez votre abonnement ChatGPT ou connectez un autre fournisseur avec votre propre clé API."}}, "it": {"stringUnit": {"state": "translated", "value": "Usa il tuo abbonamento ChatGPT oppure collega un altro fornitore con la tua chiave API."}}, "pl": {"stringUnit": {"state": "translated", "value": "Korzystaj ze swojej subskrypcji ChatGPT lub połącz innego dostawcę za pomocą własnego klucza API."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Use a sua subscrição ChatGPT ou associe outro fornecedor com a sua própria chave de API."}}, "ru": {"stringUnit": {"state": "translated", "value": "Используйте свою подписку ChatGPT или подключите другого поставщика со своим ключом API."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "使用你的 ChatGPT 订阅，或通过自己的 API 密钥连接其他提供商。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "使用你的 ChatGPT 訂閱，或透過自己的 API 金鑰連結其他供應商。"}}}},
+    "Using ChatGPT plan": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Using ChatGPT plan"}}, "de": {"stringUnit": {"state": "translated", "value": "ChatGPT-Tarif wird verwendet"}}, "es": {"stringUnit": {"state": "translated", "value": "Usando el plan de ChatGPT"}}, "fr": {"stringUnit": {"state": "translated", "value": "Utilisation du forfait ChatGPT"}}, "it": {"stringUnit": {"state": "translated", "value": "Piano ChatGPT in uso"}}, "pl": {"stringUnit": {"state": "translated", "value": "Korzystanie z planu ChatGPT"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "A usar o plano ChatGPT"}}, "ru": {"stringUnit": {"state": "translated", "value": "Используется тариф ChatGPT"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "正在使用 ChatGPT 套餐"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "正在使用 ChatGPT 方案"}}}},
+    "Use your ChatGPT plan": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Use your ChatGPT plan"}}, "de": {"stringUnit": {"state": "translated", "value": "ChatGPT-Tarif verwenden"}}, "es": {"stringUnit": {"state": "translated", "value": "Usa tu plan de ChatGPT"}}, "fr": {"stringUnit": {"state": "translated", "value": "Utiliser votre forfait ChatGPT"}}, "it": {"stringUnit": {"state": "translated", "value": "Usa il tuo piano ChatGPT"}}, "pl": {"stringUnit": {"state": "translated", "value": "Korzystaj ze swojego planu ChatGPT"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Usar o seu plano ChatGPT"}}, "ru": {"stringUnit": {"state": "translated", "value": "Используйте свой тариф ChatGPT"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "使用你的 ChatGPT 套餐"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "使用你的 ChatGPT 方案"}}}},
+    "Connect an eligible Plus or Pro plan without an API key. Requests share your existing ChatGPT plan limits.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Connect an eligible Plus or Pro plan without an API key. Requests share your existing ChatGPT plan limits."}}, "de": {"stringUnit": {"state": "translated", "value": "Verbinde einen berechtigten Plus- oder Pro-Tarif ohne API-Schlüssel. Anfragen werden auf die bestehenden Limits deines ChatGPT-Tarifs angerechnet."}}, "es": {"stringUnit": {"state": "translated", "value": "Conecta un plan Plus o Pro compatible sin una clave de API. Las solicitudes comparten los límites actuales de tu plan de ChatGPT."}}, "fr": {"stringUnit": {"state": "translated", "value": "Connectez un forfait Plus ou Pro éligible sans clé API. Les requêtes utilisent les limites existantes de votre forfait ChatGPT."}}, "it": {"stringUnit": {"state": "translated", "value": "Collega un piano Plus o Pro idoneo senza chiave API. Le richieste condividono i limiti del tuo piano ChatGPT esistente."}}, "pl": {"stringUnit": {"state": "translated", "value": "Połącz kwalifikujący się plan Plus lub Pro bez klucza API. Żądania korzystają z tych samych limitów co Twój obecny plan ChatGPT."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Associe um plano Plus ou Pro elegível sem uma chave de API. Os pedidos partilham os limites existentes do seu plano ChatGPT."}}, "ru": {"stringUnit": {"state": "translated", "value": "Подключите подходящий тариф Plus или Pro без ключа API. Запросы используют общие лимиты вашего текущего тарифа ChatGPT."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "无需 API 密钥即可连接符合条件的 Plus 或 Pro 套餐。请求与你现有的 ChatGPT 套餐共用额度。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "無需 API 金鑰即可連結符合資格的 Plus 或 Pro 方案。請求與你現有的 ChatGPT 方案共用額度。"}}}},
+    "Continue with ChatGPT": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Continue with ChatGPT"}}, "de": {"stringUnit": {"state": "translated", "value": "Mit ChatGPT fortfahren"}}, "es": {"stringUnit": {"state": "translated", "value": "Continuar con ChatGPT"}}, "fr": {"stringUnit": {"state": "translated", "value": "Continuer avec ChatGPT"}}, "it": {"stringUnit": {"state": "translated", "value": "Continua con ChatGPT"}}, "pl": {"stringUnit": {"state": "translated", "value": "Kontynuuj z ChatGPT"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Continuar com ChatGPT"}}, "ru": {"stringUnit": {"state": "translated", "value": "Продолжить с ChatGPT"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "使用 ChatGPT 继续"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "使用 ChatGPT 繼續"}}}},
+    "Waiting for sign-in…": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Waiting for sign-in…"}}, "de": {"stringUnit": {"state": "translated", "value": "Warten auf Anmeldung…"}}, "es": {"stringUnit": {"state": "translated", "value": "Esperando el inicio de sesión…"}}, "fr": {"stringUnit": {"state": "translated", "value": "En attente de connexion…"}}, "it": {"stringUnit": {"state": "translated", "value": "In attesa dell’accesso…"}}, "pl": {"stringUnit": {"state": "translated", "value": "Oczekiwanie na zalogowanie…"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "A aguardar o início de sessão…"}}, "ru": {"stringUnit": {"state": "translated", "value": "Ожидание входа…"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "正在等待登录…"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "正在等待登入…"}}}},
+    "Cancel sign-in": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Cancel sign-in"}}, "de": {"stringUnit": {"state": "translated", "value": "Anmeldung abbrechen"}}, "es": {"stringUnit": {"state": "translated", "value": "Cancelar inicio de sesión"}}, "fr": {"stringUnit": {"state": "translated", "value": "Annuler la connexion"}}, "it": {"stringUnit": {"state": "translated", "value": "Annulla accesso"}}, "pl": {"stringUnit": {"state": "translated", "value": "Anuluj logowanie"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Cancelar início de sessão"}}, "ru": {"stringUnit": {"state": "translated", "value": "Отменить вход"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "取消登录"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "取消登入"}}}},
+    "Manage usage": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Manage usage"}}, "de": {"stringUnit": {"state": "translated", "value": "Nutzung verwalten"}}, "es": {"stringUnit": {"state": "translated", "value": "Gestionar uso"}}, "fr": {"stringUnit": {"state": "translated", "value": "Gérer l’utilisation"}}, "it": {"stringUnit": {"state": "translated", "value": "Gestisci utilizzo"}}, "pl": {"stringUnit": {"state": "translated", "value": "Zarządzaj wykorzystaniem"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Gerir utilização"}}, "ru": {"stringUnit": {"state": "translated", "value": "Управление использованием"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "管理用量"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "管理用量"}}}},
+    "Check your connection": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Check your connection"}}, "de": {"stringUnit": {"state": "translated", "value": "Verbindung prüfen"}}, "es": {"stringUnit": {"state": "translated", "value": "Comprueba tu conexión"}}, "fr": {"stringUnit": {"state": "translated", "value": "Vérifier votre connexion"}}, "it": {"stringUnit": {"state": "translated", "value": "Verifica la connessione"}}, "pl": {"stringUnit": {"state": "translated", "value": "Sprawdź połączenie"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Verificar a ligação"}}, "ru": {"stringUnit": {"state": "translated", "value": "Проверьте подключение"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "检查连接"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "檢查連線"}}}},
+    "This sends a short greeting without health data and verifies that your plan can complete a response.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "This sends a short greeting without health data and verifies that your plan can complete a response."}}, "de": {"stringUnit": {"state": "translated", "value": "Dabei wird eine kurze Begrüßung ohne Gesundheitsdaten gesendet und geprüft, ob dein Tarif eine vollständige Antwort ermöglicht."}}, "es": {"stringUnit": {"state": "translated", "value": "Esto envía un breve saludo sin datos de salud y comprueba que tu plan pueda completar una respuesta."}}, "fr": {"stringUnit": {"state": "translated", "value": "Cette action envoie une brève salutation sans données de santé et vérifie que votre forfait permet de générer une réponse complète."}}, "it": {"stringUnit": {"state": "translated", "value": "Invia un breve saluto senza dati sanitari e verifica che il tuo piano possa completare una risposta."}}, "pl": {"stringUnit": {"state": "translated", "value": "Wysyła krótkie powitanie bez danych zdrowotnych i sprawdza, czy Twój plan pozwala uzyskać pełną odpowiedź."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Envia uma breve saudação sem dados de saúde e verifica se o seu plano consegue gerar uma resposta completa."}}, "ru": {"stringUnit": {"state": "translated", "value": "Будет отправлено короткое приветствие без данных о здоровье, чтобы проверить, позволяет ли ваш тариф получить полный ответ."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "这会发送一条不含健康数据的简短问候，并验证你的套餐能否生成完整回复。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "這會傳送一則不含健康資料的簡短問候，並驗證你的方案能否產生完整回覆。"}}}},
+    "Test connection": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Test connection"}}, "de": {"stringUnit": {"state": "translated", "value": "Verbindung testen"}}, "es": {"stringUnit": {"state": "translated", "value": "Probar conexión"}}, "fr": {"stringUnit": {"state": "translated", "value": "Tester la connexion"}}, "it": {"stringUnit": {"state": "translated", "value": "Prova connessione"}}, "pl": {"stringUnit": {"state": "translated", "value": "Przetestuj połączenie"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Testar ligação"}}, "ru": {"stringUnit": {"state": "translated", "value": "Проверить подключение"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "测试连接"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "測試連線"}}}},
+    "Checking connection…": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Checking connection…"}}, "de": {"stringUnit": {"state": "translated", "value": "Verbindung wird geprüft…"}}, "es": {"stringUnit": {"state": "translated", "value": "Comprobando conexión…"}}, "fr": {"stringUnit": {"state": "translated", "value": "Vérification de la connexion…"}}, "it": {"stringUnit": {"state": "translated", "value": "Verifica della connessione…"}}, "pl": {"stringUnit": {"state": "translated", "value": "Sprawdzanie połączenia…"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "A verificar a ligação…"}}, "ru": {"stringUnit": {"state": "translated", "value": "Проверка подключения…"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "正在检查连接…"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "正在檢查連線…"}}}},
+    "Signing in does not grant access to your health data. Coach's data-sharing settings remain separate.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Signing in does not grant access to your health data. Coach's data-sharing settings remain separate."}}, "de": {"stringUnit": {"state": "translated", "value": "Die Anmeldung gewährt keinen Zugriff auf deine Gesundheitsdaten. Die Einstellungen zur Datenfreigabe für Coach bleiben davon getrennt."}}, "es": {"stringUnit": {"state": "translated", "value": "Iniciar sesión no concede acceso a tus datos de salud. Los ajustes para compartir datos con Coach siguen siendo independientes."}}, "fr": {"stringUnit": {"state": "translated", "value": "La connexion ne donne pas accès à vos données de santé. Les réglages de partage des données avec Coach restent distincts."}}, "it": {"stringUnit": {"state": "translated", "value": "L’accesso non autorizza l’uso dei tuoi dati sanitari. Le impostazioni di condivisione dei dati di Coach restano separate."}}, "pl": {"stringUnit": {"state": "translated", "value": "Zalogowanie nie przyznaje dostępu do Twoich danych zdrowotnych. Ustawienia udostępniania danych funkcji Coach pozostają niezależne."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Iniciar sessão não concede acesso aos seus dados de saúde. As definições de partilha de dados do Coach continuam separadas."}}, "ru": {"stringUnit": {"state": "translated", "value": "Вход не предоставляет доступ к вашим данным о здоровье. Настройки обмена данными для Coach остаются отдельными."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "登录不会授予访问健康数据的权限。Coach 的数据共享设置仍单独管理。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "登入不會授予存取健康資料的權限。Coach 的資料共享設定仍獨立管理。"}}}},
+    "Disconnect ChatGPT": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Disconnect ChatGPT"}}, "de": {"stringUnit": {"state": "translated", "value": "ChatGPT trennen"}}, "es": {"stringUnit": {"state": "translated", "value": "Desconectar ChatGPT"}}, "fr": {"stringUnit": {"state": "translated", "value": "Déconnecter ChatGPT"}}, "it": {"stringUnit": {"state": "translated", "value": "Disconnetti ChatGPT"}}, "pl": {"stringUnit": {"state": "translated", "value": "Odłącz ChatGPT"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Desligar ChatGPT"}}, "ru": {"stringUnit": {"state": "translated", "value": "Отключить ChatGPT"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "断开 ChatGPT 连接"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "中斷 ChatGPT 連線"}}}},
+    "ChatGPT subscription": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "ChatGPT subscription"}}, "de": {"stringUnit": {"state": "translated", "value": "ChatGPT-Abonnement"}}, "es": {"stringUnit": {"state": "translated", "value": "Suscripción de ChatGPT"}}, "fr": {"stringUnit": {"state": "translated", "value": "Abonnement ChatGPT"}}, "it": {"stringUnit": {"state": "translated", "value": "Abbonamento ChatGPT"}}, "pl": {"stringUnit": {"state": "translated", "value": "Subskrypcja ChatGPT"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Subscrição ChatGPT"}}, "ru": {"stringUnit": {"state": "translated", "value": "Подписка ChatGPT"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "ChatGPT 订阅"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "ChatGPT 訂閱"}}}},
+    "You're using your ChatGPT plan": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "You're using your ChatGPT plan"}}, "de": {"stringUnit": {"state": "translated", "value": "Du nutzt deinen ChatGPT-Tarif"}}, "es": {"stringUnit": {"state": "translated", "value": "Estás usando tu plan de ChatGPT"}}, "fr": {"stringUnit": {"state": "translated", "value": "Vous utilisez votre forfait ChatGPT"}}, "it": {"stringUnit": {"state": "translated", "value": "Stai usando il tuo piano ChatGPT"}}, "pl": {"stringUnit": {"state": "translated", "value": "Korzystasz ze swojego planu ChatGPT"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Está a usar o seu plano ChatGPT"}}, "ru": {"stringUnit": {"state": "translated", "value": "Вы используете свой тариф ChatGPT"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "你正在使用自己的 ChatGPT 套餐"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "你正在使用自己的 ChatGPT 方案"}}}},
+    "Eligible requests use your existing plan allowance. You can manage Noop's usage in ChatGPT settings.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Eligible requests use your existing plan allowance. You can manage Noop's usage in ChatGPT settings."}}, "de": {"stringUnit": {"state": "translated", "value": "Berechtigte Anfragen nutzen das Kontingent deines bestehenden Tarifs. Du kannst die Nutzung durch Noop in den ChatGPT-Einstellungen verwalten."}}, "es": {"stringUnit": {"state": "translated", "value": "Las solicitudes compatibles usan la cuota de tu plan actual. Puedes gestionar el uso de Noop en los ajustes de ChatGPT."}}, "fr": {"stringUnit": {"state": "translated", "value": "Les requêtes éligibles utilisent le quota de votre forfait actuel. Vous pouvez gérer l’utilisation de Noop dans les réglages de ChatGPT."}}, "it": {"stringUnit": {"state": "translated", "value": "Le richieste idonee usano la quota del tuo piano esistente. Puoi gestire l’utilizzo di Noop nelle impostazioni di ChatGPT."}}, "pl": {"stringUnit": {"state": "translated", "value": "Kwalifikujące się żądania korzystają z limitu Twojego obecnego planu. Wykorzystaniem przez Noop możesz zarządzać w ustawieniach ChatGPT."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Os pedidos elegíveis usam a quota do seu plano atual. Pode gerir a utilização do Noop nas definições do ChatGPT."}}, "ru": {"stringUnit": {"state": "translated", "value": "Подходящие запросы используют квоту вашего текущего тарифа. Управлять использованием Noop можно в настройках ChatGPT."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "符合条件的请求会使用现有套餐的额度。你可以在 ChatGPT 设置中管理 Noop 的用量。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "符合資格的請求會使用現有方案的額度。你可以在 ChatGPT 設定中管理 Noop 的用量。"}}}},
+    "Sign in to connect your subscription.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Sign in to connect your subscription."}}, "de": {"stringUnit": {"state": "translated", "value": "Melde dich an, um dein Abonnement zu verbinden."}}, "es": {"stringUnit": {"state": "translated", "value": "Inicia sesión para conectar tu suscripción."}}, "fr": {"stringUnit": {"state": "translated", "value": "Connectez-vous pour associer votre abonnement."}}, "it": {"stringUnit": {"state": "translated", "value": "Accedi per collegare il tuo abbonamento."}}, "pl": {"stringUnit": {"state": "translated", "value": "Zaloguj się, aby połączyć swoją subskrypcję."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Inicie sessão para associar a sua subscrição."}}, "ru": {"stringUnit": {"state": "translated", "value": "Войдите, чтобы подключить свою подписку."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "登录以连接你的订阅。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "登入以連結你的訂閱。"}}}},
+    "Complete sign-in in the browser.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Complete sign-in in the browser."}}, "de": {"stringUnit": {"state": "translated", "value": "Schließe die Anmeldung im Browser ab."}}, "es": {"stringUnit": {"state": "translated", "value": "Completa el inicio de sesión en el navegador."}}, "fr": {"stringUnit": {"state": "translated", "value": "Terminez la connexion dans le navigateur."}}, "it": {"stringUnit": {"state": "translated", "value": "Completa l’accesso nel browser."}}, "pl": {"stringUnit": {"state": "translated", "value": "Dokończ logowanie w przeglądarce."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Conclua o início de sessão no navegador."}}, "ru": {"stringUnit": {"state": "translated", "value": "Завершите вход в браузере."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "在浏览器中完成登录。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "在瀏覽器中完成登入。"}}}},
+    "Sign in again and allow this app to use your ChatGPT plan.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Sign in again and allow this app to use your ChatGPT plan."}}, "de": {"stringUnit": {"state": "translated", "value": "Melde dich erneut an und erlaube dieser App, deinen ChatGPT-Tarif zu nutzen."}}, "es": {"stringUnit": {"state": "translated", "value": "Vuelve a iniciar sesión y permite que esta app use tu plan de ChatGPT."}}, "fr": {"stringUnit": {"state": "translated", "value": "Reconnectez-vous et autorisez cette app à utiliser votre forfait ChatGPT."}}, "it": {"stringUnit": {"state": "translated", "value": "Accedi di nuovo e consenti a questa app di usare il tuo piano ChatGPT."}}, "pl": {"stringUnit": {"state": "translated", "value": "Zaloguj się ponownie i zezwól tej aplikacji na korzystanie z Twojego planu ChatGPT."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Inicie sessão novamente e permita que esta aplicação use o seu plano ChatGPT."}}, "ru": {"stringUnit": {"state": "translated", "value": "Войдите снова и разрешите этому приложению использовать ваш тариф ChatGPT."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "请重新登录，并允许此 App 使用你的 ChatGPT 套餐。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "請重新登入，並允許此 App 使用你的 ChatGPT 方案。"}}}},
+    "ChatGPT plan permission is enabled.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "ChatGPT plan permission is enabled."}}, "de": {"stringUnit": {"state": "translated", "value": "Die Berechtigung zur Nutzung des ChatGPT-Tarifs ist erteilt."}}, "es": {"stringUnit": {"state": "translated", "value": "El permiso para usar el plan de ChatGPT está activado."}}, "fr": {"stringUnit": {"state": "translated", "value": "L’autorisation d’utiliser le forfait ChatGPT est activée."}}, "it": {"stringUnit": {"state": "translated", "value": "L’autorizzazione a usare il piano ChatGPT è attiva."}}, "pl": {"stringUnit": {"state": "translated", "value": "Zezwolenie na korzystanie z planu ChatGPT jest włączone."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "A permissão para usar o plano ChatGPT está ativa."}}, "ru": {"stringUnit": {"state": "translated", "value": "Разрешение на использование тарифа ChatGPT включено."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "已启用 ChatGPT 套餐使用权限。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "已啟用 ChatGPT 方案使用權限。"}}}},
+    "Renewing your connection…": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Renewing your connection…"}}, "de": {"stringUnit": {"state": "translated", "value": "Verbindung wird erneuert…"}}, "es": {"stringUnit": {"state": "translated", "value": "Renovando la conexión…"}}, "fr": {"stringUnit": {"state": "translated", "value": "Renouvellement de votre connexion…"}}, "it": {"stringUnit": {"state": "translated", "value": "Rinnovo della connessione…"}}, "pl": {"stringUnit": {"state": "translated", "value": "Odnawianie połączenia…"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "A renovar a ligação…"}}, "ru": {"stringUnit": {"state": "translated", "value": "Обновление подключения…"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "正在更新连接…"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "正在更新連線…"}}}},
+    "Sign in again to reconnect your plan.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Sign in again to reconnect your plan."}}, "de": {"stringUnit": {"state": "translated", "value": "Melde dich erneut an, um deinen Tarif wieder zu verbinden."}}, "es": {"stringUnit": {"state": "translated", "value": "Vuelve a iniciar sesión para reconectar tu plan."}}, "fr": {"stringUnit": {"state": "translated", "value": "Reconnectez-vous pour rétablir la connexion à votre forfait."}}, "it": {"stringUnit": {"state": "translated", "value": "Accedi di nuovo per ricollegare il tuo piano."}}, "pl": {"stringUnit": {"state": "translated", "value": "Zaloguj się ponownie, aby ponownie połączyć swój plan."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Inicie sessão novamente para voltar a associar o seu plano."}}, "ru": {"stringUnit": {"state": "translated", "value": "Войдите снова, чтобы восстановить подключение к вашему тарифу."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "请重新登录以恢复套餐连接。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "請重新登入以恢復方案連線。"}}}},
+    "Your connection is temporarily unavailable.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Your connection is temporarily unavailable."}}, "de": {"stringUnit": {"state": "translated", "value": "Deine Verbindung ist vorübergehend nicht verfügbar."}}, "es": {"stringUnit": {"state": "translated", "value": "Tu conexión no está disponible temporalmente."}}, "fr": {"stringUnit": {"state": "translated", "value": "Votre connexion est temporairement indisponible."}}, "it": {"stringUnit": {"state": "translated", "value": "La connessione è temporaneamente non disponibile."}}, "pl": {"stringUnit": {"state": "translated", "value": "Połączenie jest chwilowo niedostępne."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "A sua ligação está temporariamente indisponível."}}, "ru": {"stringUnit": {"state": "translated", "value": "Ваше подключение временно недоступно."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "连接暂时不可用。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "連線暫時無法使用。"}}}},
+    "Review your plan usage before trying again.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Review your plan usage before trying again."}}, "de": {"stringUnit": {"state": "translated", "value": "Prüfe die Nutzung deines Tarifs, bevor du es erneut versuchst."}}, "es": {"stringUnit": {"state": "translated", "value": "Revisa el uso de tu plan antes de volver a intentarlo."}}, "fr": {"stringUnit": {"state": "translated", "value": "Consultez l’utilisation de votre forfait avant de réessayer."}}, "it": {"stringUnit": {"state": "translated", "value": "Controlla l’utilizzo del tuo piano prima di riprovare."}}, "pl": {"stringUnit": {"state": "translated", "value": "Sprawdź wykorzystanie swojego planu, zanim spróbujesz ponownie."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Verifique a utilização do seu plano antes de tentar novamente."}}, "ru": {"stringUnit": {"state": "translated", "value": "Проверьте использование вашего тарифа перед повторной попыткой."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "请先查看套餐用量，再重试。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "請先查看方案用量，再重試。"}}}},
+    "No models are currently available for this ChatGPT account.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "No models are currently available for this ChatGPT account."}}, "de": {"stringUnit": {"state": "translated", "value": "Für dieses ChatGPT-Konto sind derzeit keine Modelle verfügbar."}}, "es": {"stringUnit": {"state": "translated", "value": "Actualmente no hay modelos disponibles para esta cuenta de ChatGPT."}}, "fr": {"stringUnit": {"state": "translated", "value": "Aucun modèle n’est actuellement disponible pour ce compte ChatGPT."}}, "it": {"stringUnit": {"state": "translated", "value": "Al momento non sono disponibili modelli per questo account ChatGPT."}}, "pl": {"stringUnit": {"state": "translated", "value": "Dla tego konta ChatGPT nie są obecnie dostępne żadne modele."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Não há modelos disponíveis para esta conta ChatGPT neste momento."}}, "ru": {"stringUnit": {"state": "translated", "value": "Для этого аккаунта ChatGPT сейчас нет доступных моделей."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "此 ChatGPT 账户当前没有可用模型。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "此 ChatGPT 帳號目前沒有可用模型。"}}}},
+    "Connection verified with %@.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Connection verified with %@."}}, "de": {"stringUnit": {"state": "translated", "value": "Verbindung mit %@ bestätigt."}}, "es": {"stringUnit": {"state": "translated", "value": "Conexión verificada con %@."}}, "fr": {"stringUnit": {"state": "translated", "value": "Connexion vérifiée avec %@."}}, "it": {"stringUnit": {"state": "translated", "value": "Connessione verificata con %@."}}, "pl": {"stringUnit": {"state": "translated", "value": "Połączenie zweryfikowano przy użyciu %@."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Ligação verificada com %@."}}, "ru": {"stringUnit": {"state": "translated", "value": "Подключение проверено с помощью %@."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "已通过 %@ 验证连接。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "已透過 %@ 驗證連線。"}}}},
+    "Paste workout text": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Paste workout text"}}, "de": {"stringUnit": {"state": "translated", "value": "Trainingstext einfügen"}}, "es": {"stringUnit": {"state": "translated", "value": "Pegar texto del entrenamiento"}}, "fr": {"stringUnit": {"state": "translated", "value": "Coller le texte de la séance"}}, "it": {"stringUnit": {"state": "translated", "value": "Incolla testo allenamento"}}, "pl": {"stringUnit": {"state": "translated", "value": "Wklej tekst treningu"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Colar texto do treino"}}, "ru": {"stringUnit": {"state": "translated", "value": "Вставить текст тренировки"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "粘贴训练文本"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "貼上訓練文字"}}}},
+    "Workout text": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Workout text"}}, "de": {"stringUnit": {"state": "translated", "value": "Trainingstext"}}, "es": {"stringUnit": {"state": "translated", "value": "Texto del entrenamiento"}}, "fr": {"stringUnit": {"state": "translated", "value": "Texte de la séance"}}, "it": {"stringUnit": {"state": "translated", "value": "Testo allenamento"}}, "pl": {"stringUnit": {"state": "translated", "value": "Tekst treningu"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Texto do treino"}}, "ru": {"stringUnit": {"state": "translated", "value": "Текст тренировки"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "训练文本"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "訓練文字"}}}},
+    "Paste your Hevy workout text, then review it before saving. Notes stay on this device.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Paste your Hevy workout text, then review it before saving. Notes stay on this device."}}, "de": {"stringUnit": {"state": "translated", "value": "Füge deinen Hevy-Trainingstext ein und prüfe ihn vor dem Speichern. Notizen bleiben auf diesem Gerät."}}, "es": {"stringUnit": {"state": "translated", "value": "Pega el texto de tu entrenamiento de Hevy y revísalo antes de guardar. Las notas permanecen en este dispositivo."}}, "fr": {"stringUnit": {"state": "translated", "value": "Collez le texte de votre séance Hevy et vérifiez-le avant de l’enregistrer. Les notes restent sur cet appareil."}}, "it": {"stringUnit": {"state": "translated", "value": "Incolla il testo del tuo allenamento Hevy e controllalo prima di salvare. Le note restano su questo dispositivo."}}, "pl": {"stringUnit": {"state": "translated", "value": "Wklej tekst treningu z Hevy i sprawdź go przed zapisaniem. Notatki pozostają na tym urządzeniu."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Cole o texto do treino do Hevy e reveja-o antes de guardar. As notas ficam neste dispositivo."}}, "ru": {"stringUnit": {"state": "translated", "value": "Вставьте текст тренировки из Hevy и проверьте его перед сохранением. Заметки останутся на этом устройстве."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "粘贴 Hevy 训练文本，检查后再保存。备注保留在此设备上。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "貼上 Hevy 訓練文字，檢查後再儲存。備註保留在此裝置上。"}}}},
+    "Matched workout duration: %lld min": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Matched workout duration: %lld min"}}, "de": {"stringUnit": {"state": "translated", "value": "Dauer des passenden Trainings: %lld Min."}}, "es": {"stringUnit": {"state": "translated", "value": "Duración del entrenamiento coincidente: %lld min"}}, "fr": {"stringUnit": {"state": "translated", "value": "Durée de la séance correspondante : %lld min"}}, "it": {"stringUnit": {"state": "translated", "value": "Durata allenamento corrispondente: %lld min"}}, "pl": {"stringUnit": {"state": "translated", "value": "Czas dopasowanego treningu: %lld min"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Duração do treino correspondente: %lld min"}}, "ru": {"stringUnit": {"state": "translated", "value": "Длительность совпавшей тренировки: %lld мин"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "匹配的训练时长：%lld 分钟"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "相符的訓練時長：%lld 分鐘"}}}},
+    "Add duration": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Add duration"}}, "de": {"stringUnit": {"state": "translated", "value": "Dauer hinzufügen"}}, "es": {"stringUnit": {"state": "translated", "value": "Añadir duración"}}, "fr": {"stringUnit": {"state": "translated", "value": "Ajouter une durée"}}, "it": {"stringUnit": {"state": "translated", "value": "Aggiungi durata"}}, "pl": {"stringUnit": {"state": "translated", "value": "Dodaj czas trwania"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Adicionar duração"}}, "ru": {"stringUnit": {"state": "translated", "value": "Добавить длительность"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "添加时长"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "加入時長"}}}},
+    "Duration not provided": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Duration not provided"}}, "de": {"stringUnit": {"state": "translated", "value": "Keine Dauer angegeben"}}, "es": {"stringUnit": {"state": "translated", "value": "Duración no indicada"}}, "fr": {"stringUnit": {"state": "translated", "value": "Durée non indiquée"}}, "it": {"stringUnit": {"state": "translated", "value": "Durata non fornita"}}, "pl": {"stringUnit": {"state": "translated", "value": "Nie podano czasu trwania"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Duração não indicada"}}, "ru": {"stringUnit": {"state": "translated", "value": "Длительность не указана"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "未提供时长"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "未提供時長"}}}},
+    "%@: no set details provided": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "%@: no set details provided"}}, "de": {"stringUnit": {"state": "translated", "value": "%@: keine Satzdetails angegeben"}}, "es": {"stringUnit": {"state": "translated", "value": "%@: sin detalles de series"}}, "fr": {"stringUnit": {"state": "translated", "value": "%@: aucun détail de série indiqué"}}, "it": {"stringUnit": {"state": "translated", "value": "%@: dettagli delle serie non forniti"}}, "pl": {"stringUnit": {"state": "translated", "value": "%@: brak szczegółów serii"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "%@: sem detalhes das séries"}}, "ru": {"stringUnit": {"state": "translated", "value": "%@: данные о подходах не указаны"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "%@：未提供组数详情"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "%@：未提供組數詳情"}}}},
+    "Check these set lines before saving:": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Check these set lines before saving:"}}, "de": {"stringUnit": {"state": "translated", "value": "Prüfe diese Satzzeilen vor dem Speichern:"}}, "es": {"stringUnit": {"state": "translated", "value": "Revisa estas líneas de series antes de guardar:"}}, "fr": {"stringUnit": {"state": "translated", "value": "Vérifiez ces lignes de séries avant d’enregistrer :"}}, "it": {"stringUnit": {"state": "translated", "value": "Controlla queste righe delle serie prima di salvare:"}}, "pl": {"stringUnit": {"state": "translated", "value": "Sprawdź te wiersze serii przed zapisaniem:"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Verifique estas linhas de séries antes de guardar:"}}, "ru": {"stringUnit": {"state": "translated", "value": "Проверьте строки подходов перед сохранением:"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "保存前请检查这些训练组文本："}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "儲存前請檢查這些訓練組文字："}}}},
+    "No sets found. Use lines like Set 1: 20 kg x 10 under an exercise name.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "No sets found. Use lines like Set 1: 20 kg x 10 under an exercise name."}}, "de": {"stringUnit": {"state": "translated", "value": "Keine Sätze gefunden. Schreibe unter den Übungsnamen Zeilen wie Set 1: 20 kg x 10."}}, "es": {"stringUnit": {"state": "translated", "value": "No se encontraron series. Debajo del ejercicio usa líneas como Set 1: 20 kg x 10."}}, "fr": {"stringUnit": {"state": "translated", "value": "Aucune série trouvée. Sous le nom de l’exercice, utilisez des lignes comme Set 1: 20 kg x 10."}}, "it": {"stringUnit": {"state": "translated", "value": "Nessuna serie trovata. Sotto il nome dell’esercizio usa righe come Set 1: 20 kg x 10."}}, "pl": {"stringUnit": {"state": "translated", "value": "Nie znaleziono serii. Pod nazwą ćwiczenia użyj wierszy takich jak Set 1: 20 kg x 10."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Não foram encontradas séries. Use linhas como Set 1: 20 kg x 10 por baixo do exercício."}}, "ru": {"stringUnit": {"state": "translated", "value": "Подходы не найдены. Под названием упражнения используйте строки вида Set 1: 20 kg x 10."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "未找到训练组。请在动作名称下使用这样的格式：Set 1: 20 kg x 10。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "未找到訓練組。請在動作名稱下使用這樣的格式：Set 1: 20 kg x 10。"}}}},
+    "This workout already has lifting details. Open it in Lift Log to review or edit it.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "This workout already has lifting details. Open it in Lift Log to review or edit it."}}, "de": {"stringUnit": {"state": "translated", "value": "Für dieses Training sind bereits Krafttrainingsdetails vorhanden. Öffne es in Lift Log zum Prüfen oder Bearbeiten."}}, "es": {"stringUnit": {"state": "translated", "value": "Este entrenamiento ya tiene detalles de fuerza. Ábrelo en Lift Log para revisarlo o editarlo."}}, "fr": {"stringUnit": {"state": "translated", "value": "Cette séance contient déjà des détails de musculation. Ouvrez-la dans Lift Log pour les consulter ou les modifier."}}, "it": {"stringUnit": {"state": "translated", "value": "Questo allenamento ha già dettagli di forza. Aprilo in Lift Log per controllarlo o modificarlo."}}, "pl": {"stringUnit": {"state": "translated", "value": "Ten trening ma już szczegóły siłowe. Otwórz go w Lift Log, aby je sprawdzić lub edytować."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Este treino já tem detalhes de musculação. Abra-o em Lift Log para rever ou editar."}}, "ru": {"stringUnit": {"state": "translated", "value": "Для этой тренировки уже сохранены силовые данные. Откройте её в Lift Log для просмотра или редактирования."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "此训练已有力量训练详情。请在 Lift Log 中查看或编辑。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "此訓練已有重量訓練詳情。請在 Lift Log 中查看或編輯。"}}}},
+    "Couldn't save the workout. Your existing log is unchanged.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Couldn't save the workout. Your existing log is unchanged."}}, "de": {"stringUnit": {"state": "translated", "value": "Das Training konnte nicht gespeichert werden. Dein bisheriges Protokoll bleibt unverändert."}}, "es": {"stringUnit": {"state": "translated", "value": "No se pudo guardar el entrenamiento. Tu registro actual no ha cambiado."}}, "fr": {"stringUnit": {"state": "translated", "value": "Impossible d’enregistrer la séance. Votre journal existant reste inchangé."}}, "it": {"stringUnit": {"state": "translated", "value": "Impossibile salvare l’allenamento. Il registro esistente non è cambiato."}}, "pl": {"stringUnit": {"state": "translated", "value": "Nie udało się zapisać treningu. Dotychczasowy dziennik pozostaje bez zmian."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Não foi possível guardar o treino. O registo existente não foi alterado."}}, "ru": {"stringUnit": {"state": "translated", "value": "Не удалось сохранить тренировку. Существующий журнал не изменён."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "无法保存训练。现有日志未更改。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "無法儲存訓練。現有紀錄未變更。"}}}},
+    "Exercises and sets": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Exercises and sets"}}, "de": {"stringUnit": {"state": "translated", "value": "Übungen und Sätze"}}, "es": {"stringUnit": {"state": "translated", "value": "Ejercicios y series"}}, "fr": {"stringUnit": {"state": "translated", "value": "Exercices et séries"}}, "it": {"stringUnit": {"state": "translated", "value": "Esercizi e serie"}}, "pl": {"stringUnit": {"state": "translated", "value": "Ćwiczenia i serie"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Exercícios e séries"}}, "ru": {"stringUnit": {"state": "translated", "value": "Упражнения и подходы"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "动作和训练组"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "動作和訓練組"}}}},
+    "Hevy CSV imports keep exercises, sets, reps, weights and notes in Lift Log. Existing logs are kept. Liftosaur imports remain workout summaries.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Hevy CSV imports keep exercises, sets, reps, weights and notes in Lift Log. Existing logs are kept. Liftosaur imports remain workout summaries."}}, "de": {"stringUnit": {"state": "translated", "value": "Hevy-CSV-Importe speichern Übungen, Sätze, Wiederholungen, Gewichte und Notizen in Lift Log. Bestehende Einträge bleiben erhalten. Liftosaur-Importe bleiben Trainingsübersichten."}}, "es": {"stringUnit": {"state": "translated", "value": "Las importaciones CSV de Hevy guardan ejercicios, series, repeticiones, pesos y notas en Lift Log. Los registros existentes se conservan. Liftosaur sigue importando resúmenes."}}, "fr": {"stringUnit": {"state": "translated", "value": "Les imports CSV Hevy conservent exercices, séries, répétitions, poids et notes dans Lift Log. Les journaux existants sont conservés. Les imports Liftosaur restent des résumés."}}, "it": {"stringUnit": {"state": "translated", "value": "I CSV Hevy conservano esercizi, serie, ripetizioni, pesi e note in Lift Log. I registri esistenti vengono mantenuti. Liftosaur continua a importare riepiloghi."}}, "pl": {"stringUnit": {"state": "translated", "value": "Import CSV Hevy zachowuje ćwiczenia, serie, powtórzenia, ciężary i notatki w Lift Log. Dotychczasowe wpisy pozostają. Importy Liftosaur nadal są podsumowaniami."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Os CSV do Hevy guardam exercícios, séries, repetições, pesos e notas em Lift Log. Os registos existentes são mantidos. O Liftosaur continua a importar resumos."}}, "ru": {"stringUnit": {"state": "translated", "value": "Импорт CSV Hevy сохраняет упражнения, подходы, повторения, веса и заметки в Lift Log. Прежние записи остаются. Импорт Liftosaur по-прежнему содержит сводки."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "Hevy CSV 将动作、组数、次数、重量和备注保存在 Lift Log 中，并保留现有日志。Liftosaur 仍导入训练摘要。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "Hevy CSV 將動作、組數、次數、重量和備註保存在 Lift Log 中，並保留現有紀錄。Liftosaur 仍匯入訓練摘要。"}}}},
+    "Saved %lld workouts; %lld already in Lift Log.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Saved %1$lld workouts; %2$lld already in Lift Log."}}, "de": {"stringUnit": {"state": "translated", "value": "%1$lld Trainings gespeichert; %2$lld bereits in Lift Log."}}, "es": {"stringUnit": {"state": "translated", "value": "%1$lld entrenamientos guardados; %2$lld ya estaban en Lift Log."}}, "fr": {"stringUnit": {"state": "translated", "value": "%1$lld séances enregistrées ; %2$lld déjà dans Lift Log."}}, "it": {"stringUnit": {"state": "translated", "value": "%1$lld allenamenti salvati; %2$lld già in Lift Log."}}, "pl": {"stringUnit": {"state": "translated", "value": "Zapisano %1$lld treningów; %2$lld było już w Lift Log."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "%1$lld treinos guardados; %2$lld já estavam em Lift Log."}}, "ru": {"stringUnit": {"state": "translated", "value": "Сохранено тренировок: %1$lld; уже в Lift Log: %2$lld."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "已保存 %1$lld 次训练；%2$lld 次已在 Lift Log 中。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "已儲存 %1$lld 次訓練；%2$lld 次已在 Lift Log 中。"}}}},
+    "Import workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Import workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build."}}, "de": {"stringUnit": {"state": "translated", "value": "Importiere Trainingsübersichten aus Apple Health. Diese persönliche NOOP-Version schreibt nichts in Health und importiert keine Vitalwerte daraus."}}, "es": {"stringUnit": {"state": "translated", "value": "Importa resúmenes de entrenamientos desde Apple Health. Esta versión personal de NOOP no escribe en Salud ni importa sus constantes vitales."}}, "fr": {"stringUnit": {"state": "translated", "value": "Importez les résumés de séances depuis Apple Santé. Cette version personnelle de NOOP n’écrit rien dans Santé et n’importe pas ses constantes vitales."}}, "it": {"stringUnit": {"state": "translated", "value": "Importa riepiloghi da Apple Salute. Questa versione personale di NOOP non scrive in Salute e non ne importa i parametri vitali."}}, "pl": {"stringUnit": {"state": "translated", "value": "Importuj podsumowania treningów z Apple Zdrowie. Ta osobista wersja NOOP nie zapisuje nic w Zdrowiu ani nie importuje stamtąd parametrów życiowych."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Importe resumos de treinos da Apple Saúde. Esta versão pessoal do NOOP não escreve na Saúde nem importa os seus sinais vitais."}}, "ru": {"stringUnit": {"state": "translated", "value": "Импортируйте сводки тренировок из Apple Здоровье. Эта личная сборка NOOP ничего не записывает в Здоровье и не импортирует оттуда жизненные показатели."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "从 Apple 健康导入训练摘要。此个人版 NOOP 不会写入健康，也不会从健康导入生命体征。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "從 Apple 健康匯入訓練摘要。此個人版 NOOP 不會寫入健康，也不會從健康匯入生命徵象。"}}}},
+    "Workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text."}}, "de": {"stringUnit": {"state": "translated", "value": "Trainingsübersichten werden beim Öffnen von NOOP und bei Health-Updates durch iOS aktualisiert. Vollständige Krafttrainingsdetails kommen aus CSV oder eingefügtem Text."}}, "es": {"stringUnit": {"state": "translated", "value": "Los resúmenes se actualizan al abrir NOOP y cuando iOS entrega cambios de Salud. Los detalles completos de fuerza llegan mediante CSV o texto pegado."}}, "fr": {"stringUnit": {"state": "translated", "value": "Les résumés sont actualisés à l’ouverture de NOOP et lors des mises à jour Santé fournies par iOS. Les détails complets viennent d’un CSV ou du texte collé."}}, "it": {"stringUnit": {"state": "translated", "value": "I riepiloghi si aggiornano all’apertura di NOOP e quando iOS fornisce aggiornamenti di Salute. I dettagli completi arrivano da CSV o testo incollato."}}, "pl": {"stringUnit": {"state": "translated", "value": "Podsumowania odświeżają się po otwarciu NOOP i po aktualizacjach Zdrowia dostarczonych przez iOS. Pełne szczegóły pochodzą z CSV lub wklejonego tekstu."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Os resumos atualizam ao abrir o NOOP e quando o iOS entrega alterações da Saúde. Os detalhes completos vêm de CSV ou texto colado."}}, "ru": {"stringUnit": {"state": "translated", "value": "Сводки обновляются при открытии NOOP и поступлении обновлений Здоровья от iOS. Полные силовые данные импортируются из CSV или вставленного текста."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "打开 NOOP 或 iOS 提供健康更新时会刷新训练摘要。完整力量训练详情来自 CSV 或粘贴文本。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "開啟 NOOP 或 iOS 提供健康更新時會重新整理訓練摘要。完整重量訓練詳情來自 CSV 或貼上文字。"}}}},
+    "Read only": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Read only"}}, "de": {"stringUnit": {"state": "translated", "value": "Nur lesen"}}, "es": {"stringUnit": {"state": "translated", "value": "Solo lectura"}}, "fr": {"stringUnit": {"state": "translated", "value": "Lecture seule"}}, "it": {"stringUnit": {"state": "translated", "value": "Sola lettura"}}, "pl": {"stringUnit": {"state": "translated", "value": "Tylko odczyt"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Só de leitura"}}, "ru": {"stringUnit": {"state": "translated", "value": "Только чтение"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "只读"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "唯讀"}}}},
+    "Couldn't read workouts from Apple Health.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Couldn't read workouts from Apple Health."}}, "de": {"stringUnit": {"state": "translated", "value": "Trainings aus Apple Health konnten nicht gelesen werden."}}, "es": {"stringUnit": {"state": "translated", "value": "No se pudieron leer los entrenamientos de Apple Salud."}}, "fr": {"stringUnit": {"state": "translated", "value": "Impossible de lire les séances depuis Apple Santé."}}, "it": {"stringUnit": {"state": "translated", "value": "Impossibile leggere gli allenamenti da Apple Salute."}}, "pl": {"stringUnit": {"state": "translated", "value": "Nie udało się odczytać treningów z Apple Zdrowie."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Não foi possível ler os treinos da Apple Saúde."}}, "ru": {"stringUnit": {"state": "translated", "value": "Не удалось прочитать тренировки из Apple Здоровье."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "无法从 Apple 健康读取训练。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "無法從 Apple 健康讀取訓練。"}}}},
+    "%lld: %@ × %@": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "de": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "es": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "fr": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "it": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "pl": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "ru": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "%1$lld: %2$@ × %3$@"}}}},
+    "Recovery, Strain and Sleep as score rings, plus live HR and strap battery at a glance.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Recovery, Strain and Sleep as score rings, plus live HR and strap battery at a glance."}}, "de": {"stringUnit": {"state": "translated", "value": "Erholung, Belastung und Schlaf als Bewertungsringe sowie Live-Herzfrequenz und Bandakku auf einen Blick."}}, "es": {"stringUnit": {"state": "translated", "value": "Recuperación, esfuerzo y sueño en anillos de puntuación, más frecuencia cardíaca en directo y batería de la pulsera de un vistazo."}}, "fr": {"stringUnit": {"state": "translated", "value": "Récupération, effort et sommeil sous forme d’anneaux, avec fréquence cardiaque en direct et batterie du bracelet en un coup d’œil."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Recuperação, esforço e sono em anéis de pontuação, com frequência cardíaca em direto e bateria da pulseira num relance."}}, "it": {"stringUnit": {"state": "translated", "value": "Recupero, sforzo e sonno come anelli di punteggio, con frequenza cardiaca in tempo reale e batteria del bracciale a colpo d’occhio."}}, "pl": {"stringUnit": {"state": "translated", "value": "Regeneracja, wysiłek i sen w pierścieniach wyników oraz bieżące tętno i bateria opaski w jednym miejscu."}}, "ru": {"stringUnit": {"state": "translated", "value": "Восстановление, нагрузка и сон в виде колец оценки, а также текущий пульс и заряд браслета."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "通过评分环一览恢复、负荷和睡眠，以及实时心率和手环电量。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "透過評分環一覽恢復、負荷和睡眠，以及即時心率和手環電量。"}}}},
+    "Effort %@ %@": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Strain %1$@ %2$@"}}, "de": {"stringUnit": {"state": "translated", "value": "Belastung %1$@ %2$@"}}, "es": {"stringUnit": {"state": "translated", "value": "Esfuerzo %1$@ %2$@"}}, "fr": {"stringUnit": {"state": "translated", "value": "Effort %1$@ %2$@"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Esforço %1$@ %2$@"}}, "it": {"stringUnit": {"state": "translated", "value": "Sforzo %1$@ %2$@"}}, "pl": {"stringUnit": {"state": "translated", "value": "Wysiłek %1$@ %2$@"}}, "ru": {"stringUnit": {"state": "translated", "value": "Нагрузка %1$@ %2$@"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "负荷 %1$@ %2$@"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "負荷 %1$@ %2$@"}}}},
+    "Effort %@": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Strain %@"}}, "de": {"stringUnit": {"state": "translated", "value": "Belastung %@"}}, "es": {"stringUnit": {"state": "translated", "value": "Esfuerzo %@"}}, "fr": {"stringUnit": {"state": "translated", "value": "Effort %@"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Esforço %@"}}, "it": {"stringUnit": {"state": "translated", "value": "Sforzo %@"}}, "pl": {"stringUnit": {"state": "translated", "value": "Wysiłek %@"}}, "ru": {"stringUnit": {"state": "translated", "value": "Нагрузка %@"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "负荷 %@"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "負荷 %@"}}}},
+    "Charge / Effort / Rest": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Recovery / Strain / Sleep"}}, "de": {"stringUnit": {"state": "translated", "value": "Erholung / Belastung / Schlaf"}}, "es": {"stringUnit": {"state": "translated", "value": "Recuperación / Esfuerzo / Sueño"}}, "fr": {"stringUnit": {"state": "translated", "value": "Récupération / Effort / Sommeil"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Recuperação / Esforço / Sono"}}, "it": {"stringUnit": {"state": "translated", "value": "Recupero / Sforzo / Sonno"}}, "pl": {"stringUnit": {"state": "translated", "value": "Regeneracja / Wysiłek / Sen"}}, "ru": {"stringUnit": {"state": "translated", "value": "Восстановление / Нагрузка / Сон"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "恢复 / 负荷 / 睡眠"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "恢復 / 負荷 / 睡眠"}}}},
+    "A one-tap guarded workout: the strap watches your heart rate against a band gated on today's Charge, and only ever buzzes to correct course. Silence means you're on track.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "A one-tap guarded workout: the strap watches your heart rate against a band gated on today's Recovery, and only ever buzzes to correct course. Silence means you're on track."}}, "de": {"stringUnit": {"state": "translated", "value": "Ein Training mit einem Fingertipp: Das Band überwacht deine Herzfrequenz anhand der heutigen Erholung und vibriert nur zur Korrektur. Stille bedeutet, dass du im Zielbereich bist."}}, "es": {"stringUnit": {"state": "translated", "value": "Un entrenamiento con un toque: la pulsera vigila tu frecuencia cardíaca según la recuperación de hoy y solo vibra para corregir el ritmo. El silencio indica que vas bien."}}, "fr": {"stringUnit": {"state": "translated", "value": "Un entraînement en un geste : le bracelet surveille votre fréquence cardiaque selon votre récupération du jour et ne vibre que pour vous corriger. Le silence indique que vous êtes dans la bonne zone."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Um treino com um toque: a pulseira acompanha a frequência cardíaca segundo a recuperação de hoje e só vibra para corrigir o ritmo. O silêncio indica que está no caminho certo."}}, "it": {"stringUnit": {"state": "translated", "value": "Un allenamento con un tocco: il bracciale controlla la frequenza cardiaca in base al recupero di oggi e vibra solo per correggere il ritmo. Il silenzio indica che sei nella zona giusta."}}, "pl": {"stringUnit": {"state": "translated", "value": "Trening jednym dotknięciem: opaska śledzi tętno w zakresie opartym na dzisiejszej regeneracji i wibruje tylko, gdy trzeba skorygować tempo. Cisza oznacza, że jesteś w celu."}}, "ru": {"stringUnit": {"state": "translated", "value": "Тренировка одним нажатием: браслет следит за пульсом в диапазоне с учётом сегодняшнего восстановления и вибрирует только для корректировки. Тишина означает, что вы в нужной зоне."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "一键开始受监测的训练：手环根据今天的恢复情况设定心率范围，仅在需要调整时振动。没有振动表示你处于目标范围内。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "一鍵開始受監測的訓練：手環根據今天的恢復狀況設定心率範圍，僅在需要調整時震動。沒有震動表示你處於目標範圍內。"}}}},
+    "no Effort recorded": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "no Strain recorded"}}, "de": {"stringUnit": {"state": "translated", "value": "keine Belastung aufgezeichnet"}}, "es": {"stringUnit": {"state": "translated", "value": "sin esfuerzo registrado"}}, "fr": {"stringUnit": {"state": "translated", "value": "aucun effort enregistré"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "sem esforço registado"}}, "it": {"stringUnit": {"state": "translated", "value": "nessuno sforzo registrato"}}, "pl": {"stringUnit": {"state": "translated", "value": "brak zapisanego wysiłku"}}, "ru": {"stringUnit": {"state": "translated", "value": "нагрузка не записана"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "未记录负荷"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "未記錄負荷"}}}},
+    "The Deep sleep HRV window needs a night with deep-stage sleep to score Charge. Switch to Whole night in Settings, or wait for a night with more deep sleep.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "The Deep sleep HRV window needs a night with deep-stage sleep to score Recovery. Switch to Whole night in Settings, or wait for a night with more deep sleep."}}, "de": {"stringUnit": {"state": "translated", "value": "Das HRV-Fenster für Tiefschlaf benötigt eine Nacht mit Tiefschlaf, um die Erholung zu bewerten. Wähle in den Einstellungen „Ganze Nacht“ oder warte auf eine Nacht mit mehr Tiefschlaf."}}, "es": {"stringUnit": {"state": "translated", "value": "La ventana de VFC de sueño profundo necesita una noche con sueño profundo para puntuar la recuperación. Cambia a Toda la noche en Ajustes o espera una noche con más sueño profundo."}}, "fr": {"stringUnit": {"state": "translated", "value": "La fenêtre de VFC en sommeil profond nécessite une nuit comportant du sommeil profond pour calculer la récupération. Choisissez Nuit entière dans les réglages ou attendez une nuit avec davantage de sommeil profond."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "A janela de VFC de sono profundo precisa de uma noite com sono profundo para calcular a recuperação. Mude para Noite inteira nas Definições ou aguarde uma noite com mais sono profundo."}}, "it": {"stringUnit": {"state": "translated", "value": "La finestra HRV del sonno profondo richiede una notte con sonno profondo per calcolare il recupero. Passa a Tutta la notte nelle impostazioni o attendi una notte con più sonno profondo."}}, "pl": {"stringUnit": {"state": "translated", "value": "Okno HRV snu głębokiego wymaga nocy ze snem głębokim, aby obliczyć regenerację. Wybierz Cała noc w ustawieniach albo poczekaj na noc z większą ilością snu głębokiego."}}, "ru": {"stringUnit": {"state": "translated", "value": "Для оценки восстановления по ВСР глубокого сна нужна ночь с глубоким сном. Выберите «Вся ночь» в настройках или дождитесь ночи с большим количеством глубокого сна."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "深睡眠心率变异性窗口需要一晚有深睡眠的数据才能计算恢复评分。请在设置中切换到“整晚”，或等待深睡眠更多的一晚。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "深層睡眠心率變異性視窗需要一晚有深層睡眠的資料才能計算恢復評分。請在設定中切換到「整晚」，或等待深層睡眠更多的一晚。"}}}},
+    "Opens the full Charge metric.": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Opens the full Recovery metric."}}, "de": {"stringUnit": {"state": "translated", "value": "Öffnet die vollständige Erholungsmetrik."}}, "es": {"stringUnit": {"state": "translated", "value": "Abre la métrica completa de recuperación."}}, "fr": {"stringUnit": {"state": "translated", "value": "Ouvre la mesure complète de récupération."}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Abre a métrica completa de recuperação."}}, "it": {"stringUnit": {"state": "translated", "value": "Apre la metrica completa del recupero."}}, "pl": {"stringUnit": {"state": "translated", "value": "Otwiera pełny wskaźnik regeneracji."}}, "ru": {"stringUnit": {"state": "translated", "value": "Открывает полный показатель восстановления."}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "打开完整的恢复指标。"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "開啟完整的恢復指標。"}}}},
     "Band Steps": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Band Steps"}}, "de": {"stringUnit": {"state": "translated", "value": "Schritte vom Band"}}, "es": {"stringUnit": {"state": "translated", "value": "Pasos de la pulsera"}}, "fr": {"stringUnit": {"state": "translated", "value": "Pas du bracelet"}}, "it": {"stringUnit": {"state": "translated", "value": "Passi del bracciale"}}, "pl": {"stringUnit": {"state": "translated", "value": "Kroki z opaski"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Passos da pulseira"}}, "ru": {"stringUnit": {"state": "translated", "value": "Шаги браслета"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "手环步数"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "手環步數"}}}},
     "Band estimate unavailable": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Band estimate unavailable"}}, "de": {"stringUnit": {"state": "translated", "value": "Keine Schätzung vom Band"}}, "es": {"stringUnit": {"state": "translated", "value": "Estimación de la pulsera no disponible"}}, "fr": {"stringUnit": {"state": "translated", "value": "Estimation du bracelet indisponible"}}, "it": {"stringUnit": {"state": "translated", "value": "Stima del bracciale non disponibile"}}, "pl": {"stringUnit": {"state": "translated", "value": "Szacunek z opaski niedostępny"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Estimativa da pulseira indisponível"}}, "ru": {"stringUnit": {"state": "translated", "value": "Оценка браслета недоступна"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "手环估算不可用"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "手環估算無法使用"}}}},
     "Daily step goal": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Daily step goal"}}, "de": {"stringUnit": {"state": "translated", "value": "Tägliches Schrittziel"}}, "es": {"stringUnit": {"state": "translated", "value": "Objetivo diario de pasos"}}, "fr": {"stringUnit": {"state": "translated", "value": "Objectif quotidien de pas"}}, "it": {"stringUnit": {"state": "translated", "value": "Obiettivo giornaliero di passi"}}, "pl": {"stringUnit": {"state": "translated", "value": "Dzienny cel kroków"}}, "pt-PT": {"stringUnit": {"state": "translated", "value": "Objetivo diário de passos"}}, "ru": {"stringUnit": {"state": "translated", "value": "Дневная цель по шагам"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "每日步数目标"}}, "zh-Hant": {"stringUnit": {"state": "translated", "value": "每日步數目標"}}}},
@@ -2811,7 +2874,7 @@
       "de": { "stringUnit": { "state": "translated", "value": "Abgeschlossene Sitzungen landen hier – mit jedem Satz, den du aufgezeichnet hast." } }, "en": { "stringUnit": { "state": "translated", "value": "Finished sessions land here, with every set you logged." } }, "es": { "stringUnit": { "state": "translated", "value": "Las sesiones terminadas aparecen aquí, con cada serie que registraste." } }, "fr": { "stringUnit": { "state": "translated", "value": "Les séances terminées arrivent ici, avec chaque série que tu as enregistrée." } }, "it": { "stringUnit": { "state": "translated", "value": "Le sessioni concluse finiscono qui, con ogni serie che hai registrato." } }, "pl": { "stringUnit": { "state": "translated", "value": "Zakończone sesje trafiają tutaj, z każdą zapisaną serią." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "As sessões terminadas aparecem aqui, com todas as séries que registaste." } }, "ru": { "stringUnit": { "state": "translated", "value": "Завершённые сессии попадают сюда — со всеми записанными подходами." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "完成的训练会出现在这里，包含你记录的每一组。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "完成的訓練會出現在這裡，包含你記錄的每一組。" } }
     } },
     "Lifting figures are worked out from the sets above. Effort stays measured from heart rate and is never derived from weights and reps.": { "localizations": {
-      "de": { "stringUnit": { "state": "translated", "value": "Die Kraftzahlen werden aus den Sätzen oben berechnet. Die Belastung bleibt aus der Herzfrequenz gemessen und wird nie aus Gewichten und Wiederholungen abgeleitet." } }, "en": { "stringUnit": { "state": "translated", "value": "Lifting figures are worked out from the sets above. Effort stays measured from heart rate and is never derived from weights and reps." } }, "es": { "stringUnit": { "state": "translated", "value": "Las cifras de fuerza salen de las series de arriba. El Esfuerzo se sigue midiendo por frecuencia cardíaca y nunca se deriva de pesos y repeticiones." } }, "fr": { "stringUnit": { "state": "translated", "value": "Les chiffres de musculation sont calculés à partir des séries ci-dessus. L'Effort reste mesuré par la fréquence cardiaque et n'est jamais déduit des charges et répétitions." } }, "it": { "stringUnit": { "state": "translated", "value": "I numeri della forza sono calcolati dalle serie qui sopra. Lo Sforzo resta misurato dalla frequenza cardiaca e non viene mai derivato da pesi e ripetizioni." } }, "pl": { "stringUnit": { "state": "translated", "value": "Liczby siłowe wynikają z serii powyżej. Wysiłek nadal mierzony jest tętnem i nigdy nie jest wyprowadzany z ciężarów i powtórzeń." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Os números de força são calculados a partir das séries acima. O Esforço continua medido pela frequência cardíaca e nunca é derivado de pesos e repetições." } }, "ru": { "stringUnit": { "state": "translated", "value": "Силовые показатели считаются из подходов выше. Усилие по-прежнему измеряется по пульсу и никогда не выводится из весов и повторений." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "力量数据由上面的组次算出。消耗始终由心率测得，绝不会从重量和次数推导。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "力量數據由上面的組次算出。消耗始終由心率測得，絕不會從重量和次數推導。" } }
+      "de": { "stringUnit": { "state": "translated", "value": "Die Kraftzahlen werden aus den Sätzen oben berechnet. Die Belastung bleibt aus der Herzfrequenz gemessen und wird nie aus Gewichten und Wiederholungen abgeleitet." } }, "en": { "stringUnit": { "state": "translated", "value": "Lifting figures are worked out from the sets above. Strain stays measured from heart rate and is never derived from weights and reps." } }, "es": { "stringUnit": { "state": "translated", "value": "Las cifras de fuerza salen de las series de arriba. El Esfuerzo se sigue midiendo por frecuencia cardíaca y nunca se deriva de pesos y repeticiones." } }, "fr": { "stringUnit": { "state": "translated", "value": "Les chiffres de musculation sont calculés à partir des séries ci-dessus. L'Effort reste mesuré par la fréquence cardiaque et n'est jamais déduit des charges et répétitions." } }, "it": { "stringUnit": { "state": "translated", "value": "I numeri della forza sono calcolati dalle serie qui sopra. Lo Sforzo resta misurato dalla frequenza cardiaca e non viene mai derivato da pesi e ripetizioni." } }, "pl": { "stringUnit": { "state": "translated", "value": "Liczby siłowe wynikają z serii powyżej. Wysiłek nadal mierzony jest tętnem i nigdy nie jest wyprowadzany z ciężarów i powtórzeń." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Os números de força são calculados a partir das séries acima. O Esforço continua medido pela frequência cardíaca e nunca é derivado de pesos e repetições." } }, "ru": { "stringUnit": { "state": "translated", "value": "Силовые показатели считаются из подходов выше. Усилие по-прежнему измеряется по пульсу и никогда не выводится из весов и повторений." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "力量数据由上面的组次算出。消耗始终由心率测得，绝不会从重量和次数推导。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "力量數據由上面的組次算出。消耗始終由心率測得，絕不會從重量和次數推導。" } }
     } },
     "None of these exercises has a muscle group yet. Add one on the exercise and every future session counts toward it.": { "localizations": {
       "de": { "stringUnit": { "state": "translated", "value": "Noch keine dieser Übungen hat eine Muskelgruppe. Trag eine bei der Übung ein, und jede künftige Sitzung zählt darauf ein." } }, "en": { "stringUnit": { "state": "translated", "value": "None of these exercises has a muscle group yet. Add one on the exercise and every future session counts toward it." } }, "es": { "stringUnit": { "state": "translated", "value": "Ninguno de estos ejercicios tiene aún grupo muscular. Añade uno al ejercicio y todas las sesiones futuras contarán para él." } }, "fr": { "stringUnit": { "state": "translated", "value": "Aucun de ces exercices n'a encore de groupe musculaire. Ajoutes-en un à l'exercice et chaque séance future comptera dedans." } }, "it": { "stringUnit": { "state": "translated", "value": "Nessuno di questi esercizi ha ancora un gruppo muscolare. Aggiungine uno all'esercizio e ogni sessione futura conterà su di esso." } }, "pl": { "stringUnit": { "state": "translated", "value": "Żadne z tych ćwiczeń nie ma jeszcze grupy mięśniowej. Dodaj ją do ćwiczenia, a każda kolejna sesja będzie się na nią liczyć." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhum destes exercícios tem ainda grupo muscular. Adiciona um ao exercício e todas as sessões futuras contam para ele." } }, "ru": { "stringUnit": { "state": "translated", "value": "Ни одно из этих упражнений пока не имеет мышечной группы. Добавь её к упражнению — и каждая следующая сессия пойдёт в зачёт." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "这些动作还没有肌群。给动作添加一个，之后每次训练都会计入其中。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "這些動作還沒有肌群。給動作新增一個，之後每次訓練都會計入其中。" } }
@@ -3003,7 +3066,7 @@
       "de": { "stringUnit": { "state": "translated", "value": "Programme, Sitzungen und Satz-für-Satz-Verlauf" } }, "en": { "stringUnit": { "state": "translated", "value": "Programs, sessions and per-set history" } }, "es": { "stringUnit": { "state": "translated", "value": "Programas, sesiones e historial por serie" } }, "fr": { "stringUnit": { "state": "translated", "value": "Programmes, séances et historique par série" } }, "it": { "stringUnit": { "state": "translated", "value": "Programmi, sessioni e storico per serie" } }, "pl": { "stringUnit": { "state": "translated", "value": "Programy, sesje i historia serii" } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Programas, sessões e histórico por série" } }, "ru": { "stringUnit": { "state": "translated", "value": "Программы, сессии и история по подходам" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "计划、训练与每组历史" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "計畫、訓練與每組歷史" } }
     } },
     "Lifting adds volume and set counts. It never changes your Effort, which stays measured from heart rate.": { "localizations": {
-      "de": { "stringUnit": { "state": "translated", "value": "Krafttraining ergänzt Volumen und Satzzahlen. Deine Belastung ändert es nie – die wird weiterhin aus der Herzfrequenz gemessen." } }, "en": { "stringUnit": { "state": "translated", "value": "Lifting adds volume and set counts. It never changes your Effort, which stays measured from heart rate." } }, "es": { "stringUnit": { "state": "translated", "value": "Las pesas añaden volumen y recuento de series. Nunca cambian tu Esfuerzo, que se sigue midiendo por la frecuencia cardíaca." } }, "fr": { "stringUnit": { "state": "translated", "value": "La musculation ajoute du volume et un décompte de séries. Elle ne change jamais ton Effort, toujours mesuré à partir de la fréquence cardiaque." } }, "it": { "stringUnit": { "state": "translated", "value": "I pesi aggiungono volume e conteggio delle serie. Non cambiano mai il tuo Sforzo, che resta misurato dalla frequenza cardiaca." } }, "pl": { "stringUnit": { "state": "translated", "value": "Trening siłowy dodaje objętość i liczbę serii. Nigdy nie zmienia Twojego Wysiłku, który nadal jest mierzony tętnem." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Os pesos acrescentam volume e contagem de séries. Nunca alteram o teu Esforço, que continua medido pela frequência cardíaca." } }, "ru": { "stringUnit": { "state": "translated", "value": "Силовые добавляют объём и число подходов. Они никогда не меняют твоё Усилие — оно по-прежнему измеряется по пульсу." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "力量训练会增加容量和组数统计，但绝不会改变你的消耗——消耗始终由心率测得。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "力量訓練會增加容量和組數統計，但絕不會改變你的消耗——消耗始終由心率測得。" } }
+      "de": { "stringUnit": { "state": "translated", "value": "Krafttraining ergänzt Volumen und Satzzahlen. Deine Belastung ändert es nie – die wird weiterhin aus der Herzfrequenz gemessen." } }, "en": { "stringUnit": { "state": "translated", "value": "Lifting adds volume and set counts. It never changes your Strain, which stays measured from heart rate." } }, "es": { "stringUnit": { "state": "translated", "value": "Las pesas añaden volumen y recuento de series. Nunca cambian tu Esfuerzo, que se sigue midiendo por la frecuencia cardíaca." } }, "fr": { "stringUnit": { "state": "translated", "value": "La musculation ajoute du volume et un décompte de séries. Elle ne change jamais ton Effort, toujours mesuré à partir de la fréquence cardiaque." } }, "it": { "stringUnit": { "state": "translated", "value": "I pesi aggiungono volume e conteggio delle serie. Non cambiano mai il tuo Sforzo, che resta misurato dalla frequenza cardiaca." } }, "pl": { "stringUnit": { "state": "translated", "value": "Trening siłowy dodaje objętość i liczbę serii. Nigdy nie zmienia Twojego Wysiłku, który nadal jest mierzony tętnem." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Os pesos acrescentam volume e contagem de séries. Nunca alteram o teu Esforço, que continua medido pela frequência cardíaca." } }, "ru": { "stringUnit": { "state": "translated", "value": "Силовые добавляют объём и число подходов. Они никогда не меняют твоё Усилие — оно по-прежнему измеряется по пульсу." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "力量训练会增加容量和组数统计，但绝不会改变你的消耗——消耗始终由心率测得。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "力量訓練會增加容量和組數統計，但絕不會改變你的消耗——消耗始終由心率測得。" } }
     } },
     "Programs": { "localizations": {
       "de": { "stringUnit": { "state": "translated", "value": "Programme" } }, "en": { "stringUnit": { "state": "translated", "value": "Programs" } }, "es": { "stringUnit": { "state": "translated", "value": "Programas" } }, "fr": { "stringUnit": { "state": "translated", "value": "Programmes" } }, "it": { "stringUnit": { "state": "translated", "value": "Programmi" } }, "pl": { "stringUnit": { "state": "translated", "value": "Programy" } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Programas" } }, "ru": { "stringUnit": { "state": "translated", "value": "Программы" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "计划" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "計畫" } }
@@ -3845,6 +3908,7 @@
     },
     " EFFORT": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": " STRAIN"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -4757,6 +4821,7 @@
     },
     "%@ Effort": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "%@ Strain"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -9985,7 +10050,7 @@
         "en": {
           "stringUnit": {
             "state": "new",
-            "value": "%1$@: %2$@ of Charge"
+            "value": "%1$@: %2$@ of Recovery"
           }
         },
         "es": {
@@ -17158,6 +17223,7 @@
     },
     "%lld%% Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "%lld%% Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -24864,6 +24930,7 @@
     },
     "A lower resting heart rate usually means a higher charge.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "A lower resting heart rate usually means a higher recovery."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -25676,6 +25743,7 @@
     },
     "A once-a-day nudge when your Effort reaches the low end of today's optimal strain range, worked out from your recovery.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "A once-a-day nudge when your Strain reaches the low end of today's optimal strain range, worked out from your recovery."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -26037,6 +26105,7 @@
     },
     "A read-only Plews/Altini smallest-worthwhile-change reading of your nightly HRV: it shows whether your 7-night HRV baseline sits above, inside, or below your personal normal band. It changes nothing else - the Charge ring is identical whether this is on or off. This is rough / early testing, not yet validated against varying real data (n=1).": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "A read-only Plews/Altini smallest-worthwhile-change reading of your nightly HRV: it shows whether your 7-night HRV baseline sits above, inside, or below your personal normal band. It changes nothing else - the Recovery ring is identical whether this is on or off. This is rough / early testing, not yet validated against varying real data (n=1)."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -26914,6 +26983,7 @@
     },
     "A watch samples your heart-rate variability rather than streaming it all night, so your Charge score needs roughly seven nights to calibrate. Until then NOOP shows “needs more data”, never a guessed number.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "A watch samples your heart-rate variability rather than streaming it all night, so your Recovery score needs roughly seven nights to calibrate. Until then NOOP shows “needs more data”, never a guessed number."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -33752,6 +33822,7 @@
     },
     "Apple's own sleep stages drive Rest directly. This is one of the watch's strengths.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Apple's own sleep stages drive Sleep directly. This is one of the watch's strengths."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -33810,6 +33881,7 @@
     },
     "Apple's sleep stages are strong, and they drive your Rest score directly.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Apple's sleep stages are strong, and they drive your Sleep score directly."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -34390,6 +34462,7 @@
     },
     "Ask about your charge, effort, rest and workouts, grounded in your own numbers.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Ask about your recovery, strain, sleep and workouts, grounded in your own numbers."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -36442,6 +36515,7 @@
     },
     "Avg HR is shown as typed. The HR graph, zones and Effort stay from the recorded session.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Avg HR is shown as typed. The HR graph, zones and Strain stay from the recorded session."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -47903,7 +47977,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Charge"
+            "value": "Recovery"
           }
         },
         "es": {
@@ -47958,6 +48032,7 @@
     },
     "Charge %@%%": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery %@%%"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48016,6 +48091,7 @@
     },
     "Charge %lld today, so your band is %lld–%lld bpm.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery %lld today, so your band is %lld–%lld bpm."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48074,6 +48150,7 @@
     },
     "Charge (all history)": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery (all history)"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48132,6 +48209,7 @@
     },
     "Charge (past year)": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery (past year)"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48199,7 +48277,7 @@
         "en": {
           "stringUnit": {
             "state": "new",
-            "value": "Charge baseline calibrating. %1$@, %2$@. %3$@."
+            "value": "Recovery baseline calibrating. %1$@, %2$@. %3$@."
           }
         },
         "es": {
@@ -48254,6 +48332,7 @@
     },
     "Charge baseline recalibrating": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery baseline recalibrating"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48312,6 +48391,7 @@
     },
     "Charge is low and sleep was consistent.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is low and sleep was consistent."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48370,6 +48450,7 @@
     },
     "Charge is low but sleep ran short.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is low but sleep ran short."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48428,6 +48509,7 @@
     },
     "Charge is low.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is low."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48486,6 +48568,7 @@
     },
     "Charge is steady and sleep was consistent.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is steady and sleep was consistent."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48544,6 +48627,7 @@
     },
     "Charge is steady but sleep ran short.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is steady but sleep ran short."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48602,6 +48686,7 @@
     },
     "Charge is steady.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is steady."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48660,6 +48745,7 @@
     },
     "Charge is strong and sleep was consistent.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is strong and sleep was consistent."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48718,6 +48804,7 @@
     },
     "Charge is strong but sleep ran short.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is strong but sleep ran short."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48776,6 +48863,7 @@
     },
     "Charge is strong.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery is strong."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48834,6 +48922,7 @@
     },
     "Charge model": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery model"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48892,6 +48981,7 @@
     },
     "Charge scale, depleted to peaked": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery scale, depleted to peaked"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -48950,6 +49040,7 @@
     },
     "Charge trend": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery trend"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49008,6 +49099,7 @@
     },
     "Charge weighs your HRV against your personal baseline (~55%%), resting heart rate (~20%%), rest quality (~15%%), respiration (~5%%) and skin-temperature deviation (~5%%). Effort is a 0-%lld cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day NOOP collected raw streams.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery weighs your HRV against your personal baseline (~55%%), resting heart rate (~20%%), sleep quality (~15%%), respiration (~5%%) and skin-temperature deviation (~5%%). Strain is a 0-%lld cardiovascular load from time in heart-rate zones. Sleep is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day NOOP collected raw streams."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49066,6 +49158,7 @@
     },
     "Charge weighs your HRV against your personal baseline (~55%%), resting heart rate (~20%%), rest quality (~15%%), respiration (~5%%) and skin-temperature deviation (~5%%). Effort is a 0–%@ cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day NOOP collected raw streams.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery weighs your HRV against your personal baseline (~55%%), resting heart rate (~20%%), sleep quality (~15%%), respiration (~5%%) and skin-temperature deviation (~5%%). Strain is a 0–%@ cardiovascular load from time in heart-rate zones. Sleep is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day NOOP collected raw streams."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49182,6 +49275,7 @@
     },
     "Charge · %@ pts": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery · %@ pts"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49240,6 +49334,7 @@
     },
     "Charge · Effort · Rest": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery · Strain · Sleep"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49298,6 +49393,7 @@
     },
     "Charge → Next-day charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery → Next-day recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49356,6 +49452,7 @@
     },
     "Charge, Effort and Rest (and how they differ from WHOOP).": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery, Strain and Sleep (and how they differ from WHOOP)."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49414,6 +49511,7 @@
     },
     "Charge, Effort and Rest are scored on your own device from your strap data. Charge needs about four nights of sleep to learn your baseline (that's \"Calibrating\", counted as nights of 4 on the ring), and keeps sharpening over your first couple of weeks. On a WHOOP 5 or MG the strap banks little history, so that count can sit at 0 of 4 until you have worn it across a few nights. That's the strap's sync limit, not a fault. Before there's a number, NOOP shows what it can without faking one.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery, Strain and Sleep are scored on your own device from your strap data. Recovery needs about four nights of sleep to learn your baseline (that's \"Calibrating\", counted as nights of 4 on the ring), and keeps sharpening over your first couple of weeks. On a WHOOP 5 or MG the strap banks little history, so that count can sit at 0 of 4 until you have worn it across a few nights. That's the strap's sync limit, not a fault. Before there's a number, NOOP shows what it can without faking one."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49472,6 +49570,7 @@
     },
     "Charge, Effort and Rest become personal after a few nights of wear.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery, Strain and Sleep become personal after a few nights of wear."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49530,6 +49629,7 @@
     },
     "Charge, Effort and Rest build over your next few nights of wear.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery, Strain and Sleep build over your next few nights of wear."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49588,6 +49688,7 @@
     },
     "Charge, Effort, Rest, HRV, resting and live heart rate, and strap battery at a glance.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery, Strain, Sleep, HRV, resting and live heart rate, and strap battery at a glance."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -49646,6 +49747,7 @@
     },
     "Charge: how recovered are you?": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery: how recovered are you?"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -50760,6 +50862,7 @@
     },
     "Choose how distances, weights, heights, temperatures and Effort are shown. Your data is always stored the same way. This only changes the display.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Choose how distances, weights, heights, temperatures and Strain are shown. Your data is always stored the same way. This only changes the display."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -58414,6 +58517,7 @@
     },
     "Current charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Current recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -66076,6 +66180,7 @@
     },
     "EFFORT": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "STRAIN"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -66134,6 +66239,7 @@
     },
     "EFFORT BUILDING": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "STRAIN BUILDING"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67843,7 +67949,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Effort"
+            "value": "Strain"
           }
         },
         "es": {
@@ -67898,6 +68004,7 @@
     },
     "Effort (0–100)": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Strain (0–100)"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67956,6 +68063,7 @@
     },
     "Effort scale": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Strain scale"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -68014,6 +68122,7 @@
     },
     "Effort this %@": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Strain this %@"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -68072,6 +68181,7 @@
     },
     "Effort: how hard did your heart work?": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Strain: how hard did your heart work?"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -69501,6 +69611,7 @@
     },
     "Estimate from today's effort, your typical sleep and your %lld-night recovery baseline, not a measurement. Your real Charge is scored from tomorrow's HRV when you wake.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Estimate from today's effort, your typical sleep and your %lld-night recovery baseline, not a measurement. Your real Recovery is scored from tomorrow's HRV when you wake."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -78475,6 +78586,7 @@
     },
     "HR %@ · Effort %@": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "HR %@ · Strain %@"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -80169,6 +80281,7 @@
     },
     "HRV ↔ Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "HRV ↔ Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -82346,6 +82459,7 @@
     },
     "Heart-rate variability as the engine behind your charge score.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Heart-rate variability as the engine behind your recovery score."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -83951,7 +84065,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "How Charge is calculated"
+            "value": "How Recovery is calculated"
           }
         },
         "es": {
@@ -84006,6 +84120,7 @@
     },
     "How Charge is calculated. The method behind the score.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "How Recovery is calculated. The method behind the score."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -84064,6 +84179,7 @@
     },
     "How Charge, Effort and Rest are calculated, and how they differ from WHOOP.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "How Recovery, Strain and Sleep are calculated, and how they differ from WHOOP."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -84131,7 +84247,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "How Effort is calculated"
+            "value": "How Strain is calculated"
           }
         },
         "es": {
@@ -84311,7 +84427,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "How Rest is calculated"
+            "value": "How Sleep is calculated"
           }
         },
         "es": {
@@ -84727,6 +84843,7 @@
     },
     "How closely a good night tracks next-morning charge.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "How closely a good night tracks next-morning recovery."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -84785,6 +84902,7 @@
     },
     "How much one day's charge carries into the next.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "How much one day's recovery carries into the next."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -85725,6 +85843,7 @@
     },
     "How's my charge trending?": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "How's my recovery trending?"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -88412,6 +88531,7 @@
     },
     "Import your strength-training history from a Hevy CSV export or a Liftosaur JSON export. Each workout becomes a Strength session with a training-volume estimate (weight × reps). It's a volume figure, not a measured strain. It never changes your Effort.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Import your strength-training history from a Hevy CSV export or a Liftosaur JSON export. Each workout becomes a Strength session with a training-volume estimate (weight × reps). It's a volume figure, not a measured strain. It never changes your Strain."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -92947,6 +93067,7 @@
     },
     "Last Charge breakdown": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Last Recovery breakdown"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -95141,6 +95262,7 @@
     },
     "Led by your heart-rate variability (HRV) measured against your own personal baseline, plus resting heart rate, last night's Rest, breathing rate, and a skin-temperature signal (an early illness or overreach flag). Higher HRV versus your baseline means more Charge. NOOP needs a few nights to learn your baseline first. Until then you'll see “Calibrating”.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Led by your heart-rate variability (HRV) measured against your own personal baseline, plus resting heart rate, last night's Sleep, breathing rate, and a skin-temperature signal (an early illness or overreach flag). Higher HRV versus your baseline means more Recovery. NOOP needs a few nights to learn your baseline first. Until then you'll see “Calibrating”."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -97190,6 +97312,7 @@
     },
     "Live machine data over Bluetooth FTMS. No sleep, recovery, skin temp or SpO₂. Effort needs the machine's heart rate; without it the session logs the machine metrics only.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Live machine data over Bluetooth FTMS. No sleep, recovery, skin temp or SpO₂. Strain needs the machine's heart rate; without it the session logs the machine metrics only."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -98444,6 +98567,7 @@
     },
     "Log behaviours above. After a few days of answers, NOOP ranks how each one moves your charge, HRV and rest. Importing a WHOOP export (which includes its journal) backfills history instantly.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Log behaviours above. After a few days of answers, NOOP ranks how each one moves your recovery, HRV and sleep. Importing a WHOOP export (which includes its journal) backfills history instantly."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -100346,6 +100470,7 @@
       "zh-Hant": { "stringUnit": { "state": "translated", "value": "一天開始於" } }
     } },
     "Default. Steps and in-progress Effort restart at the beginning of detected main sleep. Naps do not start a new day; missing sleep falls back to local midnight.": { "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Default. Steps and in-progress Strain restart at the beginning of detected main sleep. Naps do not start a new day; missing sleep falls back to local midnight."}},
       "de": { "stringUnit": { "state": "translated", "value": "Standard. Schritte und die laufende Anstrengung beginnen mit dem erkannten Hauptschlaf neu. Nickerchen starten keinen neuen Tag; bei fehlendem Schlaf verwendet NOOP ersatzweise die lokale Mitternacht." } },
       "es": { "stringUnit": { "state": "translated", "value": "Predeterminado. Los pasos y el Esfuerzo en curso se reinician al comienzo del sueño principal detectado. Las siestas no empiezan un nuevo día; si faltan datos de sueño, se usa la medianoche local." } },
       "fr": { "stringUnit": { "state": "translated", "value": "Par défaut. Les pas et l’Effort en cours repartent de zéro au début du sommeil principal détecté. Les siestes ne commencent pas une nouvelle journée ; en l’absence de sommeil, l’heure locale de minuit est utilisée." } },
@@ -104673,6 +104798,7 @@
     },
     "Mostly over the band — harder than today's Charge could pay for.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Mostly over the band — harder than today's Recovery could pay for."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -106078,6 +106204,7 @@
     },
     "NOOP Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "NOOP Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -106194,6 +106321,7 @@
     },
     "NOOP can run off only an Apple Watch, no chest strap needed. The watch is the sensor; NOOP does the thinking on your phone, computing Charge, Rest, Effort and your Fitness Age from your Health data, all on-device.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "NOOP can run off only an Apple Watch, no chest strap needed. The watch is the sensor; NOOP does the thinking on your phone, computing Recovery, Sleep, Strain and your Fitness Age from your Health data, all on-device."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -106426,6 +106554,7 @@
     },
     "NOOP gives you three daily scores (Charge, Effort and Rest), each on a 0-100 scale. They're built from your strap's raw signals using published, peer-reviewed sport science, and computed entirely on your device. They are NOT WHOOP's scores: we don't have WHOOP's private algorithms and don't pretend to. They aim at the same three questions using open science, so they'll usually track WHOOP's in direction, but won't match number-for-number. And that's the point.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "NOOP gives you three daily scores (Recovery, Strain and Sleep), each on a 0-100 scale. They're built from your strap's raw signals using published, peer-reviewed sport science, and computed entirely on your device. They are NOT WHOOP's scores: we don't have WHOOP's private algorithms and don't pretend to. They aim at the same three questions using open science, so they'll usually track WHOOP's in direction, but won't match number-for-number. And that's the point."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -106484,6 +106613,7 @@
     },
     "NOOP gives you three daily scores (Charge, Effort and Rest), each on a 0–100 scale. They're built from your strap's raw signals using published, peer-reviewed sport science, and computed entirely on your device. They are NOT WHOOP's scores: we don't have WHOOP's private algorithms and don't pretend to. They aim at the same three questions using open science, so they'll usually track WHOOP's in direction, but won't match number-for-number. And that's the point.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "NOOP gives you three daily scores (Recovery, Strain and Sleep), each on a 0–100 scale. They're built from your strap's raw signals using published, peer-reviewed sport science, and computed entirely on your device. They are NOT WHOOP's scores: we don't have WHOOP's private algorithms and don't pretend to. They aim at the same three questions using open science, so they'll usually track WHOOP's in direction, but won't match number-for-number. And that's the point."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -107719,6 +107849,7 @@
     },
     "NOOP scores your charge, effort and rest itself: on-device, no cloud.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "NOOP scores your recovery, strain and sleep itself: on-device, no cloud."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -108365,6 +108496,7 @@
     },
     "NOOP's own Charge, Effort and Rest, computed on your device from published methods.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "NOOP's own Recovery, Strain and Sleep, computed on your device from published methods."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -110369,6 +110501,7 @@
     },
     "No Charge banked today, so your band takes a careful middle course: %lld–%lld bpm.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "No Recovery banked today, so your band takes a careful middle course: %lld–%lld bpm."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -110427,6 +110560,7 @@
     },
     "No Charge breakdown yet": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "No Recovery breakdown yet"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -111129,6 +111263,7 @@
     },
     "No cardio load yet. Effort builds once your heart rate climbs into your effort zone (around 50% of your heart-rate reserve). A calm day honestly reads near zero.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "No cardio load yet. Strain builds once your heart rate climbs into your effort zone (around 50% of your heart-rate reserve). A calm day honestly reads near zero."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -111187,6 +111322,7 @@
     },
     "No chest strap? No problem. NOOP can run off only your Apple Watch. It reads your watch's data through Apple Health and works out your Charge, Rest, Effort and Fitness Age right here on your phone. Everything stays on the device.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "No chest strap? No problem. NOOP can run off only your Apple Watch. It reads your watch's data through Apple Health and works out your Recovery, Sleep, Strain and Fitness Age right here on your phone. Everything stays on the device."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -119856,6 +119992,7 @@
     },
     "On: your charge, rest, HRV and workouts are shared with the provider for tailored coaching.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "On: your recovery, sleep, HRV and workouts are shared with the provider for tailored coaching."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -125567,6 +125704,7 @@
     },
     "Pick a sport. NOOP records HR, peak, average and effort from the live feed.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Pick a sport. NOOP records HR, peak, average and strain from the live feed."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -125625,6 +125763,7 @@
     },
     "Pick a wearable signal (resting HR, HRV, sleep, Charge, weight…) to line it up against this marker. NOOP averages the signal over the %@ before each reading.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Pick a wearable signal (resting HR, HRV, sleep, Recovery, weight…) to line it up against this marker. NOOP averages the signal over the %@ before each reading."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -126889,6 +127028,7 @@
     },
     "Powers Charge, Effort, Rest and Sleep": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Powers Recovery, Strain and Sleep"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -126947,6 +127087,7 @@
     },
     "Powers Charge, Effort, Rest, Sleep + Health Monitor": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Powers Recovery, Strain, Sleep + Health Monitor"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -127005,6 +127146,7 @@
     },
     "Powers Effort now; Charge and Rest once enough nights and decode are confirmed": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Powers Strain now; Recovery and Sleep once enough nights and decode are confirmed"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -127063,6 +127205,7 @@
     },
     "Powers Rest, Effort, Fitness Age and steps, plus Charge once recovery calibrates": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Powers Sleep, Strain, Fitness Age and steps, plus Recovery once recovery calibrates"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -127121,6 +127264,7 @@
     },
     "Powers the live console + Effort. No Charge, Rest or Sleep": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Powers the live console + Strain. No Recovery or Sleep"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -130680,6 +130824,7 @@
     },
     "Ranked, lag-aware: which of your habits actually move your Charge, plus your personal alcohol/caffeine dose-response.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Ranked, lag-aware: which of your habits actually move your Recovery, plus your personal alcohol/caffeine dose-response."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -130913,6 +131058,7 @@
     },
     "Re-anchors every baseline that feeds Charge to your recent nights. No stored day is deleted.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Re-anchors every baseline that feeds Recovery to your recent nights. No stored day is deleted."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -133241,6 +133387,7 @@
     },
     "Recalibrate Charge baseline": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recalibrate Recovery baseline"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -133299,6 +133446,7 @@
     },
     "Recalibrate your Charge baseline?": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recalibrate your Recovery baseline?"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -134477,6 +134625,7 @@
     },
     "Records a live machine workout, Effort-scored from HR when the machine reports it": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Records a live machine workout, Strain-scored from HR when the machine reports it"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -134599,6 +134748,7 @@
     },
     "Recovery / Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -134832,6 +134982,7 @@
     },
     "Recovery, NOOP's Charge score, is led by your heart-rate variability measured against your own personal baseline. A chest strap streams beat-to-beat data densely all night, so it can learn that baseline fast. An Apple Watch instead samples HRV, a handful of readings through the day plus overnight, so the signal is real but sparser.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Recovery, NOOP's Recovery score, is led by your heart-rate variability measured against your own personal baseline. A chest strap streams beat-to-beat data densely all night, so it can learn that baseline fast. An Apple Watch instead samples HRV, a handful of readings through the day plus overnight, so the signal is real but sparser."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -138539,7 +138690,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rest"
+            "value": "Sleep"
           }
         },
         "es": {
@@ -138652,6 +138803,7 @@
     },
     "Rest baseline": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Rest-day baseline"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -138710,6 +138862,7 @@
     },
     "Rest quality": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Sleep quality"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -138826,6 +138979,7 @@
     },
     "Rest ↔ Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Sleep ↔ Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -138884,6 +139038,7 @@
     },
     "Rest: how restorative was your sleep?": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Sleep: how restorative was your sleep?"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -139238,6 +139393,7 @@
     },
     "Restarts the roughly 4-night build-up for Charge and your HRV baseline from tonight. Use it if a bad first week set your baseline off. Your history stays.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Restarts the roughly 4-night build-up for Recovery and your HRV baseline from tonight. Use it if a bad first week set your baseline off. Your history stays."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -139418,6 +139574,7 @@
     },
     "Resting HR ↔ Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Resting HR ↔ Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -145868,6 +146025,7 @@
     },
     "See how Charge, Effort and Rest are calculated, and how they differ from WHOOP.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "See how Recovery, Strain and Sleep are calculated, and how they differ from WHOOP."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -145984,6 +146142,7 @@
     },
     "See what shaped your Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "See what shaped your Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -149160,6 +149319,7 @@
     },
     "Silent strap coaching against today's Charge.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Silent strap coaching against today's Recovery."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -150531,6 +150691,7 @@
     },
     "Sleep & Rest": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Sleep"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -150589,6 +150750,7 @@
     },
     "Sleep / Rest": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Sleep"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -151704,6 +151866,7 @@
     },
     "Sleep steadiness: Rest varied ±%@ pts night to night.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Sleep steadiness: Sleep varied ±%@ pts night to night."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -154090,6 +154253,7 @@
     },
     "Start a live session. Beta. Silent strap coaching against today's Charge.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Start a live session. Beta. Silent strap coaching against today's Recovery."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -154322,6 +154486,7 @@
     },
     "Start a workout when the stream matters. NOOP records the interval, HR, peak, average and effort from the same live feed.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Start a workout when the stream matters. NOOP records the interval, HR, peak, average and strain from the same live feed."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -155912,6 +156077,7 @@
     },
     "Steps, active energy and logged workouts feed Effort. Dense and reliable.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Steps, active energy and logged workouts feed Strain. Dense and reliable."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -155970,6 +156136,7 @@
     },
     "Steps, active energy and logged workouts feed your Effort. Dense and reliable.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Steps, active energy and logged workouts feed your Strain. Dense and reliable."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -162420,6 +162587,7 @@
     },
     "TYPICAL EFFORT": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "TYPICAL STRAIN"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -164352,6 +164520,7 @@
     },
     "That's why a watch-only Charge starts out “Calibrating”. NOOP needs about seven nights of your HRV to learn what normal looks like for you. Until it has them it withholds the score rather than guess. Once the baseline is set, your Charge appears with its confidence, on the same 0-100 scale as a strap's.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "That's why a watch-only Recovery starts out “Calibrating”. NOOP needs about seven nights of your HRV to learn what normal looks like for you. Until it has them it withholds the score rather than guess. Once the baseline is set, your Recovery appears with its confidence, on the same 0-100 scale as a strap's."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -164410,6 +164579,7 @@
     },
     "That's why a watch-only Charge starts out “Calibrating”. NOOP needs about seven nights of your HRV to learn what normal looks like for you. Until it has them it withholds the score rather than guess. Once the baseline is set, your Charge appears with its confidence, on the same 0–100 scale as a strap's.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "That's why a watch-only Recovery starts out “Calibrating”. NOOP needs about seven nights of your HRV to learn what normal looks like for you. Until it has them it withholds the score rather than guess. Once the baseline is set, your Recovery appears with its confidence, on the same 0–100 scale as a strap's."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -164642,6 +164812,7 @@
     },
     "The average above was edited. The graph, zones and Effort stay from the recorded session.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "The average above was edited. The graph, zones and Strain stay from the recorded session."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -166755,6 +166926,7 @@
     },
     "This builds from the strap as it syncs. Effort and rest appear after you have worn it and slept a night. Charge needs about four nights of sleep to learn your baseline (you'll see \"Calibrating\" until then), and keeps sharpening over your first couple of weeks. On a WHOOP 5 or MG the strap banks little history, so the night count can climb slowly or sit at 0 of 4 until you have worn it across a few nights. That's its sync limit, not a fault. Import your WHOOP export to skip the wait.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "This builds from the strap as it syncs. Strain and sleep appear after you have worn it and slept a night. Recovery needs about four nights of sleep to learn your baseline (you'll see \"Calibrating\" until then), and keeps sharpening over your first couple of weeks. On a WHOOP 5 or MG the strap banks little history, so the night count can climb slowly or sit at 0 of 4 until you have worn it across a few nights. That's its sync limit, not a fault. Import your WHOOP export to skip the wait."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -168053,6 +168225,7 @@
     },
     "This restarts the roughly 4-night build-up for Charge and your HRV baseline. Your history stays.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "This restarts the roughly 4-night build-up for Recovery and your HRV baseline. Your history stays."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -168111,6 +168284,7 @@
     },
     "This restarts the roughly 4-night build-up for Charge and your HRV baseline. Your history stays. Use it if a bad first week, like wearing it while sick, set your baseline off.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "This restarts the roughly 4-night build-up for Recovery and your HRV baseline. Your history stays. Use it if a bad first week, like wearing it while sick, set your baseline off."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -168227,6 +168401,7 @@
     },
     "This session's contribution to the day's Effort, as captured during the workout.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "This session's contribution to the day's Strain, as captured during the workout."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -170479,6 +170654,7 @@
     },
     "Tomorrow's Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Tomorrow's Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -170546,7 +170722,7 @@
         "en": {
           "stringUnit": {
             "state": "new",
-            "value": "Tomorrow's Charge estimate %1$lld plus or minus %2$lld"
+            "value": "Tomorrow's Recovery estimate %1$lld plus or minus %2$lld"
           }
         },
         "es": {
@@ -171263,6 +171439,7 @@
     },
     "Track a workout manually. Records heart rate and effort until you end it.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Track a workout manually. Records heart rate and strain until you end it."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -180978,6 +181155,7 @@
     },
     "What shaped your Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "What shaped your Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -185365,7 +185543,7 @@
         "en": {
           "stringUnit": {
             "state": "new",
-            "value": "You'll likely wake around %1$lld ± %2$lld Charge if you sleep about %3$@ tonight."
+            "value": "You'll likely wake around %1$lld ± %2$lld Recovery if you sleep about %3$@ tonight."
           }
         },
         "es": {
@@ -185606,6 +185784,7 @@
     },
     "You're connected. NOOP is reading your Apple Watch data now. Your Charge score will spend its first week or so calibrating, then settle in.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "You're connected. NOOP is reading your Apple Watch data now. Your Recovery score will spend its first week or so calibrating, then settle in."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -186250,6 +186429,7 @@
     },
     "Your Charge (recovery) on the watch face, with Effort and Rest in the rectangular card.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Your Recovery on the watch face, with Strain and Sleep in the rectangular card."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -186308,6 +186488,7 @@
     },
     "Your Charge score learns a personal baseline from your heart-rate variability, resting heart rate and more over time. If a bad first week set it off, you can re-learn it from tonight. Your history stays.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Your Recovery score learns a personal baseline from your heart-rate variability, resting heart rate and more over time. If a bad first week set it off, you can re-learn it from tonight. Your history stays."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -187544,6 +187725,7 @@
     },
     "Your live heart rate is working from the strap, and charge, effort and rest build from it over your next few nights of wear, sharpening as it learns your baseline. Want your full history instantly? Import your WHOOP export in Data Sources and it backfills in about a minute.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Your live heart rate is working from the strap, and recovery, strain and sleep build from it over your next few nights of wear, sharpening as it learns your baseline. Want your full history instantly? Import your WHOOP export in Data Sources and it backfills in about a minute."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -190206,6 +190388,7 @@
     },
     "above baseline, too small to change Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "above baseline, too small to change Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -191320,6 +191503,7 @@
     },
     "below baseline, too small to change Charge": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "below baseline, too small to change Recovery"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -192696,6 +192880,7 @@
     },
     "effort %@": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "strain %@"}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -216583,6 +216768,7 @@
     },
     "A training read, separate from your Charge score.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "A training read, separate from your Recovery score."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -216953,6 +217139,7 @@
     },
     "Needs %lld+ consecutive days of Effort to begin. %lld so far.": {
       "localizations": {
+        "en" : {"stringUnit": {"state": "translated", "value": "Needs %lld+ consecutive days of Strain to begin. %lld so far."}},
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -217520,10 +217707,10 @@
       }
     },
     "Effort: exponential intensity scale": { "localizations": {
-      "de": { "stringUnit": { "state": "translated", "value": "Belastung: exponentielle Intensitätsskala" } }, "en": { "stringUnit": { "state": "translated", "value": "Effort: exponential intensity scale" } }, "es": { "stringUnit": { "state": "translated", "value": "Esfuerzo: escala de intensidad exponencial" } }, "fr": { "stringUnit": { "state": "translated", "value": "Effort : échelle d’intensité exponentielle" } }, "it": { "stringUnit": { "state": "translated", "value": "Sforzo: scala di intensità esponenziale" } }, "pl": { "stringUnit": { "state": "translated", "value": "Wysiłek: wykładnicza skala intensywności" } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Esforço: escala de intensidade exponencial" } }, "ru": { "stringUnit": { "state": "translated", "value": "Усилие: экспоненциальная шкала интенсивности" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "消耗：指数强度曲线" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "消耗：指數強度曲線" } }
+      "de": { "stringUnit": { "state": "translated", "value": "Belastung: exponentielle Intensitätsskala" } }, "en": { "stringUnit": { "state": "translated", "value": "Strain: exponential intensity scale" } }, "es": { "stringUnit": { "state": "translated", "value": "Esfuerzo: escala de intensidad exponencial" } }, "fr": { "stringUnit": { "state": "translated", "value": "Effort : échelle d’intensité exponentielle" } }, "it": { "stringUnit": { "state": "translated", "value": "Sforzo: scala di intensità esponenziale" } }, "pl": { "stringUnit": { "state": "translated", "value": "Wysiłek: wykładnicza skala intensywności" } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Esforço: escala de intensidade exponencial" } }, "ru": { "stringUnit": { "state": "translated", "value": "Усилие: экспоненциальная шкала интенсивности" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "消耗：指数强度曲线" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "消耗：指數強度曲線" } }
     } },
     "Scores Effort on an exponential intensity curve (Banister TRIMP) instead of the default heart-rate zones (Edwards). The default earns nothing below half of your heart-rate reserve, so an hour of lifting — where hard sets average out against the rests — can score close to zero. The exponential curve has no floor and weights short, hard efforts far more heavily. Re-scores your history, and both scales reach the same maximum. Off by default.": { "localizations": {
-      "de": { "stringUnit": { "state": "translated", "value": "Bewertet die Belastung mit einer exponentiellen Intensitätskurve (Banister-TRIMP) statt der voreingestellten Herzfrequenzzonen (Edwards). Die Voreinstellung zählt nichts unter der Hälfte deiner Herzfrequenzreserve, sodass eine Stunde Krafttraining – bei der sich harte Sätze mit den Pausen ausmitteln – nahezu null ergeben kann. Die exponentielle Kurve hat keine Untergrenze und gewichtet kurze, harte Belastungen deutlich stärker. Bewertet deine Historie neu; beide Skalen erreichen dasselbe Maximum. Standardmäßig aus." } }, "en": { "stringUnit": { "state": "translated", "value": "Scores Effort on an exponential intensity curve (Banister TRIMP) instead of the default heart-rate zones (Edwards). The default earns nothing below half of your heart-rate reserve, so an hour of lifting — where hard sets average out against the rests — can score close to zero. The exponential curve has no floor and weights short, hard efforts far more heavily. Re-scores your history, and both scales reach the same maximum. Off by default." } }, "es": { "stringUnit": { "state": "translated", "value": "Puntúa el Esfuerzo con una curva de intensidad exponencial (TRIMP de Banister) en lugar de las zonas de frecuencia cardíaca predeterminadas (Edwards). La opción predeterminada no cuenta nada por debajo de la mitad de tu reserva de frecuencia cardíaca, así que una hora de pesas —donde las series duras se compensan con los descansos— puede puntuar casi cero. La curva exponencial no tiene umbral y pondera mucho más los esfuerzos cortos e intensos. Vuelve a puntuar tu historial y ambas escalas alcanzan el mismo máximo. Desactivado por defecto." } }, "fr": { "stringUnit": { "state": "translated", "value": "Calcule l’Effort selon une courbe d’intensité exponentielle (TRIMP de Banister) au lieu des zones de fréquence cardiaque par défaut (Edwards). Le réglage par défaut ne compte rien en dessous de la moitié de votre réserve de fréquence cardiaque : une heure de musculation — où les séries dures se compensent avec les temps de repos — peut donc être notée presque zéro. La courbe exponentielle n’a pas de seuil et pondère bien davantage les efforts courts et intenses. Recalcule votre historique, et les deux échelles atteignent le même maximum. Désactivé par défaut." } }, "it": { "stringUnit": { "state": "translated", "value": "Calcola lo Sforzo su una curva di intensità esponenziale (TRIMP di Banister) invece delle zone di frequenza cardiaca predefinite (Edwards). L’impostazione predefinita non conta nulla sotto la metà della tua riserva di frequenza cardiaca, quindi un’ora di pesi — dove le serie intense si compensano con i recuperi — può valere quasi zero. La curva esponenziale non ha soglia e pesa molto di più gli sforzi brevi e intensi. Ricalcola la cronologia ed entrambe le scale raggiungono lo stesso massimo. Disattivato per impostazione predefinita." } }, "pl": { "stringUnit": { "state": "translated", "value": "Ocenia Wysiłek według wykładniczej krzywej intensywności (TRIMP Banistera) zamiast domyślnych stref tętna (Edwards). Ustawienie domyślne nie liczy niczego poniżej połowy rezerwy tętna, więc godzina treningu siłowego — gdzie ciężkie serie uśredniają się z przerwami — może dać wynik bliski zeru. Krzywa wykładnicza nie ma progu i znacznie mocniej waży krótkie, intensywne wysiłki. Przelicza historię, a obie skale osiągają to samo maksimum. Domyślnie wyłączone." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Pontua o Esforço numa curva de intensidade exponencial (TRIMP de Banister) em vez das zonas de frequência cardíaca predefinidas (Edwards). A predefinição não conta nada abaixo de metade da tua reserva de frequência cardíaca, por isso uma hora de musculação — em que as séries duras se compensam com os descansos — pode pontuar quase zero. A curva exponencial não tem limiar e pondera muito mais os esforços curtos e intensos. Volta a pontuar o teu histórico e ambas as escalas atingem o mesmo máximo. Desativado por predefinição." } }, "ru": { "stringUnit": { "state": "translated", "value": "Оценивает Усилие по экспоненциальной кривой интенсивности (TRIMP Банистера) вместо стандартных пульсовых зон (Эдвардс). Стандартный вариант не засчитывает ничего ниже половины резерва пульса, поэтому час силовой тренировки — где тяжёлые подходы усредняются с отдыхом — может дать почти ноль. У экспоненциальной кривой нет порога, и она гораздо сильнее учитывает короткие интенсивные усилия. Пересчитывает историю, и обе шкалы достигают одного максимума. По умолчанию выключено." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "以指数强度曲线（Banister TRIMP）计算消耗，而不是默认的心率区间（Edwards）。默认方式对低于心率储备一半的部分完全不计分，因此一小时力量训练——组间休息拉低了平均强度——可能几乎得零分。指数曲线没有下限，会大幅提高短时高强度努力的权重。会重新计算你的历史数据，两种标度的最高值相同。默认关闭。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "以指數強度曲線（Banister TRIMP）計算消耗，而不是預設的心率區間（Edwards）。預設方式對低於心率儲備一半的部分完全不計分，因此一小時重量訓練——組間休息拉低了平均強度——可能幾乎得零分。指數曲線沒有下限，會大幅提高短時高強度努力的權重。會重新計算你的歷史資料，兩種尺度的最高值相同。預設關閉。" } }
+      "de": { "stringUnit": { "state": "translated", "value": "Bewertet die Belastung mit einer exponentiellen Intensitätskurve (Banister-TRIMP) statt der voreingestellten Herzfrequenzzonen (Edwards). Die Voreinstellung zählt nichts unter der Hälfte deiner Herzfrequenzreserve, sodass eine Stunde Krafttraining – bei der sich harte Sätze mit den Pausen ausmitteln – nahezu null ergeben kann. Die exponentielle Kurve hat keine Untergrenze und gewichtet kurze, harte Belastungen deutlich stärker. Bewertet deine Historie neu; beide Skalen erreichen dasselbe Maximum. Standardmäßig aus." } }, "en": { "stringUnit": { "state": "translated", "value": "Scores Strain on an exponential intensity curve (Banister TRIMP) instead of the default heart-rate zones (Edwards). The default earns nothing below half of your heart-rate reserve, so an hour of lifting — where hard sets average out against the rests — can score close to zero. The exponential curve has no floor and weights short, hard efforts far more heavily. Re-scores your history, and both scales reach the same maximum. Off by default." } }, "es": { "stringUnit": { "state": "translated", "value": "Puntúa el Esfuerzo con una curva de intensidad exponencial (TRIMP de Banister) en lugar de las zonas de frecuencia cardíaca predeterminadas (Edwards). La opción predeterminada no cuenta nada por debajo de la mitad de tu reserva de frecuencia cardíaca, así que una hora de pesas —donde las series duras se compensan con los descansos— puede puntuar casi cero. La curva exponencial no tiene umbral y pondera mucho más los esfuerzos cortos e intensos. Vuelve a puntuar tu historial y ambas escalas alcanzan el mismo máximo. Desactivado por defecto." } }, "fr": { "stringUnit": { "state": "translated", "value": "Calcule l’Effort selon une courbe d’intensité exponentielle (TRIMP de Banister) au lieu des zones de fréquence cardiaque par défaut (Edwards). Le réglage par défaut ne compte rien en dessous de la moitié de votre réserve de fréquence cardiaque : une heure de musculation — où les séries dures se compensent avec les temps de repos — peut donc être notée presque zéro. La courbe exponentielle n’a pas de seuil et pondère bien davantage les efforts courts et intenses. Recalcule votre historique, et les deux échelles atteignent le même maximum. Désactivé par défaut." } }, "it": { "stringUnit": { "state": "translated", "value": "Calcola lo Sforzo su una curva di intensità esponenziale (TRIMP di Banister) invece delle zone di frequenza cardiaca predefinite (Edwards). L’impostazione predefinita non conta nulla sotto la metà della tua riserva di frequenza cardiaca, quindi un’ora di pesi — dove le serie intense si compensano con i recuperi — può valere quasi zero. La curva esponenziale non ha soglia e pesa molto di più gli sforzi brevi e intensi. Ricalcola la cronologia ed entrambe le scale raggiungono lo stesso massimo. Disattivato per impostazione predefinita." } }, "pl": { "stringUnit": { "state": "translated", "value": "Ocenia Wysiłek według wykładniczej krzywej intensywności (TRIMP Banistera) zamiast domyślnych stref tętna (Edwards). Ustawienie domyślne nie liczy niczego poniżej połowy rezerwy tętna, więc godzina treningu siłowego — gdzie ciężkie serie uśredniają się z przerwami — może dać wynik bliski zeru. Krzywa wykładnicza nie ma progu i znacznie mocniej waży krótkie, intensywne wysiłki. Przelicza historię, a obie skale osiągają to samo maksimum. Domyślnie wyłączone." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Pontua o Esforço numa curva de intensidade exponencial (TRIMP de Banister) em vez das zonas de frequência cardíaca predefinidas (Edwards). A predefinição não conta nada abaixo de metade da tua reserva de frequência cardíaca, por isso uma hora de musculação — em que as séries duras se compensam com os descansos — pode pontuar quase zero. A curva exponencial não tem limiar e pondera muito mais os esforços curtos e intensos. Volta a pontuar o teu histórico e ambas as escalas atingem o mesmo máximo. Desativado por predefinição." } }, "ru": { "stringUnit": { "state": "translated", "value": "Оценивает Усилие по экспоненциальной кривой интенсивности (TRIMP Банистера) вместо стандартных пульсовых зон (Эдвардс). Стандартный вариант не засчитывает ничего ниже половины резерва пульса, поэтому час силовой тренировки — где тяжёлые подходы усредняются с отдыхом — может дать почти ноль. У экспоненциальной кривой нет порога, и она гораздо сильнее учитывает короткие интенсивные усилия. Пересчитывает историю, и обе шкалы достигают одного максимума. По умолчанию выключено." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "以指数强度曲线（Banister TRIMP）计算消耗，而不是默认的心率区间（Edwards）。默认方式对低于心率储备一半的部分完全不计分，因此一小时力量训练——组间休息拉低了平均强度——可能几乎得零分。指数曲线没有下限，会大幅提高短时高强度努力的权重。会重新计算你的历史数据，两种标度的最高值相同。默认关闭。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "以指數強度曲線（Banister TRIMP）計算消耗，而不是預設的心率區間（Edwards）。預設方式對低於心率儲備一半的部分完全不計分，因此一小時重量訓練——組間休息拉低了平均強度——可能幾乎得零分。指數曲線沒有下限，會大幅提高短時高強度努力的權重。會重新計算你的歷史資料，兩種尺度的最高值相同。預設關閉。" } }
     } },
     "A cardiovascular load from time in heart-rate zones (Edwards TRIMP): each zone is weighted so harder ones count for more, summed into one daily figure. Settings offers an exponential alternative (Banister) that credits short, hard efforts more.": { "localizations": {
       "de": { "stringUnit": { "state": "translated", "value": "Eine kardiovaskuläre Last aus der Zeit in den Herzfrequenzzonen (Edwards-TRIMP): Jede Zone wird gewichtet, sodass härtere Zonen mehr zählen, aufsummiert zu einer Tageszahl. In den Einstellungen gibt es eine exponentielle Alternative (Banister), die kurze, harte Belastungen stärker anrechnet." } }, "en": { "stringUnit": { "state": "translated", "value": "A cardiovascular load from time in heart-rate zones (Edwards TRIMP): each zone is weighted so harder ones count for more, summed into one daily figure. Settings offers an exponential alternative (Banister) that credits short, hard efforts more." } }, "es": { "stringUnit": { "state": "translated", "value": "Una carga cardiovascular a partir del tiempo en las zonas de frecuencia cardíaca (TRIMP de Edwards): cada zona se pondera para que las más duras cuenten más, sumado en una sola cifra diaria. En Ajustes hay una alternativa exponencial (Banister) que valora más los esfuerzos cortos e intensos." } }, "fr": { "stringUnit": { "state": "translated", "value": "Une charge cardiovasculaire issue du temps passé dans les zones de fréquence cardiaque (TRIMP d’Edwards) : chaque zone est pondérée pour que les plus intenses comptent davantage, additionnée en un seul chiffre journalier. Les Réglages proposent une alternative exponentielle (Banister) qui valorise davantage les efforts courts et intenses." } }, "it": { "stringUnit": { "state": "translated", "value": "Un carico cardiovascolare dato dal tempo nelle zone di frequenza cardiaca (TRIMP di Edwards): ogni zona è ponderata in modo che quelle più dure contino di più, sommato in un unico dato giornaliero. Nelle Impostazioni c’è un’alternativa esponenziale (Banister) che premia di più gli sforzi brevi e intensi." } }, "pl": { "stringUnit": { "state": "translated", "value": "Obciążenie układu krążenia wynikające z czasu w strefach tętna (TRIMP Edwardsa): każda strefa jest ważona tak, aby trudniejsze liczyły się bardziej, zsumowane w jedną wartość dzienną. W Ustawieniach jest alternatywa wykładnicza (Banister), która mocniej docenia krótkie, intensywne wysiłki." } }, "pt-PT": { "stringUnit": { "state": "translated", "value": "Uma carga cardiovascular a partir do tempo nas zonas de frequência cardíaca (TRIMP de Edwards): cada zona é ponderada para que as mais difíceis contem mais, resumido num valor diário. Nas Definições existe uma alternativa exponencial (Banister) que valoriza mais os esforços curtos e intensos." } }, "ru": { "stringUnit": { "state": "translated", "value": "Сердечно-сосудистая нагрузка по времени в пульсовых зонах (TRIMP Эдвардса): каждая зона взвешивается так, что более тяжёлые учитываются сильнее, и всё суммируется в одно дневное значение. В настройках есть экспоненциальная альтернатива (Banister), которая сильнее засчитывает короткие интенсивные усилия." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "根据你在各心率区间的时长得出的心血管负荷（Edwards TRIMP）：区间越高权重越大，汇总为一个每日数字。设置中提供指数式替代方案（Banister），会更看重短时高强度的努力。" } }, "zh-Hant": { "stringUnit": { "state": "translated", "value": "根據你在各心率區間停留時間得出的心血管負荷（Edwards TRIMP）：區間越高權重越大，加總成每日一個數字。設定中提供指數式替代方案（Banister），會更看重短時高強度的努力。" } }
@@ -219050,7 +219237,7 @@
     } },
     "Open your Charge detail" : { "localizations" : {
         "de": {"stringUnit": {"state": "translated", "value": "Ladung im Detail öffnen"}},
-        "en": {"stringUnit": {"state": "translated", "value": "Open your Charge detail"}},
+        "en": {"stringUnit": {"state": "translated", "value": "Open your Recovery detail"}},
         "es": {"stringUnit": {"state": "translated", "value": "Abre el detalle de Carga"}},
         "fr": {"stringUnit": {"state": "translated", "value": "Ouvrir le détail de la charge"}},
         "it": {"stringUnit": {"state": "translated", "value": "Apri il dettaglio della carica"}},
@@ -219062,7 +219249,7 @@
     } },
     "Open your Effort detail" : { "localizations" : {
         "de": {"stringUnit": {"state": "translated", "value": "Belastung im Detail öffnen"}},
-        "en": {"stringUnit": {"state": "translated", "value": "Open your Effort detail"}},
+        "en": {"stringUnit": {"state": "translated", "value": "Open your Strain detail"}},
         "es": {"stringUnit": {"state": "translated", "value": "Abre el detalle de Esfuerzo"}},
         "fr": {"stringUnit": {"state": "translated", "value": "Ouvrir le détail de l'effort"}},
         "it": {"stringUnit": {"state": "translated", "value": "Apri il dettaglio dello sforzo"}},
@@ -219074,7 +219261,7 @@
     } },
     "Open your Rest detail" : { "localizations" : {
         "de": {"stringUnit": {"state": "translated", "value": "Erholung im Detail öffnen"}},
-        "en": {"stringUnit": {"state": "translated", "value": "Open your Rest detail"}},
+        "en": {"stringUnit": {"state": "translated", "value": "Open your Sleep detail"}},
         "es": {"stringUnit": {"state": "translated", "value": "Abre el detalle de Descanso"}},
         "fr": {"stringUnit": {"state": "translated", "value": "Ouvrir le détail du repos"}},
         "it": {"stringUnit": {"state": "translated", "value": "Apri il dettaglio del riposo"}},
@@ -219388,7 +219575,7 @@
     },
     "On: your charge, rest, HRV and workouts are sent to the provider, each workout with its sport, duration, distance and heart rate." : { "localizations" : {
         "de": {"stringUnit": {"state": "translated", "value": "An: Ladung, Erholung, HRV und Workouts gehen an den Anbieter, jedes Workout mit Sportart, Dauer, Distanz und Herzfrequenz."}},
-        "en": {"stringUnit": {"state": "translated", "value": "On: your charge, rest, HRV and workouts are sent to the provider, each workout with its sport, duration, distance and heart rate."}},
+        "en": {"stringUnit": {"state": "translated", "value": "On: your recovery, sleep, HRV and workouts are sent to the provider, each workout with its sport, duration, distance and heart rate."}},
         "es": {"stringUnit": {"state": "translated", "value": "Activado: tu carga, descanso, HRV y entrenamientos se envían al proveedor, cada entrenamiento con su deporte, duración, distancia y frecuencia cardíaca."}},
         "fr": {"stringUnit": {"state": "translated", "value": "Activé : votre charge, repos, VFC et entraînements sont envoyés au fournisseur, chaque entraînement avec son sport, sa durée, sa distance et sa fréquence cardiaque."}},
         "it": {"stringUnit": {"state": "translated", "value": "Attivo: carica, riposo, HRV e allenamenti vengono inviati al provider, ogni allenamento con sport, durata, distanza e frequenza cardiaca."}},

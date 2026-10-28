@@ -8,8 +8,17 @@ enum AIProvider: String, CaseIterable, Identifiable {
     case anthropic
     case gemini
     case custom
+    case chatGPT
 
     var id: String { rawValue }
+
+    static var selectableProviders: [AIProvider] {
+        #if os(iOS)
+        return allCases
+        #else
+        return allCases.filter { $0 != .chatGPT }
+        #endif
+    }
 
     var displayName: String {
         switch self {
@@ -17,6 +26,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return "Anthropic"
         case .gemini:    return "Google Gemini"
         case .custom:    return "Custom (OpenAI-compatible)"
+        case .chatGPT:   return "ChatGPT subscription"
         }
     }
 
@@ -26,6 +36,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return "claude-sonnet-4-6"
         case .gemini:    return "gemini-flash-latest"   // stable alias → current Flash, no version churn (#400)
         case .custom:    return ""   // the user picks the model their server serves
+        case .chatGPT:   return ""   // selected from this account's live catalog
         }
     }
 
@@ -76,6 +87,8 @@ enum AIProvider: String, CaseIterable, Identifiable {
             ]
         case .custom:
             return []   // populated from the server's /models (refreshModels) or typed in
+        case .chatGPT:
+            return []
         }
     }
 
@@ -85,6 +98,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return URL(string: "https://api.anthropic.com/v1/messages")!
         case .gemini:    return URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
         case .custom:    return AIProvider.customURL(path: "/chat/completions")
+        case .chatGPT:   return ChatGPTClient.responsesURL
         }
     }
 
@@ -94,15 +108,17 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .anthropic: return URL(string: "https://api.anthropic.com/v1/models")!
         case .gemini:    return URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!
         case .custom:    return AIProvider.customURL(path: "/models")
+        case .chatGPT:   return ChatGPTClient.modelsURL
         }
     }
 
-    var client: any AIProviderClient {
+    var legacyClient: (any AIProviderClient)? {
         switch self {
         case .openAI:    return OpenAIClient()
         case .anthropic: return AnthropicClient()
         case .gemini:    return GeminiClient()
         case .custom:    return CustomClient()
+        case .chatGPT:   return nil
         }
     }
 

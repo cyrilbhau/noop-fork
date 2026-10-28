@@ -33,8 +33,11 @@ enum CoachBriefScheduler {
         static let enabled = "coachBrief.enabled"          // master enable; default OFF
         static let time = "coachBrief.timeMinutes"         // minutes since local midnight; default 07:00
         static let lastRun = "coachBrief.lastRunDayKey"    // yyyy-MM-dd of the last GENERATED brief (dedup)
-        static let storedBrief = "coachBrief.storedText"   // the full brief, for the notification tap-through
-        static let hasUnconsumed = "coachBrief.hasUnconsumedBrief"
+        static let storedBrief = "coachBrief.storedText"   // legacy cache without a connection owner
+        static let hasUnconsumed = "coachBrief.hasUnconsumedBrief" // legacy consumption flag
+        static let connection = "coachBrief.connection"
+        static let storedRecord = "coachBrief.storedRecord"
+        static let notificationConnection = "coachBrief.connectionID"
         // K10: the brief text mirrored into the App Group so the widget extension (separate process)
         // can read it. The app's own UserDefaults.standard isn't visible to the widget.
         static let widgetBriefKey = "coachBrief.widgetText"
@@ -49,6 +52,7 @@ enum CoachBriefScheduler {
     /// (as opposed to any other local notification) and route it to Coach.
     static let notificationCategoryId = "coach-brief"
     private static let requestIdPrefix = "coach-brief-"
+    private static var lastNotificationAlignment: UUID?
 
     /// The Coach master switch, under the same `noop.` key Android writes and `RootTabView` binds.
     ///
@@ -106,21 +110,158 @@ enum CoachBriefScheduler {
         return min(max(v, 0), minutesPerDay - 1)
     }
 
-    /// The most recently generated full brief text (for the notification tap-through), or nil before the
-    /// first successful generation.
-    static var storedBrief: String? { UserDefaults.standard.string(forKey: K.storedBrief) }
+    /// A connection generation also distinguishes A → B → A from an uninterrupted connection to A.
+    /// Owners contain only a provider name and, for ChatGPT, its opaque local profile identifier.
+    struct Connection: Codable, Equatable {
+        let owner: String?
+        let generation: UUID
+    }
+
+    private struct StoredBrief: Codable {
+        let connection: Connection
+        let text: String
+        var unconsumed: Bool
+    }
+
+    /// Align before using a restored session as well as after a selected provider/profile changes.
+    /// Persisting the owner first makes a crash before cache removal fail closed on the next read.
+    static func alignStoredBriefOwner(_ owner: String?) {
+        var retired = false
+        let connection = alignStoredBriefOwner(owner, defaults: .standard, clearPresentation: {
+            retired = true
+            #if os(iOS)
+            publishToWidget(nil)
+            #endif
+        })
+        if retired || lastNotificationAlignment != connection.generation {
+            lastNotificationAlignment = connection.generation
+            removeNotifications(except: connection.generation.uuidString)
+        }
+    }
+
+    @discardableResult
+    static func alignStoredBriefOwner(_ owner: String?, defaults: UserDefaults,
+                                      clearPresentation: () -> Void) -> Connection {
+        let previous = storedConnection(defaults: defaults)
+        let normalizedOwner = owner.flatMap { $0.isEmpty ? nil : $0 }
+        let connection = previous.flatMap { $0.owner == normalizedOwner ? $0 : nil }
+            ?? Connection(owner: normalizedOwner, generation: UUID())
+        if connection != previous, let data = try? JSONEncoder().encode(connection) {
+            defaults.set(data, forKey: K.connection)
+            // A different selected connection gets its own daily generation, keeping its schedule.
+            defaults.removeObject(forKey: K.lastRun)
+        }
+        let cached = decodedBrief(defaults: defaults)
+        let hasLegacy = defaults.object(forKey: K.storedBrief) != nil || defaults.object(forKey: K.hasUnconsumed) != nil
+        let invalidRecord = defaults.object(forKey: K.storedRecord) != nil
+            && (cached?.connection != connection || connection.owner == nil)
+        if connection != previous || hasLegacy || invalidRecord {
+            // Clear visible output before removing the invalid record, so a crash in between still
+            // leaves evidence for the next launch to repeat the retirement.
+            clearPresentation()
+            retireStoredBrief(defaults: defaults)
+        }
+        return connection
+    }
+
+    static func storedConnection(defaults: UserDefaults) -> Connection? {
+        guard let data = defaults.data(forKey: K.connection) else { return nil }
+        return try? JSONDecoder().decode(Connection.self, from: data)
+    }
+
+    private static func decodedBrief(defaults: UserDefaults) -> StoredBrief? {
+        guard let data = defaults.data(forKey: K.storedRecord) else { return nil }
+        return try? JSONDecoder().decode(StoredBrief.self, from: data)
+    }
+
+    private static func validBrief(defaults: UserDefaults) -> StoredBrief? {
+        guard let connection = storedConnection(defaults: defaults), connection.owner != nil,
+              let record = decodedBrief(defaults: defaults), record.connection == connection else { return nil }
+        return record
+    }
+
+    private static func retireStoredBrief(defaults: UserDefaults) {
+        defaults.removeObject(forKey: K.storedRecord)
+        defaults.removeObject(forKey: K.storedBrief)
+        defaults.removeObject(forKey: K.hasUnconsumed)
+    }
+
+    /// The last completed brief for the currently selected connection only.
+    static var storedBrief: String? { validBrief(defaults: .standard)?.text }
 
     /// True when a generated brief hasn't yet been surfaced in the Coach transcript. Set right after a
     /// successful generation; cleared by `consumeStoredBrief()`.
-    static var hasUnconsumedBrief: Bool { UserDefaults.standard.bool(forKey: K.hasUnconsumed) }
+    static var hasUnconsumedBrief: Bool { validBrief(defaults: .standard)?.unconsumed == true }
 
     /// Coach reads this once (on appear, with an empty transcript) to surface the stored brief as its
     /// first message without re-generating or re-sending anything. Returns nil (and leaves state
     /// untouched) when there's nothing unconsumed, so a normal open is unaffected.
     static func consumeStoredBrief() -> String? {
-        guard hasUnconsumedBrief, let text = storedBrief else { return nil }
-        UserDefaults.standard.set(false, forKey: K.hasUnconsumed)
+        var retired = false
+        let text = consumeStoredBrief(defaults: .standard, clearPresentation: {
+            retired = true
+            #if os(iOS)
+            publishToWidget(nil)
+            #endif
+        })
+        let generation = storedConnection(defaults: .standard)?.generation
+        if retired || lastNotificationAlignment != generation {
+            lastNotificationAlignment = generation
+            removeNotifications(except: generation?.uuidString)
+        }
         return text
+    }
+
+    static func consumeStoredBrief(defaults: UserDefaults, clearPresentation: () -> Void) -> String? {
+        guard var record = validBrief(defaults: defaults) else {
+            if defaults.object(forKey: K.storedRecord) != nil || defaults.object(forKey: K.storedBrief) != nil {
+                clearPresentation()
+                retireStoredBrief(defaults: defaults)
+            }
+            return nil
+        }
+        guard record.unconsumed else { return nil }
+        record.unconsumed = false
+        guard let data = try? JSONEncoder().encode(record) else { return nil }
+        defaults.set(data, forKey: K.storedRecord)
+        return record.text
+    }
+
+    /// Owner and text are one encoded value, so interruption cannot attribute an old text to a new owner.
+    @discardableResult
+    static func storeCompletedBrief(_ text: String, day: String, connection: Connection,
+                                    defaults: UserDefaults) -> Bool {
+        guard connection.owner != nil, storedConnection(defaults: defaults) == connection,
+              let data = try? JSONEncoder().encode(StoredBrief(connection: connection, text: text, unconsumed: true)) else {
+            return false
+        }
+        defaults.set(data, forKey: K.storedRecord)
+        defaults.set(day, forKey: K.lastRun)
+        return true
+    }
+
+    private static func removeNotifications(except connectionID: String?) {
+        let centre = UNUserNotificationCenter.current()
+        centre.getDeliveredNotifications { delivered in
+            Task { @MainActor in
+                guard storedConnection(defaults: .standard)?.generation.uuidString == connectionID else { return }
+                let ids = delivered.map(\.request).filter {
+                    $0.identifier.hasPrefix(requestIdPrefix)
+                        && (connectionID == nil || ($0.content.userInfo[K.notificationConnection] as? String) != connectionID)
+                }.map(\.identifier)
+                if !ids.isEmpty { centre.removeDeliveredNotifications(withIdentifiers: ids) }
+            }
+        }
+        centre.getPendingNotificationRequests { pending in
+            Task { @MainActor in
+                guard storedConnection(defaults: .standard)?.generation.uuidString == connectionID else { return }
+                let ids = pending.filter {
+                    $0.identifier.hasPrefix(requestIdPrefix)
+                        && (connectionID == nil || ($0.content.userInfo[K.notificationConnection] as? String) != connectionID)
+                }.map(\.identifier)
+                if !ids.isEmpty { centre.removePendingNotificationRequests(withIdentifiers: ids) }
+            }
+        }
     }
 
     // MARK: - K10: Widget-facing API (App Group, iOS only)
@@ -220,7 +361,10 @@ enum CoachBriefScheduler {
     /// Returns the brief text, or nil on failure (no key/consent/network) — the caller surfaces that.
     @discardableResult
     static func generateNow(generateBrief: () async -> String?) async -> String? {
-        await generateBrief()
+        guard !Task.isCancelled else { return nil }
+        let text = await generateBrief()
+        guard !Task.isCancelled else { return nil }
+        return text
     }
 
     // MARK: - Due check + generation
@@ -246,8 +390,7 @@ enum CoachBriefScheduler {
         return true
     }
 
-    /// Give the generation slot back. Always called immediately after the attempt, before either outcome
-    /// is branched on, so a failed generation releases it exactly like a successful one.
+    /// Give the generation slot back on every exit, including cancellation and failed generation.
     @MainActor private static func releaseGeneration() { generationInFlight = false }
 
     /// If today's brief is due (we're at/after the chosen time and haven't generated today), generate it
@@ -255,43 +398,74 @@ enum CoachBriefScheduler {
     /// time passed while the app wasn't open, and the iOS foreground/BGTask paths.
     ///
     /// Returns whether this call can be considered successful: `true` when there was nothing to do
-    /// (feature off, not yet time, or already ran today) or generation succeeded; `false` only when
-    /// generation was attempted and failed (so the iOS BGTask handler can report the real outcome and
+    /// (feature off, not yet time, or already ran today) or generation succeeded; `false` when cancelled
+    /// or generation failed (so the iOS BGTask handler can report the real outcome and
     /// retry on the next wake instead of marking the day done on a failure).
     @discardableResult
     static func catchUpIfDue(generateBrief: () async -> String?) async -> Bool {
-        guard isEnabled else { return true }
-        let now = Date()
-        let cal = Calendar.current
-        let comps = cal.dateComponents([.hour, .minute], from: now)
+        let dependencies = Dependencies(
+            isEnabled: { isEnabled }, timeMinutes: { timeMinutes },
+            lastRunDay: { UserDefaults.standard.string(forKey: K.lastRun) },
+            connection: { storedConnection(defaults: .standard) },
+            publish: { day, text, connection in
+                guard storeCompletedBrief(text, day: day, connection: connection, defaults: .standard) else { return false }
+                #if os(iOS)
+                publishToWidget(text)
+                #endif
+                postNotification(title: String(localized: "Today's coaching brief"),
+                                  body: oneLineSummary(from: text), connectionID: connection.generation.uuidString)
+                return true
+            },
+            unavailable: { connection in
+                postNotification(title: String(localized: "Coach brief unavailable"),
+                                  body: String(localized: "Couldn't generate today's brief. Tap to try again in Coach."),
+                                  isRetry: true, connectionID: connection.generation.uuidString)
+            })
+        return await catchUpIfDue(generateBrief: generateBrief, now: Date(), calendar: .current,
+                                  dependencies: dependencies)
+    }
+
+    /// The publication boundary is injected so cancellation can be tested without posting notifications
+    /// or changing the install's persisted brief. Production keeps storage and publication together.
+    struct Dependencies {
+        let isEnabled: () -> Bool
+        let timeMinutes: () -> Int
+        let lastRunDay: () -> String?
+        let connection: () -> Connection?
+        let publish: (_ day: String, _ text: String, _ connection: Connection) -> Bool
+        let unavailable: (_ connection: Connection) -> Void
+    }
+
+    static func catchUpIfDue(generateBrief: () async -> String?, now: Date, calendar: Calendar,
+                             dependencies: Dependencies) async -> Bool {
+        guard !Task.isCancelled else { return false }
+        guard dependencies.isEnabled() else { return true }
+        guard let connection = dependencies.connection(), connection.owner != nil else { return false }
+        let comps = calendar.dateComponents([.hour, .minute], from: now)
         let nowMinutes = (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
-        guard nowMinutes >= timeMinutes else { return true }                                  // not yet time today
-        guard UserDefaults.standard.string(forKey: K.lastRun) != dayKey(now) else { return true } // already ran today
+        guard nowMinutes >= dependencies.timeMinutes() else { return true } // not yet time today
+        let day = dayKey(now, timeZone: calendar.timeZone)
+        guard dependencies.lastRunDay() != day else { return true } // already ran today
 
         // One attempt at a time; see `generationInFlight` for why the day guard alone is not enough.
-        guard await claimGeneration() else { return true }
+        guard claimGeneration() else { return true }
+        defer { releaseGeneration() }
         let generated = await generateBrief()
-        await releaseGeneration()
+        // Providers may swallow cancellation and return nil, or even return the text accumulated so
+        // far. Neither result is a completed brief after expiration. Revoking the schedule while the
+        // request is suspended must also prevent a late notification or widget repopulation.
+        guard !Task.isCancelled, dependencies.isEnabled(), dependencies.connection() == connection else { return false }
 
-        guard let text = generated else {
+        guard let text = generated, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             // No key/consent/network, or the provider returned nothing. Never mark the day done, so the
             // next wake (BGTask retry, or the next foreground open) tries again. Post a low-key retry
             // notification rather than silently doing nothing — the PRD's "unavailable, tap to retry".
-            postNotification(title: String(localized: "Coach brief unavailable"),
-                              body: String(localized: "Couldn't generate today's brief. Tap to try again in Coach."),
-                              isRetry: true)
+            dependencies.unavailable(connection)
             return false
         }
 
-        UserDefaults.standard.set(dayKey(now), forKey: K.lastRun)
-        UserDefaults.standard.set(text, forKey: K.storedBrief)
-        UserDefaults.standard.set(true, forKey: K.hasUnconsumed)
-        #if os(iOS)
-        publishToWidget(text)  // K10: mirror into the App Group for the widget
-        #endif
-        postNotification(title: String(localized: "Today's coaching brief"),
-                          body: oneLineSummary(from: text))
-        return true
+        // No suspension between the cancellation check and this synchronous publication boundary.
+        return dependencies.publish(day, text, connection)
     }
 
     /// Pure: the notification body is the brief's first non-empty line, trimmed and length-capped so it
@@ -307,24 +481,26 @@ enum CoachBriefScheduler {
         return trimmed[..<cut].trimmingCharacters(in: .whitespaces) + "…"
     }
 
-    private static func postNotification(title: String, body: String, isRetry: Bool = false) {
+    private static func postNotification(title: String, body: String, isRetry: Bool = false, connectionID: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.categoryIdentifier = notificationCategoryId
+        content.userInfo[K.notificationConnection] = connectionID
         // Immediate delivery (trigger nil) — this fires the moment generation completes, it is not a
-        // pre-scheduled fixed-content trigger like `WindDownNudge`'s. One id per day, so a retry
-        // replaces rather than stacks the earlier attempt's notification.
-        let request = UNNotificationRequest(identifier: requestIdPrefix + dayKey(Date()),
+        // pre-scheduled fixed-content trigger like `WindDownNudge`'s. One id per connection/day keeps
+        // retries together, while delayed cleanup for an old connection cannot delete a new one's brief.
+        let request = UNNotificationRequest(identifier: requestIdPrefix + connectionID + "-" + dayKey(Date()),
                                             content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
 
     /// yyyy-MM-dd local-day key for the once-per-day dedup. POSIX locale so the key is stable everywhere.
-    private static func dayKey(_ date: Date) -> String {
+    private static func dayKey(_ date: Date, timeZone: TimeZone = .current) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = timeZone
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: date)
     }
@@ -380,6 +556,56 @@ enum CoachBriefScheduler {
 
     // MARK: - iOS background task plumbing
 
+    /// Settles a background run once, including expiration before its worker cancellation is installed.
+    /// This contains no BGTask dependency so the real expiration race is testable with closures.
+    final class TaskCompletionGuard: @unchecked Sendable {
+        private let lock = NSLock()
+        private let complete: (Bool) -> Void
+        private var finished = false
+        private var expired = false
+        private var cancellationInstalled = false
+        private var cancelWorker: (() -> Void)?
+
+        init(complete: @escaping (Bool) -> Void) { self.complete = complete }
+
+        var isExpired: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return expired
+        }
+
+        func installCancellation(_ cancel: @escaping () -> Void) {
+            lock.lock()
+            guard !cancellationInstalled else { lock.unlock(); return }
+            cancellationInstalled = true
+            let cancelImmediately = expired
+            if !finished { cancelWorker = cancel }
+            lock.unlock()
+            if cancelImmediately { cancel() }
+        }
+
+        func expire() {
+            lock.lock()
+            guard !finished else { lock.unlock(); return }
+            finished = true
+            expired = true
+            let cancel = cancelWorker
+            cancelWorker = nil
+            lock.unlock()
+            cancel?()
+            complete(false)
+        }
+
+        func finish(success: Bool) {
+            lock.lock()
+            guard !finished else { lock.unlock(); return }
+            finished = true
+            cancelWorker = nil
+            lock.unlock()
+            complete(success)
+        }
+    }
+
     #if os(iOS)
     /// iOS BGTask identifier, derived from the running bundle id so it tracks `BUNDLE_ID_PREFIX` and
     /// matches the iOS target's `BGTaskSchedulerPermittedIdentifiers` (Info.plist / project.yml).
@@ -391,38 +617,29 @@ enum CoachBriefScheduler {
     static func register(generateBrief: @escaping () async -> String?, log: @escaping (String) -> Void) {
         logBackgroundFailure = log
         BGTaskScheduler.shared.register(forTaskWithIdentifier: bgTaskIdentifier, using: nil) { task in
-            let completion = TaskCompletionGuard(task: task)
+            let completion = TaskCompletionGuard { success in
+                task.setTaskCompleted(success: success)
+                task.expirationHandler = nil
+            }
+            // Install exactly once, before creating a worker which could otherwise overwrite it or
+            // start after expiration. The guard remembers early expiration until cancellation exists.
+            task.expirationHandler = { completion.expire() }
             let worker = Task { @MainActor in
-                task.expirationHandler = { completion.finish(success: false) }
+                guard !completion.isExpired, !Task.isCancelled else {
+                    completion.finish(success: false)
+                    return
+                }
                 guard isEnabled else {
                     completion.finish(success: true)
                     return
                 }
-                let succeeded = await catchUpIfDue(generateBrief: generateBrief)
-                // Single-shot; request the next occurrence regardless of this run's outcome so a failed
-                // generation still retries at the next wake rather than going silent for good.
+                // Submit before awaiting a network operation: expiration must still leave the next
+                // best-effort wake armed, even if this worker cannot finish its provider request.
                 submitBackgroundRequest()
-                completion.finish(success: succeeded)
+                let succeeded = await catchUpIfDue(generateBrief: generateBrief)
+                completion.finish(success: succeeded && !Task.isCancelled)
             }
-            task.expirationHandler = { worker.cancel(); completion.finish(success: false) }
-        }
-    }
-
-    /// `BGTask` completion is single-shot even when the normal path races expiration.
-    private final class TaskCompletionGuard: @unchecked Sendable {
-        private let task: BGTask
-        private let lock = NSLock()
-        private var finished = false
-
-        init(task: BGTask) { self.task = task }
-
-        func finish(success: Bool) {
-            lock.lock()
-            defer { lock.unlock() }
-            guard !finished else { return }
-            finished = true
-            task.setTaskCompleted(success: success)
-            task.expirationHandler = nil
+            completion.installCancellation { worker.cancel() }
         }
     }
 

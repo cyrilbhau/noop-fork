@@ -57,6 +57,12 @@ object LiftingImporter {
 
     // MARK: - One parsed session (mirrors Swift LiftingSession)
 
+    data class ImportedSet(
+        val exercise: String, val setIndex: Int, val weightKg: Double?, val reps: Int?,
+        val setType: String = "normal", val rpe: Double? = null, val note: String? = null,
+        val durationSeconds: Double? = null, val distanceMeters: Double? = null,
+    )
+
     data class Session(
         val startTs: Long,        // unix seconds, UTC
         val endTs: Long,          // unix seconds, UTC (== startTs when no end)
@@ -66,6 +72,8 @@ object LiftingImporter {
         val totalReps: Int,
         val topSetKg: Double?,
         val title: String?,
+        val loggedSets: List<ImportedSet> = emptyList(),
+        val note: String? = null,
     ) {
         /** Duration in seconds, or null when start == end. */
         val durationS: Double? get() = (endTs - startTs).takeIf { it > 0 }?.toDouble()
@@ -227,6 +235,17 @@ object LiftingImporter {
             val key = "${title ?: ""}|$startRaw"
             val acc = byKey.getOrPut(key) { order.add(key); HevyAcc(start, title, zone) }
             row.cell("end_time", "end")?.let { acc.endRaw = it }
+            row.cell("description", "workout_notes", "workout_note")?.let { acc.note = it }
+            if (exercise.isNotEmpty()) {
+                val ordinal = acc.loggedSets.count { it.exercise == exercise } + 1
+                acc.loggedSets.add(ImportedSet(
+                    exercise, ordinal, weightKg, reps, setType,
+                    row.double("rpe")?.takeIf { it.isFinite() && it in 0.0..10.0 },
+                    row.cell("exercise_notes", "exercise_note", "notes"),
+                    row.double("duration_seconds", "duration_s")?.takeIf { it.isFinite() && it >= 0 },
+                    row.double("distance_meters", "distance_m")?.takeIf { it.isFinite() && it >= 0 },
+                ))
+            }
             acc.add(exercise, setType, weightKg, reps)
         }
 
@@ -309,6 +328,8 @@ object LiftingImporter {
         var reps = 0
         var top: Double? = null
         val exercises = HashSet<String>()
+        val loggedSets = ArrayList<ImportedSet>()
+        var note: String? = null
 
         /**
          * Count a set. Warm-up sets are excluded from the working-volume figure (Hevy marks them
@@ -327,7 +348,7 @@ object LiftingImporter {
         }
 
         fun toSession(): Session? {
-            if (sets == 0) return null
+            if (sets == 0 && loggedSets.isEmpty()) return null
             val end = endRaw?.let { parseEpochSeconds(it, zone) } ?: start
             return Session(
                 startTs = start,
@@ -338,6 +359,8 @@ object LiftingImporter {
                 totalReps = reps,
                 topSetKg = top,
                 title = title,
+                loggedSets = loggedSets.toList(),
+                note = note,
             )
         }
     }

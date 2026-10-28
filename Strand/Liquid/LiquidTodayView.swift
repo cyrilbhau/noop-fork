@@ -1953,7 +1953,7 @@ struct LiquidTodayView: View {
         switch readiness.level {
         case .primed: return String(localized: "Push")
         case .balanced: return String(localized: "Maintain")
-        case .strained, .rundown: return String(localized: "Rest")
+        case .strained, .rundown: return String(localized: "Rest up")
         case .insufficient: return nil
         }
     }
