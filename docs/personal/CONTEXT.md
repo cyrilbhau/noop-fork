@@ -1,17 +1,20 @@
 # NOOP Cyril project context and design handoff
 
 Updated 29 October 2026, Asia/Kolkata. This is the current handoff for Claude and other contributors
-working on the personal iPhone fork. The owner reports that the app is functioning well and wants
-design review next, with the working implementation checkpointed first.
+working on the personal iPhone fork. The audited redesign is installed in place, and the owner
+confirmed existing history and saved Coach sign-in are intact. The owner approved promoting the
+redesign to the personal baseline and creating the installed-redesign checkpoint.
 
 ## Start here
 
 - Checkout: `/Users/cyrilbhau/Documents/Noop/noop-fork`.
 - Private repository: [cyrilbhau/noop-fork](https://github.com/cyrilbhau/noop-fork).
 - Working branch: `personal/iphone-baseline`.
-- Accepted application source: [`e6e14c6a4853419aa7801a7e454caee013e85048`](https://github.com/cyrilbhau/noop-fork/commit/e6e14c6a4853419aa7801a7e454caee013e85048), pushed 28 October.
-- Handoff checkpoint: `checkpoint/2026-10-29-before-design`. It contains that application source
-  plus the current handoff and documentation corrections; no application behavior changes.
+- Installed application source: [`c176345781a50a904287044f93743879ba67e22e`](https://github.com/cyrilbhau/noop-fork/commit/c176345781a50a904287044f93743879ba67e22e).
+- Current checkpoint: `checkpoint/2026-10-29-redesign-installed`. It records the installed application
+  source plus installation acceptance and this updated handoff; later documentation does not change the binary.
+- Earlier recovery point: `checkpoint/2026-10-29-before-design`, retained unchanged.
+- Redesign evidence and remaining checks: [implementation report](REDESIGN-REPORT.md).
 - Installed app: **NOOP Cyril**, built and signed locally with its existing personal identity.
 - Scope: personal **iPhone app and iPhone widgets**. No Android feature work, Apple Watch integration,
   public release, or hosted backend is planned. Shared Apple sources must still compile for macOS.
@@ -42,6 +45,14 @@ validated milestones. This handoff records both recent implementation workstream
 
 ## Implemented and accepted
 
+The 29 October redesign adds Today / Sleep / Training / Health tabs, a native separate Coach tab,
+Profile access from the avatar, redesigned screens/widgets and the live classic-mode fallback.
+Both Apple app targets compile, the isolated app and design suites pass, and synthetic simulator
+captures cover default, AX5 and genuine empty states. See the report for exact results, known
+baseline tool-test failures and the remaining widget, strap, alarm, haptic and overnight checks.
+The owner reconfirmed history and saved Coach sign-in after this update; the workflow confirmations
+below were recorded on 28 October and were not all repeated after the redesign.
+
 | Area | Current behavior and evidence |
 |---|---|
 | Personal installation | Signed app and iPhone widget built; combined update installed in place. The owner opened the final app successfully. Existing app data and sign-in were retained. |
@@ -62,10 +73,10 @@ The personal Health bridge has `importsWorkoutsOnly = true`: it requests workout
 physiological imports, and blocks both Health writeback paths even if earlier grants exist. A Health
 workout summary does not contain the complete lifting log. No direct Hevy or Strava API sync was added.
 
-## Design brief for Claude
+## Original design brief — historical context
 
-Start by reviewing the installed interface and the source below. The requested deliverable in this
-handoff session is context and a checkpoint; no new redesign is implemented by this checkpoint.
+This section records the brief before the implemented redesign. For the current interface and
+its flag, source map, deviations and verification, start with [the redesign report](REDESIGN-REPORT.md).
 
 The design direction is WHOOP familiarity, using **Sleep / Recovery / Strain** consistently. The
 broader intended native interface covers **Today / Sleep / Health / Training**; the final navigation
@@ -132,7 +143,7 @@ capabilities of that stream. Styling must not imply otherwise.
 with the existing tracked SwiftPM lockfile exception. App version is still **12.1.0**, build **438**;
 the checkpoint tag versions this working state without claiming a new product release.
 
-## Validation already recorded
+## Earlier functional validation — 28 October
 
 These are the 28 October implementation results, not fresh runtime tests performed for this
 documentation checkpoint. The combined source commit records them, and the detailed Coach plan
@@ -207,11 +218,12 @@ widget storage. A source checkpoint does **not** back up installed health data o
 
 ## Checkpoint and recovery
 
-The annotated tag `checkpoint/2026-10-29-before-design` is the return point for the accepted source
-and this handoff. It is pushed alongside `personal/iphone-baseline` to the private repository.
+The annotated tag `checkpoint/2026-10-29-redesign-installed` records the accepted installed redesign
+and its handoff on `personal/iphone-baseline`. The earlier annotated tag
+`checkpoint/2026-10-29-before-design` remains the return point for the interface before the redesign.
 
 ```bash
-git show --no-patch checkpoint/2026-10-29-before-design
+git show --no-patch checkpoint/2026-10-29-redesign-installed
 git diff checkpoint/2026-10-29-before-design -- path/to/file.swift
 ```
 
@@ -221,4 +233,4 @@ same personal identity if returning that source to the phone. A Git checkout doe
 installed app, restore its database, recover Keychain state, or reconstruct ignored signing files.
 Do not uninstall the working app or restore over its populated database to test this checkpoint.
 
-Keep later work in small validated commits and push at useful milestones. Leave this tag unchanged.
+Keep later work in small validated commits and push at useful milestones. Leave both checkpoint tags unchanged.

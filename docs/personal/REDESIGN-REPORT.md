@@ -2,8 +2,9 @@
 
 Initial implementation and follow-up audit: 29 October 2026 (Asia/Kolkata), following
 [REDESIGN-IMPLEMENTATION.md](REDESIGN-IMPLEMENTATION.md). Branch `personal/redesign` on the private
-repository, branched from `claude/noop-design-overhaul-3b7185` (30a7b3b7). Nothing was pushed to `main`
-or `personal/iphone-baseline`, and no PR was opened. The audited redesign was installed in place on
+repository, branched from `claude/noop-design-overhaul-3b7185` (30a7b3b7). The owner approved promoting
+the accepted redesign to `personal/iphone-baseline` and creating the annotated installed checkpoint.
+Nothing was pushed to `main`, and no PR was opened. The audited redesign was installed in place on
 the owner's physical iPhone after backup confirmation and approval; see the install record below.
 
 | Phase | Commit |
@@ -25,8 +26,9 @@ summarises them. The audit continuation below supersedes the original gap and ve
 ## Audit continuation — 29 October 2026
 
 The handoff was audited against the source, both app builds, the isolated app tests, and settled
-simulator screenshots. Changes stay on `personal/redesign`; no PR, merge, tag, or remote branch deletion
-has been performed. The accepted source baseline and checkpoint remain intact. The phone now runs
+simulator screenshots. The accepted source is checkpointed on `personal/iphone-baseline` under
+`checkpoint/2026-10-29-redesign-installed`; `personal/redesign` retains the same history. The earlier
+`checkpoint/2026-10-29-before-design` and remote safety branches remain intact. The phone now runs
 the audited redesign. The owner confirmed existing history and saved Coach sign-in are intact;
 the remaining daily-workflow and hardware checks are listed below.
 
@@ -287,5 +289,7 @@ Local build logs, device metadata and `.xcresult` bundles remain outside Git.
 - After installation, record the owner-observed results for Coach sign-in, pasted-workout preview/save,
   Health summaries, Today/detail consistency and 04:00 rollover, calibration, widgets, alarms, Devices
   actions, Breathe timing, haptics, live HR/rest ring, and live classic-mode toggling.
-- If accepted, ask separately before merging into `personal/iphone-baseline` and before creating an
-  annotated checkpoint tag. Propose deleting `personal/redesign-wip` only after merge and explicit approval.
+- **Baseline checkpoint approval:** after confirming history and sign-in, the owner explicitly approved
+  fast-forwarding `personal/iphone-baseline` to the accepted redesign and creating/pushing the annotated
+  tag `checkpoint/2026-10-29-redesign-installed`. This documentation checkpoint preserves all tested
+  application source. Remote branch deletion was not part of that approval.

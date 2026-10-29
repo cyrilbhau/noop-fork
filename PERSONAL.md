@@ -4,10 +4,13 @@
 iPhone. The owner confirmed ChatGPT Coach replies and retained sign-in, pasted-workout saving and
 reopening, and Apple Health workout imports. The personal build contains the iPhone app and its
 widgets only; the owner has no Apple Watch. The old device-provisioning blocker is resolved.
+The audited redesign is now installed in place; the owner reconfirmed existing history and saved
+Coach sign-in. Hardware and overnight checks remain open in [the redesign report](docs/personal/REDESIGN-REPORT.md).
 
 Start with [the current context and design handoff](docs/personal/CONTEXT.md). It covers both recent
-workstreams, source entry points, remaining validation and the checkpoint
-`checkpoint/2026-10-29-before-design`. Claude loads it through [CLAUDE.md](CLAUDE.md).
+workstreams, source entry points, remaining validation and the current checkpoint
+`checkpoint/2026-10-29-redesign-installed`. The earlier `checkpoint/2026-10-29-before-design` is retained.
+Claude loads the context through [CLAUDE.md](CLAUDE.md).
 The [installation guide](docs/personal/INSTALL.md) remains a setup reference; use
 [the device procedure](docs/personal/DEVICE-TESTING.md) for the remaining collection checks.
 
@@ -54,12 +57,14 @@ Personal additions are deliberately modular:
   existing API-key providers remain available. No NOOP backend or new paid subscription was added.
 - Workout text and Hevy CSV set-level imports, workout-only Apple Health reads and display/cache fixes.
 - Sleep/Recovery/Strain presentation for the owner's familiar WHOOP comparison.
+- Audited Today/Sleep/Training/Health redesign, native Coach tab, Profile navigation, widgets and
+  Live Activities, with a live classic-mode fallback and AX5 support.
 
 These additions do not change BLE commands, firmware, protocol decoding, database migrations or
 analytics formulas. The personal UI and subscription integration target iPhone; shared CSV metadata
-and parsing changes were mirrored in Kotlin. Existing screens remain the baseline interface apart
-from the accepted additions and labels. The owner now wants Claude to review design; the broader
-Today/Sleep/Health/Training redesign remains ahead, with collection evidence still needed for readiness.
+and parsing changes were mirrored in Kotlin. The installed iPhone interface now uses the audited
+redesign; classic mode and macOS retain their earlier appearance. Collection evidence is still
+needed for readiness.
 
 The source remains under [PolyForm Noncommercial 1.0.0](LICENSE). Keep `LICENSE`, `NOTICE`,
 `ATTRIBUTION.md` and `DISCLAIMER.md`; personal noncommercial use is permitted, commercial rights
@@ -68,9 +73,10 @@ are not granted. Prepared source is now available on
 The personal app is installed on the owner's iPhone; no public release was made. Scheduled governance/branch-cleanup jobs are gated to the
 upstream repository; personal-fork runs remain manual. No hosted build service was started.
 
-The accepted implementation is committed and pushed as
-[`e6e14c6a`](https://github.com/cyrilbhau/noop-fork/commit/e6e14c6a4853419aa7801a7e454caee013e85048).
-The 29 October checkpoint adds current documentation to the same application source. Earlier
+The installed application source is
+[`c1763457`](https://github.com/cyrilbhau/noop-fork/commit/c176345781a50a904287044f93743879ba67e22e).
+The `checkpoint/2026-10-29-redesign-installed` tag adds installation acceptance and handoff documentation
+to that source. Earlier
 [Mac continuation notes](docs/personal/MAC-CONTINUE.md) are historical; retain the existing local
 checkout, signing identity, app data and ignored configuration for subsequent updates.
 
@@ -88,8 +94,8 @@ checkout, signing identity, app data and ignored configuration for subsequent up
    of the original WHOOP archive. Keep source attribution and original exports intact.
 4. Check Coach overnight briefs, locked-phone operation and real token expiry. iOS scheduling remains
    best effort. Keep Health writes blocked under the current personal integration.
-5. Review the custom native shell with Claude using the current handoff and WHOOP design direction.
-   Implement it over the working engine without treating visual similarity as score equivalence.
+5. Complete physical-device acceptance of the installed redesign: widgets, Live Activities, alarms,
+   haptics, Breathe and live classic-mode toggling. Visual similarity does not establish score equivalence.
 
 Target: **12 November 2026**, before the stated **19 November 2026** membership end. These are
 planning dates; neither a green engine suite nor this source handoff guarantees readiness by them.
