@@ -3,7 +3,8 @@
 Initial implementation and follow-up audit: 29 October 2026 (Asia/Kolkata), following
 [REDESIGN-IMPLEMENTATION.md](REDESIGN-IMPLEMENTATION.md). Branch `personal/redesign` on the private
 repository, branched from `claude/noop-design-overhaul-3b7185` (30a7b3b7). Nothing was pushed to `main`
-or `personal/iphone-baseline`, no PR was opened, and nothing was installed on the owner's phone.
+or `personal/iphone-baseline`, and no PR was opened. The audited redesign was installed in place on
+the owner's physical iPhone after backup confirmation and approval; see the install record below.
 
 | Phase | Commit |
 |---|---|
@@ -24,8 +25,10 @@ summarises them. The audit continuation below supersedes the original gap and ve
 ## Audit continuation — 29 October 2026
 
 The handoff was audited against the source, both app builds, the isolated app tests, and settled
-simulator screenshots. Changes stay on `personal/redesign`; no PR, merge, tag, phone install, or
-remote branch deletion has been performed. The accepted baseline and checkpoint remain intact.
+simulator screenshots. Changes stay on `personal/redesign`; no PR, merge, tag, or remote branch deletion
+has been performed. The accepted source baseline and checkpoint remain intact. The phone now runs
+the audited redesign. The owner confirmed existing history and saved Coach sign-in are intact;
+the remaining daily-workflow and hardware checks are listed below.
 
 | Handoff item | Result |
 |---|---|
@@ -77,9 +80,9 @@ The minimized lifting-session bar retains its existing chrome; the full editor a
 
 ## What changed, per screen
 
-- **Shell.** Tabs are Today, Sleep, Training and Health. Coach uses `Tab(role: .search)` on iOS 26+ and is
-  a fifth tab below that. Profile replaces More and opens from the avatar. The iOS root is pinned dark. Tab
-  tags stay literal, so paths and scroll positions survive a Coach toggle. Every former More row is still
+- **Shell.** Tabs are Today, Sleep, Training and Health. Coach uses the native prominent role on iOS 27,
+  the search role on iOS 26, and a regular fifth tab below that. Profile replaces More and opens from the
+  avatar. The iOS root is pinned dark. Tab tags stay literal, so paths and scroll positions survive a Coach toggle. Every former More row is still
   reachable; the full map is in `d7858b34`.
 - **Today.** Header with the date, which opens the calendar; a battery pill that opens Devices; and the
   avatar, which opens Profile.
@@ -253,19 +256,32 @@ Local build logs, device metadata and `.xcresult` bundles remain outside Git.
   while calibrating.
 - **Live Activity scale.** Fixed in source and covered by payload/formatter tests. Confirm both display
   scales against the app with a real activity, including switching scales without another HR sample.
-- **Install.** Signed update prepared, awaiting the owner's backup and explicit permission as below.
+- **Install acceptance.** The signed update is installed and launched. The owner confirmed existing
+  history and saved Coach sign-in are intact. The remaining daily-workflow and hardware checks are pending.
 
-## Install record — prepared, awaiting permission
+## Install record — installed, history and sign-in confirmed
 
+- **Date and source:** 29 October 2026 (Asia/Kolkata), source `c176345781a50a904287044f93743879ba67e22e`,
+  version 12.1.0, build 438. Subsequent report-only commits do not change the installed binary.
+- **Backup and authorization:** the owner supplied a fresh `.noopbak`, confirmed it had been created,
+  and explicitly authorized proceeding. The backup remains private and was not restored or committed.
 - **Preparation:** signed app and one widget extension built from the redesign worktree. Existing ignored
   signing config is byte-identical to the baseline checkout and remains ignored. No Config, entitlements,
   bundle IDs, team settings, storage keys or database migrations were changed by this audit.
-- **Identity check:** read-only connected-phone metadata confirms that the installed **NOOP Cyril** has
-  the same bundle identifier as the signed build. Private device/profile identifiers are not recorded here.
-- **Status:** no phone install, uninstall, restore or application launch was performed by this audit.
-- **Next step:** the owner exports a fresh `.noopbak` from the current app and explicitly confirms the
-  in-place update. Installation must use the existing app identity, retain its container, Keychain access
-  and widget identity, and must never uninstall first.
+- **Identity check:** pre- and post-update metadata from the physical iPhone confirms **NOOP Cyril**
+  uses `com.cyrilbhau.personalhealth.noop`, matching the signed build. App and widget signatures verify,
+  their team and App Groups match, and no watch app is embedded. Private identifiers are not recorded here.
+- **Device selection correction:** an initial attempt selected a simulator and was rejected for platform
+  mismatch before changing the phone. Selection was corrected to require `hardwareProperties.reality`
+  equal to `physical`; the existing app identity was then verified on that phone before installation.
+  Earlier connected-device metadata alone was simulator evidence, not physical-phone verification.
+- **Installation:** `devicectl device install app` succeeded on the physical iPhone using the existing
+  app identity. No uninstall, database restore or signing change was performed.
+- **Launch and owner confirmation:** a normal foreground launch succeeded, without demo arguments or
+  a debugger. Post-update app metadata confirms the expected identity. The owner explicitly confirmed
+  that existing history and saved Coach sign-in are intact. Coach replies, widget freshness and strap
+  behavior have not been reverified by this update.
+- **Evidence:** installation/launch JSON, metadata and logs stay in ignored `build/personal/audit-device/`.
 - A source checkout changes files on the Mac; it cannot downgrade or wipe the installed phone database.
   It is also not a backup of health data. An install or restore is a separate action requiring approval.
 - After installation, record the owner-observed results for Coach sign-in, pasted-workout preview/save,
