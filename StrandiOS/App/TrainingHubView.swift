@@ -183,7 +183,9 @@ struct TrainingHubView: View {
     /// No sessions-per-week goal exists in NOOP, so the ring shows the count on a bare track (no fill
     /// toward an invented target).
     private var sessionsTile: some View {
-        HStack(spacing: NoopTheme.Layout.m) {
+        // Ring above the label, like the Strain tile beside it: side by side, a half-width tile at 402 pt
+        // left "Sessions" too narrow and it broke mid-word.
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
             NoopRing(value: 0, color: NoopTheme.strain, lineWidth: TrainingLayout.hubRingLine,
                      diameter: TrainingLayout.hubRing, label: loaded ? "\(sessionsThisWeek)" : "—",
                      animate: false,
@@ -194,7 +196,6 @@ struct TrainingHubView: View {
                 Text("This week · no goal set").noopFont(.footnote)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
         }
         .padding(NoopTheme.Layout.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -285,7 +286,10 @@ struct TrainingHubView: View {
         let range = cal.range(of: .day, in: .month, for: month) ?? 1..<29
         let days: [Date] = range.compactMap { cal.date(byAdding: .day, value: $0 - 1, to: month) }
             .filter { $0 <= today }
-        let columns = Array(repeating: GridItem(.flexible(), spacing: TrainingLayout.dotGap), count: 7)
+        // `.flexible()` alone defaults to a 10 pt minimum per column, which made three month grids wider than
+        // a 402 pt screen and pushed the whole hub past its gutters; the dot size is the real minimum.
+        let columns = Array(repeating: GridItem(.flexible(minimum: TrainingLayout.dot), spacing: TrainingLayout.dotGap),
+                            count: 7)
         return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
             Text(verbatim: month.formatted(.dateTime.month(.abbreviated)))
                 .noopFont(.caption, color: false)
