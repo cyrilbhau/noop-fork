@@ -20,21 +20,14 @@ struct CoachLauncherSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = ""
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic sheet.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if coach.isConfigured {
-                        configured
-                    } else {
-                        unconfigured
-                    }
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .background(StrandPalette.surfaceBase.ignoresSafeArea())
+            launcherContent
             .navigationTitle(Text("Coach"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -48,6 +41,33 @@ struct CoachLauncherSheet: View {
         #if os(iOS)
         .presentationDetents([.medium, .large])
         #endif
+    }
+
+    @ViewBuilder private var launcherContent: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignContent
+        } else {
+            classicContent
+        }
+        #else
+        classicContent
+        #endif
+    }
+
+    private var classicContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if coach.isConfigured {
+                    configured
+                } else {
+                    unconfigured
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(StrandPalette.surfaceBase.ignoresSafeArea())
     }
 
     // MARK: Configured — suggestions + a compact composer
@@ -149,3 +169,70 @@ struct CoachLauncherSheet: View {
         router.openCoach()
     }
 }
+
+// MARK: - iPhone redesign (mockup D1 styling)
+
+#if os(iOS)
+extension CoachLauncherSheet {
+
+    /// The same shortcut on the redesign's surfaces: suggestions as chips and the D1 input bar. Still only
+    /// a handoff; nothing here sends.
+    fileprivate var redesignContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                if coach.isConfigured {
+                    Text("Ask about your charge, effort, rest and workouts, grounded in your own numbers.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(CoachPrompts.suggestions, id: \.self) { prompt in
+                        Button { hand(off: prompt) } label: {
+                            Text(prompt)
+                                .noopFont(.bodySmall, color: false)
+                                .foregroundStyle(NoopTheme.textPrimary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, NoopTheme.Layout.l)
+                                .padding(.vertical, NoopTheme.Layout.m)
+                                .noopGlassBackground(cornerRadius: NoopTheme.Layout.tileRadius)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.noopPress)
+                        .accessibilityLabel(Text("Suggested prompt: \(prompt)"))
+                    }
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        TextField("Ask your coach…", text: $draft, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .lineLimit(1...3)
+                            .formKitField()
+                            .onSubmit { submitDraft() }
+                        Button {
+                            submitDraft()
+                        } label: {
+                            Image(systemName: "arrow.up")
+                                .noopFont(.button, color: false)
+                                .foregroundStyle(NoopTheme.canvas)
+                                .frame(width: NoopTheme.Layout.minTouchTarget, height: NoopTheme.Layout.minTouchTarget)
+                                .background(Circle().fill(NoopTheme.textPrimary))
+                        }
+                        .buttonStyle(.noopPress)
+                        .disabled(trimmedDraft.isEmpty)
+                        .accessibilityLabel(Text("Send"))
+                    }
+                    .padding(.top, NoopTheme.Layout.xs)
+                } else {
+                    Text("Use your ChatGPT subscription or connect another provider with your own API key.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Connect a provider") {
+                        dismiss()
+                        router.openCoach()
+                    }
+                    .buttonStyle(NoopPrimaryButton())
+                }
+            }
+            .padding(NoopTheme.Layout.gutter)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .formKitAmbient(.coach)
+    }
+}
+#endif
