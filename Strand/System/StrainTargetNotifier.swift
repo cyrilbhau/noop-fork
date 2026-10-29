@@ -42,7 +42,10 @@ enum StrainTargetNotifier {
         /// (docs/personal/REDESIGN-IMPLEMENTATION.md Appendix A).
         static func copy(target: Int, dayStrain: Double) -> (title: String, body: String) {
             let strain = dayStrain.formatted(.number.precision(.fractionLength(1)))
-            return (String(localized: "Strain target reached"),
+            // The title stays NOOP's established "Optimal strain reached": the redesign copy deck's "Strain
+            // target reached" is too close to WHOOP's own notification string, which StrainTargetPolicyTests
+            // guards against reproducing.
+            return (String(localized: "Optimal strain reached"),
                     String(localized: "You're at \(strain), past today's target of \(target). Anything more today is extra load for tomorrow."))
         }
     }

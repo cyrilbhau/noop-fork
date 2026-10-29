@@ -43,11 +43,13 @@ final class StrainTargetPolicyTests: XCTestCase {
     }
 
     func testCopyUsesNoopWordingAndTheTarget() {
-        let copy = Policy.copy(target: 14)
+        let copy = Policy.copy(target: 14, dayStrain: 14.6)
         // NOOP's own copy — must NOT reproduce WHOOP's decompiled strings.
         XCTAssertTrue(copy.title.contains("Optimal strain"))
         XCTAssertFalse(copy.title.contains("Target Strain Reached"))
         XCTAssertTrue(copy.body.contains("14"))
+        // The body states where the day is (the policy's own day strain, same 0-21 axis) and what to do.
+        XCTAssertTrue(copy.body.contains(14.6.formatted(.number.precision(.fractionLength(1)))))
         XCTAssertFalse(copy.body.contains("for this activity"))
     }
 }
