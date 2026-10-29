@@ -222,7 +222,8 @@ struct TodayCustomizationSheet: View {
                 case .addedCards:
                     HostedCardsCustomizationPage(
                         draft: $hostedDraft,
-                        onReset: resetCurrentLayout
+                        onReset: resetCurrentLayout,
+                        redesign: usesRedesignEditor
                     )
                         .toolbar {
                             customizationToolbar(showCancel: false)
@@ -634,6 +635,7 @@ private struct DashboardCardsCustomizationPage: View {
 private struct HostedCardsCustomizationPage: View {
     @Binding var draft: EditableLayoutDraft<HostedCard>
     let onReset: () -> Void
+    var redesign: Bool = false
 
     var body: some View {
         EditableLayoutList(
@@ -647,7 +649,8 @@ private struct HostedCardsCustomizationPage: View {
             configurationLabel: { _ in nil },
             onConfigure: { _ in },
             onReset: onReset,
-            allowEmpty: true,   // hosted cards are opt-in; the legacy draft retains one item.
+            allowEmpty: true,   // Existing affordance; actual final-item removal is redesign-only below.
+            permitsEmptyDraft: redesign,
             group: { $0.origin }   // group the Available list by origin tab ("Sleep", "Trends")
         ) {
             EmptyView()

@@ -20,8 +20,8 @@ struct EditableLayoutDraft<Item: Identifiable & Equatable>: Equatable {
         visible.move(fromOffsets: offsets, toOffset: destination)
     }
 
-    mutating func hide(_ item: Item) {
-        guard visible.count > 1, let index = visible.firstIndex(of: item) else { return }
+    mutating func hide(_ item: Item, allowEmpty: Bool = false) {
+        guard visible.count > (allowEmpty ? 0 : 1), let index = visible.firstIndex(of: item) else { return }
         hidden.append(visible.remove(at: index))
     }
 

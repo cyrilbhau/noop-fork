@@ -15,8 +15,11 @@ where Item: Identifiable & Equatable, Options: View {
     let configurationLabel: (Item) -> String?
     let onConfigure: (Item) -> Void
     let onReset: () -> Void
-    /// Whether the Shown list offers removal of the final item; the legacy draft retains one item.
+    /// Whether the final Shown row offers its hide action. Actual removal also requires
+    /// `permitsEmptyDraft`, preserving the existing behavior outside the redesigned Today editor.
     var allowEmpty: Bool = false
+    // Only the redesigned Added Cards page opts into removing the final item.
+    var permitsEmptyDraft: Bool = false
     var header: AnyView? = nil
     var extraFooter: AnyView? = nil
     var subtitleTint: ((Item) -> Color?)? = nil
@@ -169,7 +172,7 @@ where Item: Identifiable & Equatable, Options: View {
 
     private func hide(_ item: Item) {
         withAnimation(StrandMotion.interactive) {
-            draft.hide(item)
+            draft.hide(item, allowEmpty: allowEmpty && permitsEmptyDraft)
         }
     }
 
