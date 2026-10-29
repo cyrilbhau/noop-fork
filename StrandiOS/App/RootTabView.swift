@@ -71,10 +71,20 @@ struct RootTabView: View {
     /// V8 liquid redesign is the default Today; the Settings toggle lets a user fall back to the classic
     /// Today if they prefer it (keyed identically to the SettingsView toggle). Default ON.
     @AppStorage("noop.liquidTodayEnabled") private var liquidTodayEnabled = true
+    /// The iPhone redesign's Today (Phase 3). Default ON; off falls back to the Liquid/classic choice above,
+    /// which keeps working underneath. Only the root content swaps: the Today NavigationStack and its path
+    /// stay put, so flipping either preference does not remount the tab or lose navigation state.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
 
-    /// The Today tab root, honouring the liquid/classic preference.
+    /// The Today tab root, honouring the redesign and liquid/classic preferences.
     @ViewBuilder private var todayTabRoot: some View {
-        if liquidTodayEnabled { LiquidTodayView() } else { TodayView() }
+        if redesignEnabled {
+            RedesignTodayView()
+        } else if liquidTodayEnabled {
+            LiquidTodayView()
+        } else {
+            TodayView()
+        }
     }
 
     /// Native tab selection binding. SwiftUI sends taps on the already-selected item through the
@@ -558,6 +568,7 @@ struct RootTabView: View {
                 .modifier(TabRootChrome(profileInToolbar: profileInToolbar, openProfile: openProfile))
                 .tabRouteDestinations()
                 .moreDestinations()
+                .redesignDestinations()
         }
         // Drive this tab's root scroll-to-top on an at-root re-tap (#198 follow-up); read by ScreenScaffold
         // / LiquidTodayView inside. Only THIS tab's token changes on its reselect, so the others don't scroll.
