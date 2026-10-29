@@ -266,3 +266,24 @@ extension EnvironmentValues {
         set { self[ScrollToTopSignalKey.self] = newValue }
     }
 }
+
+// MARK: - Open-Profile action (iPhone redesign shell)
+
+/// Opens the iPhone shell's Profile sheet, the screen that replaced the old More tab. The iOS tab shell
+/// (`RootTabView`) provides it; macOS never sets it, so it stays nil there. A header avatar that reads nil
+/// keeps its previous behaviour (opening Settings), which leaves the macOS app unchanged.
+struct OpenProfileAction {
+    let handler: () -> Void
+    func callAsFunction() { handler() }
+}
+
+private struct OpenProfileActionKey: EnvironmentKey {
+    static let defaultValue: OpenProfileAction? = nil
+}
+
+extension EnvironmentValues {
+    var openProfile: OpenProfileAction? {
+        get { self[OpenProfileActionKey.self] }
+        set { self[OpenProfileActionKey.self] = newValue }
+    }
+}

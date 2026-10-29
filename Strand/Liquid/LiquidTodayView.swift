@@ -96,6 +96,8 @@ struct LiquidTodayView: View {
     /// #1862: the optional Coach launcher sheet. Presentation state only — opening it requests nothing.
     @State private var showCoachLauncher = false
     @State private var showSettings = false
+    /// The iPhone shell's Profile sheet (replaces the More tab). nil on macOS, where the avatar opens Settings.
+    @Environment(\.openProfile) private var openProfile
     @State private var synthesisExpanded = false
     @State private var showLiveSession = false
 
@@ -600,8 +602,11 @@ struct LiquidTodayView: View {
                 // which is the push-left behaviour rather than a separate approximation of it.
                 .headerTrailingControlFadeMask(reserving: headerControlsWidth)
                 HStack(spacing: headerClusterSpacing) {
-                    // Profile pic (the one set in Settings) → opens Settings, matching the classic Today.
-                    Button { showSettings = true } label: {
+                    // Profile pic (the one set in Settings) → opens the iPhone Profile sheet when the tab
+                    // shell provides one, else Settings (macOS), matching the classic Today.
+                    Button {
+                        if let openProfile { openProfile() } else { showSettings = true }
+                    } label: {
                         Color.clear.frame(
                             width: NoopMetrics.compactControlSize,
                             height: NoopMetrics.compactControlSize

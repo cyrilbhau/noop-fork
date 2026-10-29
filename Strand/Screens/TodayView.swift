@@ -435,6 +435,8 @@ struct TodayView: View {
     // iOS top-bar state: the date-jump popover and the profile/settings sheet.
     @State private var showDayPicker = false
     @State private var showSettings = false
+    /// The iPhone shell's Profile sheet (replaces the More tab). nil on macOS, where the avatar opens Settings.
+    @Environment(\.openProfile) private var openProfile
     @State private var showLiveSession = false
     /// The Updates inbox sheet (opened by the header bell). Shared across both platforms.
     /// #1862: the optional Coach launcher sheet, opened from the default-OFF Coach dashboard card.
@@ -1370,8 +1372,11 @@ struct TodayView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Quick actions")
                 .accessibilityHint("Start a workout, log your journal, or breathe")
-                // Menu (Settings), the avatar, same 36 size.
-                Button { showSettings = true } label: {
+                // Menu (Settings), the avatar, same 36 size. On iPhone the tab shell supplies the Profile
+                // sheet (which carries Settings and every former More row); nil falls back to Settings.
+                Button {
+                    if let openProfile { openProfile() } else { showSettings = true }
+                } label: {
                     ProfileAvatarView(imageData: profile.avatarImageData, size: 36)
                         .contentShape(Circle())
                 }
