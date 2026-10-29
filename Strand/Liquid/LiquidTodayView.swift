@@ -3325,18 +3325,24 @@ final class TodayDayModel: ObservableObject {
     }
 
     func synthLine(repo: Repository) -> String {
-        let readiness = readiness(repo: repo)
+        Self.readinessSentence(level: readiness(repo: repo).level, days: repo.days,
+                               today: Repository.logicalDayKey(Date()))
+    }
+
+    /// One readiness sentence for Liquid Today and Recovery detail, including the stale-strap explanation.
+    /// The caller supplies the logical day so every branch of this read uses the same clock.
+    nonisolated static func readinessSentence(level: ReadinessEngine.Level, days: [DailyMetric],
+                                              today: String) -> String {
         // #612: when still calibrating BECAUSE the strap stopped delivering nights (connected, but no new
         // night for > staleDays), say so directly instead of "still learning your baseline" — the honest
         // calibrating state with its reason attached. `stale` is always > staleDays (14), so always plural.
-        if readiness.level == .insufficient,
-           let stale = Baselines.nightsSinceNewestValidNight(dayKeys: repo.days.map(\.day),
-                                                             nightlyHrv: repo.days.map(\.avgHrv),
-                                                             today: Repository.logicalDayKey(Date())),
+        if level == .insufficient,
+           let stale = Baselines.nightsSinceNewestValidNight(dayKeys: days.map(\.day),
+                                                             nightlyHrv: days.map(\.avgHrv), today: today),
            stale > Baselines.staleDays {
             return String(localized: "No new nights from your strap for \(stale) days. Check it's connected and saving data.")
         }
-        switch readiness.level {
+        switch level {
         case .primed: return String(localized: "You're primed. A hard session should land well today.")
         case .balanced: return String(localized: "You're in a good spot for training.")
         case .strained: return String(localized: "Signals are down a touch. Keep it easy today.")

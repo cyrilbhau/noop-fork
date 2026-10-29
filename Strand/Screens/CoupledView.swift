@@ -343,12 +343,25 @@ struct CoupledView: View {
     /// The band word (LIGHT / MODERATE / STRENUOUS / HIGH) the classic StrainGauge drew from the fill
     /// fraction, kept as the section-header trailing so the coupled read still names the effort band.
     private var strainBandWord: String? {
-        guard let s = dayStrain21 else { return nil }
+        guard let band = Self.strainBand(strain21: dayStrain21) else { return nil }
+        switch band {
+        case .light:     return String(localized: "Light")
+        case .moderate:  return String(localized: "Moderate")
+        case .strenuous: return String(localized: "Strenuous")
+        case .high:      return String(localized: "High")
+        }
+    }
+
+    enum StrainBand: Equatable { case light, moderate, strenuous, high }
+
+    /// The shared display bands on the 0–21 axis. Coupled and redesigned detail supply their own copy.
+    static func strainBand(strain21: Double?) -> StrainBand? {
+        guard let s = strain21 else { return nil }
         switch s {
-        case ..<6:   return String(localized: "Light")
-        case ..<10:  return String(localized: "Moderate")
-        case ..<14:  return String(localized: "Strenuous")
-        default:     return String(localized: "High")
+        case ..<6:  return .light
+        case ..<10: return .moderate
+        case ..<14: return .strenuous
+        default:    return .high
         }
     }
 

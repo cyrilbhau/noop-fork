@@ -118,26 +118,8 @@ struct RecoveryDetailView: View {
         case .noData:
             return [String(localized: "No Recovery score for this day.")]
         case .scored, .carried:
-            return [Self.synthesis(model.readiness, days: repo.days)]
-        }
-    }
-
-    /// The readiness synthesis line, worded exactly as Liquid Today's `synthLine` (same catalogue keys and the
-    /// same stale-strap branch) so the two screens read the same sentence for the same day.
-    static func synthesis(_ readiness: ReadinessEngine.Readiness, days: [DailyMetric]) -> String {
-        if readiness.level == .insufficient,
-           let stale = Baselines.nightsSinceNewestValidNight(dayKeys: days.map(\.day),
-                                                             nightlyHrv: days.map(\.avgHrv),
-                                                             today: Repository.logicalDayKey(Date())),
-           stale > Baselines.staleDays {
-            return String(localized: "No new nights from your strap for \(stale) days. Check it's connected and saving data.")
-        }
-        switch readiness.level {
-        case .primed: return String(localized: "You're primed. A hard session should land well today.")
-        case .balanced: return String(localized: "You're in a good spot for training.")
-        case .strained: return String(localized: "Signals are down a touch. Keep it easy today.")
-        case .rundown: return String(localized: "Several recovery signals are down. Prioritise rest today.")
-        case .insufficient: return String(localized: "Still learning your baseline. A few more nights and this fills in.")
+            return [TodayDayModel.readinessSentence(level: model.readiness.level, days: repo.days,
+                                                    today: Repository.logicalDayKey(Date()))]
         }
     }
 

@@ -120,17 +120,18 @@ struct StrainDetailView: View {
         }
     }
 
-    /// The band headline, on the same 0–21 thresholds as `CoupledView.strainBandWord`. Its own keys: the
+    /// The band headline, resolved by `CoupledView.strainBand` on the 0–21 axis. Its own keys: the
     /// shared "Light" key is translated as light sleep / illumination in several locales.
     private var headline: String {
         guard model != nil else { return " " }
         guard let effort else { return String(localized: "No data") }
         let s21 = UnitFormatter.effortValue(effort, scale: .whoop)
-        switch s21 {
-        case ..<6: return String(localized: "Light day")
-        case ..<10: return String(localized: "Moderate day")
-        case ..<14: return String(localized: "Strenuous day")
-        default: return String(localized: "High-strain day")
+        switch CoupledView.strainBand(strain21: s21) {
+        case .light: return String(localized: "Light day")
+        case .moderate: return String(localized: "Moderate day")
+        case .strenuous: return String(localized: "Strenuous day")
+        case .high: return String(localized: "High-strain day")
+        case nil: return String(localized: "No data")
         }
     }
 
