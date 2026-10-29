@@ -107,7 +107,66 @@ struct LiveView: View {
     /// the Session console and is only enabled while bonded (the reading needs the live R-R stream).
     @State private var showHRVSnapshot = false
 
+    #if os(iOS)
+    /// The iPhone redesign (A4 "Live heart rate"); off falls back to the classic console.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    #endif
+
     var body: some View {
+        Group {
+            #if os(iOS)
+            if redesignEnabled {
+                redesignConsole
+            } else {
+                classicConsole
+            }
+            #else
+            classicConsole
+            #endif
+        }
+        .onAppear { refreshLiveSession(); consumeActiveWorkoutRequest() }
+        .onDisappear { model.stopRealtimeHR() }
+        // A fresh bond/connection re-arms the BLE stream (Apple must re-send startRealtime on a new
+        // connection) WITHOUT bumping the ref-count — `refreshLiveSession`'s `startRealtimeHR` already
+        // counted this screen once on `.onAppear`, balanced by the single `stopRealtimeHR` above.
+        // Re-counting here (multiple bonded/connected events per appearance, one disappear) would leave
+        // the stream stuck armed after leaving Live (#681 ref-count balance).
+        .onChangeCompat(of: live.bonded) { _ in reconnectLiveSession() }
+        .onChangeCompat(of: live.connected) { _ in reconnectLiveSession() }
+        // Live workout mode (#238): open the in-exercise screen the moment a workout starts.
+        .onChangeCompat(of: model.activeWorkout != nil) { active in if active { showLiveWorkout = true } }
+        .sheet(isPresented: $showLiveWorkout) {
+            LiveWorkoutView(onClose: { showLiveWorkout = false })
+                .environmentObject(model)
+                .environmentObject(live)
+        }
+        // Pick a named sport before starting (#519) — the live workout view then opens
+        // off the activeWorkout change above, so no extra navigation is needed here.
+        .workoutSelectionCover(isPresented: $showStartSport) {
+            StartWorkoutSheet { name in model.startWorkout(sport: name) }
+        }
+        // Manual HRV snapshot (#127) — a still, seated 60s R-R reading.
+        .sheet(isPresented: $showHRVSnapshot) {
+            // Tell the reading where its R-R is coming from so the caveat is honest (#537): a WHOOP 5/MG
+            // derives R-R from the optical pulse signal (noisier) while a WHOOP 4 / chest strap is
+            // electrical R-R. Driven off the picked strap model, mirroring the Android twin.
+            HRVSnapshotView(onClose: { showHRVSnapshot = false }, source: hrvSnapshotSource)
+                .environmentObject(model)
+                .environmentObject(live)
+        }
+        .alert("End this workout?", isPresented: $confirmingEndWorkout) {
+            Button("Cancel", role: .cancel) { }
+            Button("End workout", role: .destructive) {
+                model.endWorkout()
+            }
+        } message: {
+            Text("This stops recording and saves what's captured so far. It can't be resumed.")
+        }
+    }
+
+    /// The classic Live Body Console (macOS, and iOS with the redesign off).
+    private var classicConsole: some View {
         ScreenScaffold(title: "Live Body Console",
                        subtitle: "Current physiology, strap trust, and session controls in one working view.",
                        topBackground: liquidScaffoldSky()) {
@@ -159,44 +218,6 @@ struct LiveView: View {
                 manageDevicesRow
                 LiveLogCard()
             }
-        }
-        .onAppear { refreshLiveSession(); consumeActiveWorkoutRequest() }
-        .onDisappear { model.stopRealtimeHR() }
-        // A fresh bond/connection re-arms the BLE stream (Apple must re-send startRealtime on a new
-        // connection) WITHOUT bumping the ref-count — `refreshLiveSession`'s `startRealtimeHR` already
-        // counted this screen once on `.onAppear`, balanced by the single `stopRealtimeHR` above.
-        // Re-counting here (multiple bonded/connected events per appearance, one disappear) would leave
-        // the stream stuck armed after leaving Live (#681 ref-count balance).
-        .onChangeCompat(of: live.bonded) { _ in reconnectLiveSession() }
-        .onChangeCompat(of: live.connected) { _ in reconnectLiveSession() }
-        // Live workout mode (#238): open the in-exercise screen the moment a workout starts.
-        .onChangeCompat(of: model.activeWorkout != nil) { active in if active { showLiveWorkout = true } }
-        .sheet(isPresented: $showLiveWorkout) {
-            LiveWorkoutView(onClose: { showLiveWorkout = false })
-                .environmentObject(model)
-                .environmentObject(live)
-        }
-        // Pick a named sport before starting (#519) — the live workout view then opens
-        // off the activeWorkout change above, so no extra navigation is needed here.
-        .workoutSelectionCover(isPresented: $showStartSport) {
-            StartWorkoutSheet { name in model.startWorkout(sport: name) }
-        }
-        // Manual HRV snapshot (#127) — a still, seated 60s R-R reading.
-        .sheet(isPresented: $showHRVSnapshot) {
-            // Tell the reading where its R-R is coming from so the caveat is honest (#537): a WHOOP 5/MG
-            // derives R-R from the optical pulse signal (noisier) while a WHOOP 4 / chest strap is
-            // electrical R-R. Driven off the picked strap model, mirroring the Android twin.
-            HRVSnapshotView(onClose: { showHRVSnapshot = false }, source: hrvSnapshotSource)
-                .environmentObject(model)
-                .environmentObject(live)
-        }
-        .alert("End this workout?", isPresented: $confirmingEndWorkout) {
-            Button("Cancel", role: .cancel) { }
-            Button("End workout", role: .destructive) {
-                model.endWorkout()
-            }
-        } message: {
-            Text("This stops recording and saves what's captured so far. It can't be resumed.")
         }
     }
 
@@ -272,17 +293,45 @@ struct LiveView: View {
         return StrandPalette.metricRose
     }
 
+    /// The link state the connection pill names, resolved once so the classic pill and the redesign's
+    /// strap pill can never disagree. Distinguishes a GENUINE encrypted bond from the 5/MG live-HR shortcut
+    /// that flips `bonded` true over the unbonded standard profile (#69).
+    private enum LinkState {
+        case bondedStreaming, liveHROnly, ringStreaming, connected, pairedIdle, disconnected
+
+        var label: String {
+            switch self {
+            case .bondedStreaming: return String(localized: "Bonded · streaming")
+            case .liveHROnly: return String(localized: "Live HR (not fully paired)")
+            case .ringStreaming: return String(localized: "Streaming")
+            case .connected: return String(localized: "Connected")
+            case .pairedIdle: return String(localized: "Paired · idle")
+            case .disconnected: return String(localized: "Disconnected")
+            }
+        }
+    }
+
+    private var linkState: LinkState {
+        if activeConnection && live.encryptedBond { return .bondedStreaming }
+        if activeConnection { return .liveHROnly }
+        if ringStreaming { return .ringStreaming }
+        if live.connected { return .connected }
+        if live.encryptedBond { return .pairedIdle }
+        return .disconnected
+    }
+
     private var connectionPill: some View {
-        // Distinguish a GENUINE encrypted bond from the 5/MG live-HR shortcut that flips `bonded` true
-        // over the unbonded standard profile (#69): green "Bonded · streaming" only when encryptedBond,
-        // amber "Live HR (not fully paired)" otherwise. The pairingHintBanner below gives the how-to.
-        let (label, color): (String, Color) =
-            (activeConnection && live.encryptedBond) ? (String(localized: "Bonded · streaming"), StrandPalette.accent)
-            : activeConnection ? (String(localized: "Live HR (not fully paired)"), StrandPalette.statusWarning)
-            : ringStreaming ? (String(localized: "Streaming"), StrandPalette.accent)
-            : live.connected ? (String(localized: "Connected"), StrandPalette.statusWarning)
-            : live.encryptedBond ? (String(localized: "Paired · idle"), StrandPalette.statusWarning)
-            : (String(localized: "Disconnected"), StrandPalette.metricRose)
+        // Green "Bonded · streaming" only when encryptedBond, amber "Live HR (not fully paired)" otherwise.
+        // The pairingHintBanner below gives the how-to.
+        let state = linkState
+        let label = state.label
+        let color: Color = {
+            switch state {
+            case .bondedStreaming, .ringStreaming: return StrandPalette.accent
+            case .liveHROnly, .connected, .pairedIdle: return StrandPalette.statusWarning
+            case .disconnected: return StrandPalette.metricRose
+            }
+        }()
         return HStack(spacing: 8) {
             Circle().fill(color).frame(width: 9, height: 9)
             Text(label).font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
@@ -447,13 +496,18 @@ struct LiveView: View {
         }
     }
 
-    private func workoutSavedRow(_ row: WorkoutRow) -> some View {
+    /// "12 min · 128 avg bpm · effort 9.4": the saved workout's summary, shared by both presentations.
+    private func workoutSavedSummary(_ row: WorkoutRow) -> String {
         let mins = Int((row.durationS ?? 0) / 60)
         let parts = [String(localized: "\(mins) min"), row.avgHr.map { String(localized: "\($0) avg bpm") },
                      row.strain.map { String(localized: "effort \(UnitFormatter.effortDisplay($0, scale: effortScale))") }].compactMap { $0 }
-        return HStack(spacing: 8) {
+        return parts.joined(separator: " · ")
+    }
+
+    private func workoutSavedRow(_ row: WorkoutRow) -> some View {
+        HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(StrandPalette.accent)
-            Text("Workout saved · \(parts.joined(separator: " · "))")
+            Text("Workout saved · \(workoutSavedSummary(row))")
                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
             Spacer(minLength: 0)
         }
@@ -551,16 +605,7 @@ struct LiveView: View {
                 Text("Strap").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                 SegmentedPillControl(
                     WhoopModel.allCases,
-                    selection: Binding(
-                        get: { selectedModel },
-                        set: { newModel in
-                            guard newModel.rawValue != selectedModelRaw else { return }
-                            selectedModelRaw = newModel.rawValue
-                            // Clear the previous strap's sticky bond/connection so the next scan targets the
-                            // new family's service and bonds it fresh.
-                            model.prepareStrapSwitch()
-                        }
-                    ),
+                    selection: strapModelSelection,
                     label: { $0.displayName }
                 )
                 Spacer()
@@ -570,6 +615,20 @@ struct LiveView: View {
             // after a failed scan (#130) or a bond-refusal (which is the separate `pairingHint` banner).
             if selectedModel == .whoop5mg { whoop5PairingNote }
         }
+    }
+
+    /// The strap-family selection shared by the classic picker and the redesign's segments. Switching
+    /// clears the previous strap's sticky bond/connection so the next scan targets the new family's service
+    /// and bonds it fresh.
+    private var strapModelSelection: Binding<WhoopModel> {
+        Binding(
+            get: { selectedModel },
+            set: { newModel in
+                guard newModel.rawValue != selectedModelRaw else { return }
+                selectedModelRaw = newModel.rawValue
+                model.prepareStrapSwitch()
+            }
+        )
     }
 
     private var whoop5PairingNote: some View {
@@ -895,8 +954,23 @@ private struct LiveHeartReadout: View {
     }
 
     @State private var shown: Double = 0
+    /// The iPhone redesign's hero (A4): a pulsing BPM inside a zone-coloured ring, plus the zone strip.
+    var redesign: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        #if os(iOS)
+        if redesign {
+            redesignBody
+        } else {
+            classicBody
+        }
+        #else
+        classicBody
+        #endif
+    }
+
+    private var classicBody: some View {
         let tint = hrTint
         return VStack(alignment: .center, spacing: NoopMetrics.space2) {
             Text("HEART RATE")
@@ -945,6 +1019,107 @@ private struct LiveHeartReadout: View {
         .onAppear { rollTo(displayHR) }
         .onChangeCompat(of: displayHR) { rollTo($0) }
     }
+
+    #if os(iOS)
+    /// A4: the live BPM, large, inside a 230 pt ring filled to HR / max HR in the current zone's colour.
+    /// The heart and a halo pulse at the measured rate (`NoopTheme.Motion.heartbeatInterval`, nil under
+    /// Reduce Motion or with no reading). No reading: an em dash and a dashed empty ring, nothing animated.
+    private var redesignBody: some View {
+        let bpm = displayHR
+        let zone = liveZone
+        let color: Color = bpm == nil ? NoopTheme.textTertiary
+            : (zone >= 1 ? NoopTheme.zoneColor(zone) : NoopTheme.heart)
+        let interval = NoopTheme.Motion.heartbeatInterval(bpm: bpm, reduceMotion: reduceMotion)
+        return VStack(spacing: NoopTheme.Layout.l) {
+            ZStack {
+                if let interval {
+                    TimelineView(.periodic(from: .now, by: interval)) { context in
+                        Circle()
+                            .stroke(color, lineWidth: LiveRedesignLayout.haloLine)
+                            .frame(width: LiveRedesignLayout.haloDiameter, height: LiveRedesignLayout.haloDiameter)
+                            .phaseAnimator([false, true], trigger: context.date) { view, beat in
+                                view
+                                    .scaleEffect(beat ? LiveRedesignLayout.haloScale : 1)
+                                    .opacity(beat ? 0 : LiveRedesignLayout.haloOpacity)
+                            } animation: { beat in
+                                beat ? .easeOut(duration: interval * 0.9) : nil
+                            }
+                    }
+                    .accessibilityHidden(true)
+                }
+                NoopRing(value: hrFrac, color: color, lineWidth: LiveRedesignLayout.ringLine,
+                         diameter: LiveRedesignLayout.ringDiameter, animate: false,
+                         accessibilityLabel: String(localized: "Heart rate"),
+                         accessibilityValue: bpm.map { String(localized: "\($0) bpm") } ?? String(localized: "No data"))
+                VStack(spacing: NoopTheme.Layout.xs) {
+                    HStack(spacing: NoopTheme.Layout.xs + 2) {
+                        if let interval {
+                            TimelineView(.periodic(from: .now, by: interval)) { context in
+                                Image(systemName: "heart.fill").symbolEffect(.bounce, value: context.date)
+                            }
+                        } else {
+                            Image(systemName: "heart.fill")
+                        }
+                        Text("Now")
+                    }
+                    .noopFont(.footnote, color: false)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(bpm == nil ? NoopTheme.textTertiary : NoopTheme.heart)
+                    .accessibilityHidden(true)
+                    Text(verbatim: bpm.map(String.init) ?? "—")
+                        .noopFont(.heroNumber, color: false)
+                        .foregroundStyle(bpm == nil ? NoopTheme.textSecondary : NoopTheme.textPrimary)
+                        .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : NoopTheme.Motion.countUp, value: bpm)
+                    Text(zone >= 1 && bpm != nil ? "BPM · Zone \(zone)" : "BPM").noopFont(.footnote)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(bpm.map { "Heart rate \($0) beats per minute" } ?? "Heart rate not available")
+            }
+            .frame(height: LiveRedesignLayout.heroHeight)
+            zoneStrip(zone: bpm == nil ? 0 : zone)
+            Text(signalTrustSummary)
+                .noopFont(.footnote)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// The five HR zones as a strip, the current one at full strength with its BPM range from the profile's
+    /// zone set. Zone 0 (below zone 1, or no reading) highlights none.
+    private func zoneStrip(zone: Int) -> some View {
+        let zones = model.profile.hrZoneSet.zones
+        return VStack(spacing: NoopTheme.Layout.s) {
+            HStack(spacing: NoopTheme.Layout.xs) {
+                ForEach(1...5, id: \.self) { z in
+                    Capsule()
+                        .fill(NoopTheme.zoneColor(z))
+                        .opacity(z == zone ? 1 : LiveRedesignLayout.inactiveZoneOpacity)
+                        .frame(height: LiveRedesignLayout.zoneStripHeight)
+                }
+            }
+            HStack(spacing: 0) {
+                ForEach(1...5, id: \.self) { z in
+                    Group {
+                        if z == zone, let band = zones.first(where: { $0.number == z }) {
+                            Text("Z\(z) · \(Int(band.lower.rounded()))–\(Int(band.upper.rounded()))")
+                                .foregroundStyle(NoopTheme.zoneColor(z))
+                        } else {
+                            Text("Z\(z)")
+                        }
+                    }
+                    .noopFont(.caption)
+                    .lineLimit(1)
+                    if z < 5 { Spacer(minLength: NoopTheme.Layout.xs) }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(zone >= 1 ? Text("Zone \(zone)") : Text("No data"))
+    }
+    #endif
 
     /// Roll the count-up numeral to the new HR, matching the vessel's fill animation.
     private func rollTo(_ v: Int?) {
@@ -1121,7 +1296,23 @@ private struct LiveSignalTrustRail: View {
         return live.worn || ringStreaming
     }
 
+    /// The iPhone redesign's "streams" card (A4): one row per signal, with how long ago each live stream
+    /// last delivered, instead of the tile grid.
+    var redesign: Bool = false
+
     var body: some View {
+        #if os(iOS)
+        if redesign {
+            redesignBody
+        } else {
+            classicBody
+        }
+        #else
+        classicBody
+        #endif
+    }
+
+    private var classicBody: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 168), spacing: NoopMetrics.gap)],
                   spacing: NoopMetrics.gap) {
             ForEach(Array(signalTiles.enumerated()), id: \.element.id) { idx, tile in
@@ -1130,6 +1321,82 @@ private struct LiveSignalTrustRail: View {
             }
         }
     }
+
+    #if os(iOS)
+    /// When this screen last saw a live HR / R-R notify. Only arrivals observed while the card is on screen
+    /// count, so a stream that has gone quiet reads its true age, and nothing is claimed before the first.
+    @State private var lastHeartRateAt: Date?
+    @State private var lastIntervalsAt: Date?
+
+    private var redesignBody: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let now = context.date
+            let tiles = signalTiles
+            NoopGlassCard(flush: true) {
+                VStack(spacing: 0) {
+                    liveStreamRow(tiles[0], freshness: lastHeartRateAt, now: now, showsDivider: false)
+                    liveStreamRow(tiles[1], freshness: lastIntervalsAt, now: now)
+                    if activeIsWhoop {
+                        let frameAt = live.lastFrameAtUnix.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+                        liveStreamRow(SignalTrustTile.Model(
+                                          title: String(localized: "Strap frames"),
+                                          value: activeConnection ? (live.lastFrameType ?? "—") : String(localized: "Offline"),
+                                          detail: live.lastEvent ?? "",
+                                          icon: "dot.radiowaves.left.and.right",
+                                          tint: NoopTheme.textSecondary,
+                                          frac: nil),
+                                      freshness: frameAt, now: now)
+                    }
+                    ForEach(tiles.dropFirst(2)) { tile in
+                        liveStreamRow(tile, freshness: nil, now: now)
+                    }
+                }
+            }
+        }
+        .onReceive(live.$heartRate.dropFirst()) { value in
+            if let value, value > 0 { lastHeartRateAt = Date() }
+        }
+        .onReceive(live.$rrSeq.dropFirst()) { _ in lastIntervalsAt = Date() }
+    }
+
+    /// One signal row: a live dot (lit while the stream delivered within the last few seconds), the title,
+    /// its detail, the value, and how long ago the stream last delivered when that is known.
+    private func liveStreamRow(_ tile: SignalTrustTile.Model, freshness: Date?, now: Date,
+                               showsDivider: Bool = true) -> some View {
+        let age = freshness.map { now.timeIntervalSince($0) }
+        let isLive = age.map { $0 < LiveRedesignLayout.liveWindow } ?? false
+        return VStack(spacing: 0) {
+            if showsDivider {
+                Rectangle().fill(NoopTheme.separator).frame(height: 1).accessibilityHidden(true)
+            }
+            HStack(spacing: NoopTheme.Layout.m) {
+                Circle()
+                    .fill(isLive ? NoopTheme.recovery : NoopTheme.trackEmpty)
+                    .frame(width: LiveRedesignLayout.liveDot, height: LiveRedesignLayout.liveDot)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: LiveRedesignLayout.textGap) {
+                    Text(verbatim: tile.title).noopFont(.listTitle)
+                    if !tile.detail.isEmpty {
+                        Text(verbatim: tile.detail).noopFont(.footnote).lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .trailing, spacing: LiveRedesignLayout.textGap) {
+                    Text(verbatim: tile.value)
+                        .noopFont(.rowTitle, color: false)
+                        .foregroundStyle(tile.frac == nil && freshness == nil ? NoopTheme.textSecondary : NoopTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    if let age {
+                        Text(verbatim: LiveRedesignLayout.ageLabel(age)).noopFont(.caption)
+                    }
+                }
+            }
+            .padding(.vertical, NoopTheme.Layout.m)
+        }
+        .accessibilityElement(children: .combine)
+    }
+    #endif
 
     private var connectionModeColor: Color {
         if (activeConnection && live.encryptedBond) || ringStreaming { return StrandPalette.accent }
@@ -1216,8 +1483,27 @@ private struct ActiveWorkoutLive: View {
     @EnvironmentObject private var model: AppModel
     let workout: AppModel.ActiveWorkout
     let effortScale: EffortScale
+    /// The iPhone redesign's stat grid (same four figures, no liquid tube).
+    var redesign: Bool = false
 
     var body: some View {
+        #if os(iOS)
+        if redesign {
+            StatGrid([
+                StatGridItem("HR", value: model.bpm.map { "\($0)" }, unit: "bpm"),
+                StatGridItem("Avg", value: workout.avgHr > 0 ? "\(workout.avgHr)" : nil, unit: "bpm"),
+                StatGridItem("Peak", value: workout.peakHr > 0 ? "\(workout.peakHr)" : nil, unit: "bpm"),
+                StatGridItem("Strain", value: UnitFormatter.effortDisplay(workout.liveStrain, scale: effortScale)),
+            ])
+        } else {
+            classicBody
+        }
+        #else
+        classicBody
+        #endif
+    }
+
+    private var classicBody: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: NoopMetrics.gap) {
                 stat("HR", model.bpm.map { "\($0)" } ?? "—",
@@ -1278,8 +1564,50 @@ private struct LiveLogCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(CardAppearancePrefs.opacityKey) private var cardOpacityPercent = CardAppearancePrefs.defaultPercent
     private var cardOpacity: Double { max(0, min(1, Double(cardOpacityPercent) / 100)) }
+    /// The iPhone redesign's card (same log, exports and Test Centre link; the title is the section header).
+    var redesign: Bool = false
 
     var body: some View {
+        #if os(iOS)
+        if redesign {
+            redesignBody
+        } else {
+            classicBody
+        }
+        #else
+        classicBody
+        #endif
+    }
+
+    #if os(iOS)
+    private var redesignBody: some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                HStack(spacing: NoopTheme.Layout.l) {
+                    Spacer()
+                    Button("Copy") { copyStrapLog() }
+                    Button("Save…") { saveStrapLog() }
+                }
+                .buttonStyle(.noopPress)
+                .noopFont(.footnote, color: false)
+                .fontWeight(.semibold)
+                .foregroundStyle(NoopTheme.textPrimary)
+                if scenePhase == .background {
+                    Color.clear.frame(height: 200)
+                } else {
+                    logScroller
+                }
+                NavigationLink(destination: TestCentreView()) {
+                    NoopListRow("Open Test Centre to report a bug", systemImage: "testtube.2")
+                }
+                .buttonStyle(.noopPress)
+                .accessibilityLabel("Open Test Centre")
+            }
+        }
+    }
+    #endif
+
+    private var classicBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Text("STRAP LOG").font(StrandFont.overline).tracking(StrandFont.overlineTracking)
@@ -1340,8 +1668,7 @@ private struct LiveLogCard: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(tail.indices, id: \.self) { idx in
-                        Text(tail[idx]).font(StrandFont.mono)
-                            .foregroundStyle(StrandPalette.textSecondary)
+                        logLine(tail[idx])
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .id(idx)
                     }
@@ -1358,6 +1685,19 @@ private struct LiveLogCard: View {
                 if let last = live.log.indices.last { proxy.scrollTo(last, anchor: .bottom) }
             }
         }
+    }
+
+    /// One log line in the presentation's monospaced style.
+    @ViewBuilder private func logLine(_ line: String) -> some View {
+        #if os(iOS)
+        if redesign {
+            Text(line).noopFont(.caption, color: false).monospaced().foregroundStyle(NoopTheme.textSecondary)
+        } else {
+            Text(line).font(StrandFont.mono).foregroundStyle(StrandPalette.textSecondary)
+        }
+        #else
+        Text(line).font(StrandFont.mono).foregroundStyle(StrandPalette.textSecondary)
+        #endif
     }
 
     // MARK: - Strap-log export (issue #17 — let macOS users share the log for bug reports)
@@ -1467,3 +1807,357 @@ enum LiveRingCopy {
         }
     }
 }
+
+#if os(iOS)
+// MARK: - iPhone redesign (A4 Live heart rate)
+
+/// Geometry and timing from the round 3 A4 board that have no `NoopTheme` token.
+private enum LiveRedesignLayout {
+    static let heroHeight: CGFloat = 270
+    static let ringDiameter: CGFloat = 230
+    static let ringLine: CGFloat = 5
+    static let haloDiameter: CGFloat = 210
+    static let haloLine: CGFloat = 2
+    static let haloScale: CGFloat = 1.1
+    static let haloOpacity: Double = 0.5
+    static let zoneStripHeight: CGFloat = 8
+    static let inactiveZoneOpacity: Double = 0.35
+    static let traceHeight: CGFloat = 130
+    static let liveDot: CGFloat = 8
+    static let textGap: CGFloat = 2
+    /// A stream that delivered within this many seconds reads as live.
+    static let liveWindow: TimeInterval = 5
+    /// The trace's rolling window: the last five minutes of 1 Hz samples.
+    static let traceWindow: TimeInterval = 300
+
+    /// "Just now" under two seconds, else the short relative age ("12 sec. ago").
+    static func ageLabel(_ age: TimeInterval) -> String {
+        if age < 2 { return String(localized: "Just now") }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(fromTimeInterval: -age)
+    }
+}
+
+/// The last five minutes of live heart rate, banked once a second from the spike-filtered median
+/// (`AppModel.bpm`, the value every screen shows) while this screen is open. The same 1 Hz banking as the
+/// classic Health hero (#941), so a steady heart rate draws flat; nothing is banked without a reading.
+/// The line is coloured by HR zone and updates in place (no redraw per sample).
+private struct LiveRecentHRTrace: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var samples: [NoopChartPoint] = []
+    private let sampleTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        let zoneSet = model.profile.hrZoneSet
+        let bounds: ClosedRange<Double>? = zoneSet.zones.first.flatMap { z1 in
+            zoneSet.maxHR > z1.lower ? z1.lower...zoneSet.maxHR : nil
+        }
+        NoopGlassCard {
+            if samples.count >= 2 {
+                NoopLineChart(points: samples, color: NoopTheme.heart, zones: true, zoneBounds: bounds,
+                              xLabels: [startLabel, String(localized: "Now")],
+                              redrawOnChange: false,
+                              accessibilityLabel: Text("Live heart rate over time"),
+                              valueFormat: { String(localized: "\(Int($0.rounded())) bpm") })
+                    .frame(height: LiveRedesignLayout.traceHeight)
+            } else {
+                Text("Waiting for the strap")
+                    .noopFont(.footnote)
+                    .frame(maxWidth: .infinity, minHeight: LiveRedesignLayout.traceHeight)
+            }
+        }
+        .onReceive(sampleTimer) { now in
+            guard let bpm = model.bpm, (30...220).contains(bpm) else { return }
+            samples.append(NoopChartPoint(date: now, y: Double(bpm)))
+            let cutoff = now.addingTimeInterval(-LiveRedesignLayout.traceWindow).timeIntervalSince1970
+            samples.removeAll { $0.x < cutoff }
+        }
+    }
+
+    /// How far back the banked trace actually reaches (it starts when the screen opens).
+    private var startLabel: String {
+        guard let first = samples.first, let last = samples.last else { return "" }
+        let span = Int((last.x - first.x).rounded())
+        return span >= 60 ? String(localized: "−\(span / 60) min") : String(localized: "−\(span) s")
+    }
+}
+
+extension LiveView {
+    /// A4: the live heart-rate hero, the last five minutes, the streams, then every classic control
+    /// (session, strap, devices, log) in the redesign's surfaces. Same state, same actions.
+    var redesignConsole: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                NoopPill(verbatim: "\(activeDeviceName) · \(linkState.label)", dot: liveRedesignLinkColor)
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.s)
+                    .accessibilityLabel(Text(verbatim: "\(activeDeviceName), \(linkState.label)"))
+                LiveHeartReadout(activeIsWhoop: activeIsWhoop, activeIsOura: activeIsOura,
+                                 hrMax: model.profile.hrMax, redesign: true)
+                    .padding(.top, NoopTheme.Layout.m)
+                    .noopEntrance(index: 0)
+                liveRedesignNotices
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                NoopSectionHeader("Last 5 minutes")
+                LiveRecentHRTrace()
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .noopEntrance(index: 1)
+                NoopSectionHeader("Signals")
+                LiveSignalTrustRail(activeConnection: activeConnection, activeIsWhoop: activeIsWhoop, redesign: true)
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .noopEntrance(index: 2)
+                NoopSectionHeader("Session")
+                liveRedesignSession
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                NoopSectionHeader("Strap")
+                liveRedesignStrap
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                NoopSectionHeader("Strap log")
+                LiveLogCard(redesign: true)
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .noopAmbientBackground(
+            AmbientPreset.liveHeartRate.blobs(intensity: AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced))
+        .navigationTitle(Text("Live"))
+    }
+
+    /// The strap pill's dot, from the same `linkState` the label names.
+    private var liveRedesignLinkColor: Color {
+        switch linkState {
+        case .bondedStreaming, .ringStreaming: return NoopTheme.recovery
+        case .liveHROnly, .connected, .pairedIdle: return NoopTheme.recoveryMid
+        case .disconnected: return NoopTheme.recoveryLow
+        }
+    }
+
+    // MARK: Notices and connect callouts
+
+    /// The classic console's banners and connect callouts, in the same order and under the same conditions.
+    @ViewBuilder private var liveRedesignNotices: some View {
+        VStack(spacing: NoopTheme.Layout.cardGap) {
+            if let guide = live.reconnectGuide {
+                liveRedesignNotice(systemImage: "exclamationmark.triangle.fill", tint: NoopTheme.recoveryMid,
+                                   title: "Can't connect: your strap's pairing was reset", detail: guide)
+                    .accessibilityLabel("Reconnect help: \(guide)")
+            }
+            if let hint = live.pairingHint {
+                liveRedesignNotice(systemImage: "exclamationmark.triangle.fill", tint: NoopTheme.recoveryMid,
+                                   title: "Live HR works. Free the strap to unlock buzz, alarms & sync", detail: hint)
+                    .accessibilityLabel("Pairing help: \(hint)")
+            }
+            if activeIsWhoop, !live.connected {
+                NoopGlassCard {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                        HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                            DomainIcon(systemImage: "antenna.radiowaves.left.and.right", color: NoopTheme.breath,
+                                       size: DomainIcon.smallSize)
+                            VStack(alignment: .leading, spacing: LiveRedesignLayout.textGap) {
+                                Text("Start a live stream").noopFont(.rowTitle)
+                                Text("Scan connects to \(activeDeviceName). To pair or switch bands, open Devices.")
+                                    .noopFont(.footnote)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        liveRedesignScanButton
+                    }
+                }
+            }
+            if activeIsOura, ringPhase != .authenticated {
+                NoopGlassCard {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                        HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                            DomainIcon(systemImage: "antenna.radiowaves.left.and.right", color: NoopTheme.breath,
+                                       size: DomainIcon.smallSize)
+                            VStack(alignment: .leading, spacing: LiveRedesignLayout.textGap) {
+                                Text(LiveRingCopy.status(ringPhase, streaming: false)).noopFont(.rowTitle)
+                                Text("Reconnect drops the current link, if any, and connects to the ring again. To pair or switch bands, open Devices.")
+                                    .noopFont(.footnote)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        liveRedesignRingReconnectButton
+                    }
+                }
+            }
+            // The #80 low-bandwidth fallback: informational, live HR still works.
+            if Self.shouldShowStandardHRNote(live.standardHRMode) {
+                liveRedesignNotice(systemImage: "antenna.radiowaves.left.and.right", tint: NoopTheme.breath,
+                                   title: "Standard HR mode (low bandwidth)", detail: live.standardHRMode ?? "",
+                                   footnote: "Other metrics (R-R, frames, battery, history) need a full sync.")
+                    .accessibilityLabel("Standard HR mode, low bandwidth. \(live.standardHRMode ?? "")")
+            }
+        }
+        .padding(.top, NoopTheme.Layout.l)
+    }
+
+    private func liveRedesignNotice(systemImage: String, tint: Color, title: LocalizedStringKey, detail: String,
+                                    footnote: LocalizedStringKey? = nil) -> some View {
+        NoopGlassCard {
+            HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                DomainIcon(systemImage: systemImage, color: tint, size: DomainIcon.smallSize)
+                VStack(alignment: .leading, spacing: LiveRedesignLayout.textGap) {
+                    Text(title).noopFont(.rowTitle)
+                    Text(verbatim: detail).noopFont(.footnote).fixedSize(horizontal: false, vertical: true)
+                    if let footnote {
+                        Text(footnote).noopFont(.caption).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Session
+
+    @ViewBuilder private var liveRedesignSession: some View {
+        if let workout = model.activeWorkout {
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        Circle().fill(workout.isPaused ? NoopTheme.textTertiary : NoopTheme.heart)
+                            .frame(width: LiveRedesignLayout.liveDot, height: LiveRedesignLayout.liveDot)
+                            .accessibilityHidden(true)
+                        // "Recording" is a factual claim; while paused nothing is recorded, so the label swaps.
+                        Text(workout.isPaused ? "Paused" : "Recording workout")
+                            .noopFont(.rowTitle, color: false)
+                            .foregroundStyle(workout.isPaused ? NoopTheme.textSecondary : NoopTheme.heart)
+                        Spacer()
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(ActiveWorkoutClock.clock(Int(workout.elapsed(at: context.date))))
+                                .noopFont(.rowNumber)
+                        }
+                    }
+                    ActiveWorkoutLive(workout: workout, effortScale: effortScale, redesign: true)
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        Button { model.toggleWorkoutPause() } label: {
+                            Label(workout.isPaused ? "Resume" : "Pause",
+                                  systemImage: workout.isPaused ? "play.fill" : "pause.fill")
+                        }
+                        .buttonStyle(NoopSecondaryButton())
+                        Button { showLiveWorkout = true } label: {
+                            Label("Open live view", systemImage: "rectangle.expand.vertical")
+                        }
+                        .buttonStyle(NoopSecondaryButton())
+                    }
+                    // The irreversible action on its own row, behind the existing confirmation.
+                    Button { confirmingEndWorkout = true } label: {
+                        Label("End workout", systemImage: "stop.circle.fill").foregroundStyle(NoopTheme.recoveryLow)
+                    }
+                    .buttonStyle(NoopSecondaryButton())
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
+                NoopGlassCard {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                        Text("Ready for a marked effort.").noopFont(.rowTitle)
+                        Text(activeConnection
+                             ? "Start a workout when the stream matters. NOOP records the interval, HR, peak, average and effort from the same live feed."
+                             : "Connect the strap first, then mark a workout from the live stream.")
+                            .noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button { showStartSport = true } label: {
+                            Label("Start workout", systemImage: "figure.run")
+                        }
+                        .buttonStyle(NoopPrimaryButton())
+                        .disabled(!activeConnection)
+                        HStack(spacing: NoopTheme.Layout.s) {
+                            Button { showHRVSnapshot = true } label: {
+                                Label("HRV reading", systemImage: "waveform.path.ecg")
+                            }
+                            .buttonStyle(NoopSecondaryButton())
+                            .disabled(!activeConnection)
+                            Button { model.getBattery() } label: {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(NoopSecondaryButton())
+                            .disabled(!activeConnection)
+                        }
+                    }
+                }
+                if let last = model.lastWorkout {
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(NoopTheme.recovery)
+                            .accessibilityHidden(true)
+                        Text("Workout saved · \(workoutSavedSummary(last))").noopFont(.footnote)
+                    }
+                    .padding(.horizontal, NoopTheme.Layout.xs)
+                }
+            }
+        }
+    }
+
+    // MARK: Strap
+
+    @ViewBuilder private var liveRedesignStrap: some View {
+        VStack(spacing: NoopTheme.Layout.cardGap) {
+            if activeIsWhoop || activeIsOura {
+                NoopGlassCard {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                        // The strap-family picker while not streaming, so a WHOOP 4 and a 5/MG owner can switch.
+                        if activeIsWhoop, !activeConnection {
+                            SegmentedPills(WhoopModel.allCases, selection: strapModelSelection) {
+                                Text(verbatim: $0.displayName)
+                            }
+                            if selectedModel == .whoop5mg {
+                                Text("WHOOP 5.0/MG pairs with one app at a time. If a scan finds nothing, unpair it in the official WHOOP app and fully close that app, then Scan again.")
+                                    .noopFont(.footnote)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        if activeIsWhoop {
+                            liveRedesignScanButton
+                            HStack(spacing: NoopTheme.Layout.s) {
+                                // #921: the confirmed one-shot buzz sequence.
+                                Button { model.buzzStrapOnce() } label: {
+                                    Label("Buzz strap", systemImage: "waveform.path")
+                                }
+                                .buttonStyle(NoopSecondaryButton())
+                                .disabled(!activeConnection)
+                                Button { model.disconnect() } label: {
+                                    Label("Disconnect", systemImage: "xmark.circle")
+                                        .foregroundStyle(NoopTheme.recoveryLow)
+                                }
+                                .buttonStyle(NoopSecondaryButton())
+                                .disabled(!live.connected)
+                            }
+                        } else {
+                            Text(LiveRingCopy.status(ringPhase, streaming: ringStreaming))
+                                .noopFont(.footnote)
+                                .fixedSize(horizontal: false, vertical: true)
+                            liveRedesignRingReconnectButton
+                        }
+                    }
+                }
+            }
+            NoopGlassCard(flush: true) {
+                Button { router.openDevices() } label: {
+                    NoopListRow("Manage devices", systemImage: "badge.plus.radiowaves.right",
+                                color: NoopTheme.breath, detail: manageDevicesDetail, showsDivider: false)
+                }
+                .buttonStyle(.noopPress)
+                .accessibilityHint("Opens the Devices screen, where you pair and switch bands.")
+            }
+        }
+    }
+
+    private var liveRedesignScanButton: some View {
+        Button { model.scan(model: selectedModel) } label: {
+            Label(live.connected ? "Re-scan" : "Scan & connect", systemImage: "antenna.radiowaves.left.and.right")
+        }
+        .buttonStyle(NoopPrimaryButton())
+    }
+
+    private var liveRedesignRingReconnectButton: some View {
+        Button { model.reconnectOuraRing() } label: {
+            Label("Reconnect ring", systemImage: "arrow.clockwise")
+        }
+        .buttonStyle(NoopPrimaryButton())
+    }
+}
+#endif

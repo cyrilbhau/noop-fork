@@ -37,7 +37,27 @@ struct InsightsHubView: View {
     /// The currently-selected outcome for the ranked feed (Charge / HRV / Rest / RHR).
     @State private var outcome: InsightsHubViewModel.Outcome = .recovery
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    #endif
+
     var body: some View {
+        Group {
+            #if os(iOS)
+            // iPhone redesign (C6): the same view model, ranking and dose cards, drawn as diverging bars.
+            if redesignEnabled { hubRedesignScreen } else { classicScaffold }
+            #else
+            classicScaffold
+            #endif
+        }
+        .task(id: repo.refreshSeq) { await model.load(repo: repo) }
+        .onChangeCompat(of: outcome) { model.rankFor($0) }
+    }
+
+    /// The classic Insights hub (macOS, and iOS with the redesign switched off). Unchanged layout.
+    private var classicScaffold: some View {
         ScreenScaffold(title: "Insights",
                        subtitle: "Patterns in your own data: association, not cause.",
                        // PERF (scroll): lazy column — byte-identical layout (LazyVStack == eager VStack
@@ -54,8 +74,6 @@ struct InsightsHubView: View {
                 }
             }
         }
-        .task(id: repo.refreshSeq) { await model.load(repo: repo) }
-        .onChangeCompat(of: outcome) { model.rankFor($0) }
     }
 
     // MARK: - What moves your Charge (ranked, lag-aware)
@@ -254,6 +272,8 @@ private extension ScoreState {
 
 private struct DoseResponseCardView: View {
     let card: InsightsHubViewModel.DoseCard
+    /// Draws the iPhone redesign (C6) instead of the classic card; same state and copy.
+    var redesign = false
 
     /// The "what if I have one more" preview dose, defaulting to one above the typical
     /// starting point so the headline reads as a 2nd-drink forecast out of the box.
@@ -262,8 +282,16 @@ private struct DoseResponseCardView: View {
     private var domain: DomainTheme { card.outcomeName == "HRV" ? .rest : .charge }
 
     var body: some View {
+        #if os(iOS)
+        if redesign { redesignBody } else { classicBody }
+        #else
+        classicBody
+        #endif
+    }
+
+    private var classicBody: some View {
         let r = card.response
-        NoopCard(tint: domain.color) {
+        return NoopCard(tint: domain.color) {
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                 header(r)
 
@@ -322,12 +350,7 @@ private struct DoseResponseCardView: View {
     // MARK: Evening damage forecast (what-if on the user's latest Charge)
 
     @ViewBuilder private func damageForecast(_ r: DoseResponse) -> some View {
-        // The Δ of going from the typical starting dose (1) to the previewed dose, applied
-        // to the user's most recent outcome value as an honest "where you'd likely land".
-        let fromDose = 1
-        let delta = r.delta(fromDose: fromDose, toDose: previewDose)
-        let projected = card.latestOutcome.map { max(0, min(card.outcomeCeiling, $0 + delta)) }
-        let stepLabel = previewDose <= 1 ? String(localized: "no extra") : card.stepLabel(previewDose)
+        let (delta, projected, stepLabel) = forecastInputs(r)
 
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             // Overline and the dose stepper each get their own row — sharing one HStack
@@ -355,6 +378,16 @@ private struct DoseResponseCardView: View {
                          accent: domain.color)
             }
         }
+    }
+
+    /// The Δ of going from the typical starting dose (1) to the previewed dose, applied to the user's most
+    /// recent outcome value as an honest "where you'd likely land". Shared by both layouts.
+    private func forecastInputs(_ r: DoseResponse) -> (delta: Double, projected: Double?, stepLabel: String) {
+        let fromDose = 1
+        let delta = r.delta(fromDose: fromDose, toDose: previewDose)
+        let projected = card.latestOutcome.map { max(0, min(card.outcomeCeiling, $0 + delta)) }
+        let stepLabel = previewDose <= 1 ? String(localized: "no extra") : card.stepLabel(previewDose)
+        return (delta, projected, stepLabel)
     }
 
     /// Whole-phrase variants per direction and basis, so translators never see stitched
@@ -478,6 +511,270 @@ private struct DoseCurveChart: View {
         .accessibilityElement()
     }
 }
+
+// MARK: - iPhone redesign (C6 What moves you)
+//
+// `design/round3/sleep-health.html` C6 over the same view model: the lag-aware ranked feed as diverging
+// bars around a centre rule, each with its confidence tier and group sizes, tap to expand the existing
+// sentence, means and effect size. The dose-response cards keep their curve, honesty banners and
+// what-if stepper. The experiment itself lives on the Journal screen, linked from here.
+
+#if os(iOS)
+extension InsightsHubView {
+    var hubRedesignScreen: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                hubRdHeader
+                    .noopEntrance(index: 0)
+                SegmentedPills(InsightsHubViewModel.Outcome.allCases, selection: $outcome) { Text(verbatim: $0.label) }
+                    .accessibilityLabel(Text("Outcome metric"))
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.l)
+                if !model.loaded {
+                    NoopGlassCard {
+                        Text("Reading your journal and outcomes…")
+                            .noopFont(.bodySmall)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .noopSkeleton(true)
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.l)
+                } else {
+                    hubRdMovers
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.l)
+                        .noopEntrance(index: 1)
+                    hubRdExperimentLink
+                        .noopEntrance(index: 2)
+                    InsightsSectionTitle("Dose-response")
+                    hubRdDose
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .noopEntrance(index: 3)
+                    InsightsSectionTitle("How to read this")
+                    NoopGlassCard {
+                        Text(String(localized: "Everything here is a pattern in your own logged days: an association with an effect size and confidence, never a cause or a diagnosis. Population patterns are shown as \u{201C}typical\u{201D} and are always overridden by your own data once you have enough of it. Approximations, not WHOOP\u{2019}s scores; not a medical device."))
+                            .noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                }
+            }
+            .padding(.bottom, NoopMetrics.tabBarClearance)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .insightsAmbient(.whatMovesYou, intensityRaw: ambientIntensityRaw)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    private var hubRdHeader: some View {
+        let days = model.loaded ? model.answeredOutcomeDayCount(outcome) : 0
+        return InsightsScreenHeader(
+            titleText: Text("What moves your \(outcome.outcomeName)"),
+            subtitleText: days > 0 ? Text("From \(days) logged days of your own data") : nil)
+    }
+
+    // MARK: Movers
+
+    @ViewBuilder
+    private var hubRdMovers: some View {
+        if model.ranked.isEmpty {
+            NoopGlassCard {
+                Text(verbatim: String(localized: "Not enough overlap between your journal answers and \(outcome.outcomeName.lowercased()) yet. Keep logging. Each behaviour needs days both with and without it before NOOP can read its effect."))
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            let fractions = InsightsDivergingBar.fractions(model.ranked.map { $0.effect.pctChange ?? $0.effect.delta })
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                NoopGlassCard(flush: true) {
+                    ForEach(model.ranked.indices, id: \.self) { i in
+                        hubRdMoverRow(model.ranked[i], fraction: fractions[i], showsDivider: i > 0)
+                    }
+                }
+                (Text("Average change versus days without it.") + Text(verbatim: " ")
+                 + Text("A pattern in your data, not proof of cause."))
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, NoopTheme.Layout.xs)
+            }
+        }
+    }
+
+    private func hubRdConfidenceWord(_ c: ScoreConfidence) -> String {
+        switch c {
+        case .solid: return String(localized: "Solid")
+        case .building: return String(localized: "Building")
+        case .calibrating: return String(localized: "Calibrating")
+        }
+    }
+
+    private func hubRdLagWord(_ lag: Int) -> String {
+        switch lag {
+        case 0: return String(localized: "Same day")
+        case 1: return String(localized: "Next morning")
+        default: return String(localized: "\(lag) mornings later")
+        }
+    }
+
+    private func hubRdMoverRow(_ r: RankedEffect, fraction: Double, showsDivider: Bool) -> some View {
+        let e = r.effect
+        let movedGood: Bool? = e.delta == 0 ? nil : ((e.delta > 0) == outcome.higherIsBetter)
+        let color: Color = movedGood.map { good in
+            good ? NoopTheme.recovery : (e.significant ? NoopTheme.recoveryLow : NoopTheme.recoveryMid)
+        } ?? NoopTheme.textTertiary
+        let sign = e.delta > 0 ? "+" : (e.delta < 0 ? "−" : "")
+        let value = e.pctChange.map { "\(sign)\(Int(abs($0).rounded()))%" } ?? "\(sign)\(outcome.format(abs(e.delta)))"
+        let groups = String(localized: "\(hubRdConfidenceWord(r.confidence)) · \(e.nWith) days with, \(e.nWithout) without")
+        return InsightsEffectRow(
+            title: r.behavior,
+            caption: "\(groups) · \(hubRdLagWord(r.lag))",
+            valueText: value, fraction: fraction, color: color, muted: !e.significant,
+            showsDivider: showsDivider
+        ) {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                Text(verbatim: MetricCatalog.scoreDisplayText(r.sentence()))
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                StatGrid([
+                    StatGridItem("With", value: outcome.format(e.meanWith)),
+                    StatGridItem("Without", value: outcome.format(e.meanWithout)),
+                    StatGridItem("Effect size", value: String(format: "d = %.2f", e.cohensD),
+                                 unit: Self.effectMagnitudeWord(e.cohensD)),
+                ], columns: 3)
+            }
+        }
+    }
+
+    // MARK: Experiment link
+
+    private var hubRdExperimentLink: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            InsightsSectionTitle("Try an experiment")
+            NavigationLink { InsightsView() } label: {
+                NoopGlassCard {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                        Text("Run a clean personal test").noopFont(.rowTitle)
+                        Text("Pick one behaviour you log, one outcome, and a short window. NOOP compares the days you log the behaviour against your behaviour-free days before the start.")
+                            .noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: NoopTheme.Layout.xs) {
+                            Text("Personal Experiment").noopFont(.bodySmall, color: false)
+                                .foregroundStyle(NoopTheme.coach)
+                            Image(systemName: "chevron.right")
+                                .noopFont(.footnote, color: false)
+                                .foregroundStyle(NoopTheme.coach)
+                                .accessibilityHidden(true)
+                        }
+                        .padding(.top, NoopTheme.Layout.xs)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .insightsTintedCard(NoopTheme.coach)
+            }
+            .buttonStyle(.noopPress)
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        }
+    }
+
+    // MARK: Dose-response
+
+    @ViewBuilder
+    private var hubRdDose: some View {
+        if model.doseCards.isEmpty {
+            NoopGlassCard {
+                Text(String(localized: "Log alcohol or late caffeine with an amount and NOOP fits a personal dose curve: how much each extra unit tends to move your numbers. Until then it shows typical patterns, clearly labelled as not yet yours."))
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            VStack(spacing: NoopTheme.Layout.cardGap) {
+                ForEach(model.doseCards) { card in
+                    DoseResponseCardView(card: card, redesign: true)
+                }
+            }
+        }
+    }
+}
+
+extension DoseResponseCardView {
+    private var rdColor: Color { card.outcomeName == "HRV" ? NoopTheme.hrv : NoopTheme.recovery }
+
+    var redesignBody: some View {
+        let r = card.response
+        let (delta, projected, stepLabel) = forecastInputs(r)
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack(spacing: NoopTheme.Layout.m) {
+                    DomainIcon(systemImage: card.symbol, color: rdColor, size: DomainIcon.smallSize)
+                    Text(verbatim: card.title).noopFont(.rowTitle)
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    Text(verbatim: rdConfidenceWord(r.confidence)).noopFont(.caption)
+                }
+                Text(verbatim: MetricCatalog.scoreDisplayText(r.sentence()))
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                // The prior-shrunk curve: dose on x, modelled change on y. No zero rule, no gridlines.
+                NoopLineChart(
+                    points: r.curve.map { NoopChartPoint(x: Double($0.dose), y: $0.outcomeDelta) },
+                    color: rdColor,
+                    xLabels: r.curve.map { card.doseChoiceLabel($0.dose) },
+                    accessibilityLabel: Text(verbatim: curveAccessibilityLabel(r)),
+                    valueFormat: { signed($0, suffix: card.outcomeSuffix) })
+                    .frame(height: InsightsLayout.stressTrendChart)
+                if r.priorDominated {
+                    rdNote(String(localized: "Based mostly on typical patterns, not yet yours. Log a few more \(card.unitLabel.lowercased()) days and this becomes yours."))
+                } else if r.contradictsPrior {
+                    rdNote(String(localized: "In your data so far, this doesn\u{2019}t move your \(card.outcomeName) the way it typically does."))
+                }
+                if card.timingProxy {
+                    Text("\u{201C}Dose\u{201D} here is timing (later in the day = stronger), not milligrams.")
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Rectangle().fill(NoopTheme.separator).frame(height: 1).accessibilityHidden(true)
+                Text(verbatim: card.forecastOverline).noopFont(.footnote)
+                SegmentedPills(card.doseChoices, selection: $previewDose) { Text(verbatim: card.doseChoiceLabel($0)) }
+                    .accessibilityLabel(Text("Preview dose"))
+                Text(verbatim: forecastSentence(delta: delta, projected: projected, stepLabel: stepLabel))
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                StatGrid([
+                    StatGridItem("Per extra \(card.unitNoun)", value: signed(r.perUnit, suffix: card.outcomeSuffix),
+                                 unit: r.priorDominated ? String(localized: "typical") : String(localized: "your data")),
+                    StatGridItem("Tomorrow\u{2019}s \(card.outcomeName)",
+                                 value: projected.map { "\(Int($0.rounded()))\(card.outcomeSuffix)" }),
+                ])
+                Text(verbatim: projected != nil ? String(localized: "projected · \(stepLabel)")
+                                                : String(localized: "needs a recent day"))
+                    .noopFont(.caption)
+            }
+        }
+    }
+
+    private func rdConfidenceWord(_ c: ScoreConfidence) -> String {
+        switch c {
+        case .solid: return String(localized: "Solid")
+        case .building: return String(localized: "Building")
+        case .calibrating: return String(localized: "Calibrating")
+        }
+    }
+
+    private func rdNote(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: NoopTheme.Layout.s) {
+            Image(systemName: "info.circle.fill")
+                .noopFont(.caption, color: false)
+                .foregroundStyle(NoopTheme.textTertiary)
+                .accessibilityHidden(true)
+            Text(verbatim: text)
+                .noopFont(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+#endif
 
 // MARK: - View-model
 //
@@ -622,6 +919,16 @@ final class InsightsHubViewModel: ObservableObject {
         self.doseCards = cards
         self.loaded = true
         rankFor(currentOutcome)
+    }
+
+    /// Days that carry both a journal answer (yes or no) and a value for `outcome`: the coverage line under
+    /// the redesigned hub's title. A count of loaded rows, not a score.
+    func answeredOutcomeDayCount(_ outcome: Outcome) -> Int {
+        let outcomeDays = outcomeByKey[outcome.key] ?? [:]
+        var answered = Set<String>()
+        for days in behaviours.values { answered.formUnion(days) }
+        for days in controls.values { answered.formUnion(days) }
+        return answered.reduce(0) { $0 + (outcomeDays[$1] != nil ? 1 : 0) }
     }
 
     /// Re-rank the mover feed for a (possibly new) outcome selection — cheap, no DB.
