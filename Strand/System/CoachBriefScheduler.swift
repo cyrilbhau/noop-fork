@@ -412,7 +412,7 @@ enum CoachBriefScheduler {
                 #if os(iOS)
                 publishToWidget(text)
                 #endif
-                postNotification(title: String(localized: "Today's coaching brief"),
+                postNotification(title: String(localized: "Your morning brief"),
                                   body: oneLineSummary(from: text), connectionID: connection.generation.uuidString)
                 return true
             },

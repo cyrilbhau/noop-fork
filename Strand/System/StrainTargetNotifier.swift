@@ -36,11 +36,14 @@ enum StrainTargetNotifier {
             return dayStrain >= target && lastNotifiedDay != today
         }
 
-        /// Title + body for the nudge. `target` is the optimal-band low on the 0-21 coupled axis.
-        /// NOOP's OWN wording — the feature is reimplemented behaviour, not copied copy.
-        static func copy(target: Int) -> (title: String, body: String) {
-            (String(localized: "Optimal strain reached"),
-             String(localized: "You've hit today's optimal strain target of \(target). Nice work — your recovery earned it."))
+        /// Title + body for the nudge. `target` is the optimal-band low on the 0-21 coupled axis and
+        /// `dayStrain` the day's Strain on the same axis. NOOP's OWN wording — the feature is reimplemented
+        /// behaviour, not copied copy. Titles state the fact; the body says what to do
+        /// (docs/personal/REDESIGN-IMPLEMENTATION.md Appendix A).
+        static func copy(target: Int, dayStrain: Double) -> (title: String, body: String) {
+            let strain = dayStrain.formatted(.number.precision(.fractionLength(1)))
+            return (String(localized: "Strain target reached"),
+                    String(localized: "You're at \(strain), past today's target of \(target). Anything more today is extra load for tomorrow."))
         }
     }
 
@@ -64,8 +67,8 @@ enum StrainTargetNotifier {
                                               target: target21.map(Double.init),
                                               lastNotifiedDay: d.string(forKey: lastDayKey),
                                               today: day) else { return }
-        // Non-nil: shouldNotify above required a non-nil target before returning true.
-        let copy = StrainTargetPolicy.copy(target: target21!)
+        // Non-nil: shouldNotify above required a non-nil target and day strain before returning true.
+        let copy = StrainTargetPolicy.copy(target: target21!, dayStrain: dayStrain21!)
         let center = UNUserNotificationCenter.current()
         // Authorization is requested once via requestAuthorization() when the toggle is enabled; here we
         // only check status (no second system prompt) — the BatteryNotifier idiom.
