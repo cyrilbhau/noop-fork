@@ -285,7 +285,10 @@ struct TrainingHubView: View {
         let range = cal.range(of: .day, in: .month, for: month) ?? 1..<29
         let days: [Date] = range.compactMap { cal.date(byAdding: .day, value: $0 - 1, to: month) }
             .filter { $0 <= today }
-        let columns = Array(repeating: GridItem(.flexible(), spacing: TrainingLayout.dotGap), count: 7)
+        // `.flexible()` alone defaults to a 10 pt minimum per column, which made three month grids wider than
+        // a 402 pt screen and pushed the whole hub past its gutters; the dot size is the real minimum.
+        let columns = Array(repeating: GridItem(.flexible(minimum: TrainingLayout.dot), spacing: TrainingLayout.dotGap),
+                            count: 7)
         return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
             Text(verbatim: month.formatted(.dateTime.month(.abbreviated)))
                 .noopFont(.caption, color: false)
