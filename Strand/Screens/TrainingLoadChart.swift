@@ -22,6 +22,11 @@ import StrandDesign
 struct TrainingLoadChart: View {
     let rows: [TrainingLoadCard.Row]
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @State private var selectedDate: Date?
+    #endif
+
     /// The x-position the cursor is hovering, in chart-local coordinates.
     @State private var hoverX: CGFloat? = nil
 
@@ -49,6 +54,10 @@ struct TrainingLoadChart: View {
 
     private func fmt(_ v: Double) -> String { String(format: "%.1f", v) }
 
+    private func trainingLoadValues(_ p: TrainingLoadCard.Row) -> String {
+        String(localized: "CTL \(fmt(p.ctl)) · ATL \(fmt(p.atl))")
+    }
+
     private static let tooltipDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "d MMM yyyy"
@@ -56,6 +65,14 @@ struct TrainingLoadChart: View {
     }()
 
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled { redesignedChart } else { classicChart }
+        #else
+        classicChart
+        #endif
+    }
+
+    @ViewBuilder private var classicChart: some View {
         // Floor at 1 (matching the Android `fold(1.0)` twin): an all-rest window of zero loads would
         // otherwise make the y-domain `0...0`, which Swift Charts renders as a degenerate/empty scale.
         let maxY = max(rows.map { max($0.ctl, $0.atl) }.max() ?? 1, 1)
@@ -94,7 +111,7 @@ struct TrainingLoadChart: View {
                             anchor: CGPoint(x: cx, y: min(pyCTL, pyATL) + plot.minY),
                             container: geo.size,
                             tooltip: ChartTooltip(
-                                value: String(localized: "CTL \(fmt(p.ctl)) · ATL \(fmt(p.atl))"),
+                                value: trainingLoadValues(p),
                                 label: Self.tooltipDateFormatter.string(from: p.date)
                             )
                         )
@@ -119,4 +136,56 @@ struct TrainingLoadChart: View {
         }
         .accessibilityLabel(Text("Training load: chronic vs acute"))
     }
+
+    #if os(iOS)
+    private var selectedRow: TrainingLoadCard.Row? {
+        guard let selectedDate else { return rows.last }
+        // Selection resolves against the full series, just like the classic hover readout.
+        return rows.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+    }
+
+    private var redesignedChart: some View {
+        let maxY = max(rows.map { max($0.ctl, $0.atl) }.max() ?? 1, 1)
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            if let row = selectedRow {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text(trainingLoadValues(row)).noopFont(.footnote)
+                    Text(row.date, format: .dateTime.day().month(.abbreviated).year()).noopFont(.caption)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            Chart {
+                ForEach(ctlRows) { row in
+                    AreaMark(x: .value("Day", row.date), yStart: .value("Load", 0), yEnd: .value("CTL", row.ctl))
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(LinearGradient(colors: [NoopTheme.lift.opacity(0.24), NoopTheme.lift.opacity(0)],
+                                                        startPoint: .top, endPoint: .bottom))
+                    LineMark(x: .value("Day", row.date), y: .value("CTL", row.ctl), series: .value("Series", "CTL"))
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(NoopTheme.lift)
+                }
+                ForEach(atlRows) { row in
+                    LineMark(x: .value("Day", row.date), y: .value("ATL", row.atl), series: .value("Series", "ATL"))
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(NoopTheme.strain)
+                }
+                if selectedDate != nil, let row = selectedRow {
+                    RuleMark(x: .value("Day", row.date))
+                        .foregroundStyle(NoopTheme.textSecondary.opacity(0.5))
+                    PointMark(x: .value("Day", row.date), y: .value("CTL", row.ctl))
+                        .foregroundStyle(NoopTheme.lift)
+                    PointMark(x: .value("Day", row.date), y: .value("ATL", row.atl))
+                        .foregroundStyle(NoopTheme.strain)
+                }
+            }
+            .chartYScale(domain: 0...(maxY * 1.08))
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .chartLegend(.hidden)
+            .chartXSelection(value: $selectedDate)
+            .frame(height: NoopTheme.Layout.tileMinHeight)
+            .accessibilityLabel(Text("Training load: chronic vs acute"))
+        }
+    }
+    #endif
 }

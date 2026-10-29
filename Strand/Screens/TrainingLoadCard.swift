@@ -21,6 +21,10 @@ import WhoopStore
 struct TrainingLoadCard: View {
     let days: [DailyMetric]
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     // yyyy-MM-dd → Date (en_US_POSIX, UTC) — same keying TrendsView uses so the x-axis matches.
     private static let dayParser: DateFormatter = {
         let f = DateFormatter()
@@ -102,6 +106,19 @@ struct TrainingLoadCard: View {
     var body: some View {
         let tl = result
         Group {
+            #if os(iOS)
+            if redesignEnabled { redesignedCard(tl) } else { classicCard(tl) }
+            #else
+            classicCard(tl)
+            #endif
+        }
+        // Both layouts use this one cache and the same refresh lifecycle.
+        .onAppear { refreshResult() }
+        .onChangeCompat(of: Self.modelKey(for: days)) { _ in refreshResult() }
+    }
+
+    private func classicCard(_ tl: TrainingLoadEngine.Result) -> some View {
+        Group {
             if !tl.isAvailable {
                 unavailableCard(contiguousDays: tl.contiguousDays)
             } else {
@@ -129,12 +146,48 @@ struct TrainingLoadCard: View {
                 )
             }
         }
-        // Persist the memoized result into `@State` (mirrors `CompareView`'s `.onAppear { refreshModel() }`
-        // / `.onChangeCompat(of: modelKey)` pair) so the NEXT render's `result` access hits the cache
-        // instead of recomputing — `body` itself never mutates `@State` mid-evaluation.
-        .onAppear { refreshResult() }
-        .onChangeCompat(of: Self.modelKey(for: days)) { _ in refreshResult() }
     }
+
+    #if os(iOS)
+    private func redesignedCard(_ tl: TrainingLoadEngine.Result) -> some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Training Load")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    if tl.isAvailable {
+                        Text(subtitle(for: tl)).noopFont(.footnote)
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                            redesignedLegendDot(color: NoopTheme.lift, label: "CTL · Fitness")
+                            redesignedLegendDot(color: NoopTheme.strain, label: "ATL · Fatigue")
+                        }
+                        TrainingLoadChart(rows: rows(from: tl))
+                            .frame(minHeight: NoopTheme.Layout.tileMinHeight)
+                        let latest = tl.points.last
+                        StatGrid([
+                            StatGridItem("CTL", value: latest.map { fmt($0.chronicLoad) }),
+                            StatGridItem("ATL", value: latest.map { fmt($0.acuteLoad) }),
+                            StatGridItem("Form", value: latest.map { signed($0.balance) }),
+                            StatGridItem("Days", value: "\(tl.contiguousDays)"),
+                        ])
+                    } else {
+                        Text("Chronic vs acute load").noopFont(.footnote)
+                        Text("Needs \(Self.minimum)+ consecutive days of Effort to begin. \(tl.contiguousDays) so far.")
+                            .noopFont(.bodySmall)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func redesignedLegendDot(color: Color, label: LocalizedStringKey) -> some View {
+        HStack(spacing: NoopTheme.Layout.s) {
+            Circle().fill(color).frame(width: NoopTheme.Layout.s, height: NoopTheme.Layout.s)
+                .accessibilityHidden(true)
+            Text(label).noopFont(.footnote)
+        }
+    }
+    #endif
 
     private var legend: some View {
         HStack(spacing: NoopMetrics.space2 * 2) {

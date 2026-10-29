@@ -621,6 +621,10 @@ struct CycleTrackerView: View {
 /// Estimated body-clock phase + an optional jet-lag / shift plan. The plan is LIGHT + SLEEP
 /// TIMING only — never a supplement. Behavioural awareness, approximate.
 struct BodyClockCard: View {
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     /// The phase estimate from `CircadianEngine.estimatePhase(...)`, computed in the analytics pass.
     let estimate: CircadianEngine.PhaseEstimate
     /// Optional active re-entrainment plan (jet-lag / shift). nil = no plan running.
@@ -632,6 +636,14 @@ struct BodyClockCard: View {
     private var hue: Color { StrandPalette.restColor }
 
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled { redesignedCard } else { classicCard }
+        #else
+        classicCard
+        #endif
+    }
+
+    private var classicCard: some View {
         NoopCard(tint: hue) {
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                 header
@@ -671,6 +683,53 @@ struct BodyClockCard: View {
         }
         .accessibilityElement(children: .contain)
     }
+
+    #if os(iOS)
+    private var redesignedCard: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Body clock")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                        Text("Light + sleep timing only").noopFont(.footnote)
+                        NoopPill(confidenceLabel, dot: NoopTheme.textSecondary)
+                    }
+                    Text(offsetTitle)
+                        .noopFont(.sectionTitle)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(offsetTitle)
+                    Text(localizedBodyClockNote(estimate))
+                        .noopFont(.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Label {
+                        Text("Estimated body-clock low around \(clockString(estimate.tempMinHour))")
+                    } icon: {
+                        Image(systemName: "moon.stars").foregroundStyle(NoopTheme.sleep)
+                    }
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                    if let plan, plan.direction != .none, let firstDay = plan.days.first {
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                            Text("Plan · \(plan.estimatedDays)-day shift").noopFont(.rowTitle)
+                            Text("Day 1: bright light \(clockString(firstDay.brightLightStartHour))-\(clockString(firstDay.brightLightEndHour)), lights-out around \(clockString(firstDay.targetSleepHour)).")
+                                .noopFont(.bodySmall)
+                            Text(localizedPlanNote(plan)).noopFont(.footnote)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityElement(children: .combine)
+                    }
+                    if let onOpenPlanner {
+                        Button(plan == nil
+                               ? String(localized: "Plan a trip or shift")
+                               : String(localized: "View the full plan"), action: onOpenPlanner)
+                            .buttonStyle(NoopSecondaryButton())
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+    #endif
 
     // MARK: pieces
 

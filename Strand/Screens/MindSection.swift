@@ -27,6 +27,10 @@ import WhoopStore
 struct MindSection: View {
     @EnvironmentObject var repo: Repository
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     /// Today's stored mood (1–5); nil until the user checks in.
     @State private var todayMood: Int?
     /// True while the user re-opens the collapsed card to change today's answer.
@@ -42,6 +46,17 @@ struct MindSection: View {
     private static let minAbsR = 0.3
 
     var body: some View {
+        Group {
+            #if os(iOS)
+            if redesignEnabled { redesignedSection } else { classicSection }
+            #else
+            classicSection
+            #endif
+        }
+        .task(id: repo.refreshSeq) { await load() }
+    }
+
+    private var classicSection: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Mind", overline: "Mood, alongside your body's signals")
 
@@ -57,8 +72,85 @@ struct MindSection: View {
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .task(id: repo.refreshSeq) { await load() }
     }
+
+    #if os(iOS)
+    private var redesignedSection: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Mind")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    Text("Mood, alongside your body's signals").noopFont(.footnote)
+                    if let mood = todayMood, !editing {
+                        HStack(spacing: NoopTheme.Layout.m) {
+                            Text(MoodStore.face(for: mood))
+                                .noopFont(.statNumber)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                                Text("Today's mood").noopFont(.footnote)
+                                Text(MoodStore.label(for: mood)).noopFont(.rowTitle)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Today's mood: \(MoodStore.label(for: mood)), \(mood) of 5")
+                            Spacer(minLength: NoopTheme.Layout.xs)
+                            Button("Edit") { editing = true }
+                                .noopFont(.bodySmall, color: false)
+                                .foregroundStyle(NoopTheme.sleep)
+                                .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+                                .buttonStyle(.noopPress)
+                                .accessibilityLabel("Edit today's mood")
+                        }
+                    } else {
+                        Text("How's your mood today?").noopFont(.rowTitle)
+                        HStack(spacing: NoopTheme.Layout.xs) {
+                            ForEach(MoodStore.scale, id: \.self) { value in
+                                redesignedFaceButton(value)
+                            }
+                        }
+                    }
+                }
+            }
+            if !lines.isEmpty {
+                Text("What tracks your mood (\(moodDayCount) check-ins)")
+                    .noopFont(.rowTitle)
+                ForEach(lines) { line in
+                    NoopGlassCard {
+                        HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                            NoopRing(value: line.strength, color: NoopTheme.sleep,
+                                     diameter: NoopTheme.Layout.xl, animate: false)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                                Text(line.text).noopFont(.bodySmall)
+                                Text(line.caption).noopFont(.footnote)
+                            }
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+            Text("Self-tracking, not a clinical assessment. If low mood persists, talk to a professional. You deserve support.")
+                .noopFont(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func redesignedFaceButton(_ value: Int) -> some View {
+        let selected = todayMood == value
+        return Button { select(value) } label: {
+            Text(MoodStore.face(for: value))
+                .noopFont(.statNumber)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget)
+                .background(selected ? NoopTheme.sleep.opacity(0.16) : NoopTheme.control, in: Capsule())
+                .overlay(Capsule().strokeBorder(selected ? NoopTheme.sleep : NoopTheme.cardBorder))
+        }
+        .buttonStyle(.noopPress)
+        .accessibilityLabel("\(MoodStore.label(for: value)), mood \(value) of 5")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+    #endif
 
     // MARK: - Check-in card
 

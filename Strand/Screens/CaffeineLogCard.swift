@@ -10,6 +10,10 @@ import StrandDesign
 /// unknown (we never invent mg), the active hint covers the dose-unknown case in words, and the copy
 /// states it's an estimate from what was logged.
 struct CaffeineLogCard: View {
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     /// The shared UserDefaults-backed store (#949). Shared rather than owned here so the Apple Health
     /// import and this card write through the same instance — see `CaffeineLogStore.shared`.
     @ObservedObject private var store = CaffeineLogStore.shared
@@ -32,6 +36,17 @@ struct CaffeineLogCard: View {
     static let bedtimeMinutesKey = "noop.caffeine.bedtimeMinutes"
 
     var body: some View {
+        Group {
+            #if os(iOS)
+            if redesignEnabled { redesignedCard } else { classicCard }
+            #else
+            classicCard
+            #endif
+        }
+        .onReceive(ticker) { tick = $0 }
+    }
+
+    private var classicCard: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Caffeine", overline: "Log")
             NoopCard(tint: StrandPalette.accent) {
@@ -82,8 +97,121 @@ struct CaffeineLogCard: View {
                 }
             }
         }
-        .onReceive(ticker) { tick = $0 }
     }
+
+    #if os(iOS)
+    private var redesignedCard: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Caffeine")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    Text("Log a coffee, tea, or energy drink and NOOP shows a rough estimate of how much may still be active. It's a guide based on a typical 5 to 6 hour half-life, not a measurement.")
+                        .noopFont(.footnote)
+                    redesignedActiveHint
+                    if cutoffEnabled, latePastCutoffCount > 0 {
+                        Label(lateNudgeText, systemImage: "moon.zzz")
+                            .noopFont(.footnote, color: false)
+                            .foregroundStyle(NoopTheme.recoveryMid)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                        TextField("Amount in mg (optional)", text: $mgDraft)
+                            .keyboardType(.numberPad)
+                            .noopFont(.bodySmall)
+                            .padding(NoopTheme.Layout.m)
+                            .background(NoopTheme.control, in: RoundedRectangle(cornerRadius: NoopTheme.Layout.iconTileRadius))
+                        Text("mg").noopFont(.unit)
+                    }
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                        Text("Had it").noopFont(.footnote)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: NoopTheme.Layout.minTouchTarget * 2), spacing: NoopTheme.Layout.s)],
+                                  spacing: NoopTheme.Layout.s) {
+                            ForEach(quickHoursAgo, id: \.self) { hoursAgo in
+                                redesignedLogPill(hoursAgo == 0 ? "Now" : "\(hoursAgo)h ago", hoursAgo: hoursAgo)
+                            }
+                        }
+                    }
+                    redesignedCutoffSection
+                    if !store.intakes.isEmpty {
+                        Text("Logged today").noopFont(.rowTitle)
+                        ForEach(store.intakes) { intake in
+                            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                                HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                                    Text(intakeLabel(intake)).noopFont(.bodySmall)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    if !intake.isImported {
+                                        Button { store.remove(intake.id) } label: {
+                                            Image(systemName: "minus.circle.fill")
+                                                .noopFont(.bodySmall, color: false)
+                                                .foregroundStyle(NoopTheme.recoveryLow)
+                                                .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                                        }
+                                        .buttonStyle(.noopPress)
+                                        .accessibilityLabel("Remove caffeine intake at \(Self.timeFormatter.string(from: intake.at))")
+                                    }
+                                }
+                                if intake.isImported { Text("Apple Health").noopFont(.caption) }
+                            }
+                        }
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder private var redesignedActiveHint: some View {
+        let estimate = store.estimate()
+        if estimate.hasActive {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                Text(activeTitle(estimate)).noopFont(.sectionTitle)
+                Text(activeDetail(estimate)).noopFont(.footnote)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            Text(store.intakes.isEmpty
+                 ? String(localized: "No caffeine logged. Log an intake to see an estimate.")
+                 : String(localized: "Estimated mostly cleared. Nothing logged is likely still active."))
+                .noopFont(.footnote)
+        }
+    }
+
+    private var redesignedCutoffSection: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            Toggle(isOn: $cutoffEnabled) {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text("Cutoff before bed").noopFont(.rowTitle)
+                    Text("Warn me when I log caffeine too close to bedtime. A timing guide from your own bedtime, not a measurement.")
+                        .noopFont(.footnote)
+                }
+            }
+            .toggleStyle(.switch)
+            .tint(NoopTheme.sleep)
+            .accessibilityLabel("Warn me about caffeine close to bedtime")
+            if cutoffEnabled {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                    Text("Bedtime").noopFont(.rowTitle)
+                    DatePicker("", selection: bedtimeBinding, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        .accessibilityLabel("Bedtime")
+                }
+                Text("Stop caffeine after about \(cutoffTimeLabel) to keep most of it cleared by \(timeLabel(bedtimeMinutes)).")
+                    .noopFont(.footnote)
+            }
+        }
+    }
+
+    private func redesignedLogPill(_ label: LocalizedStringKey, hoursAgo: Int) -> some View {
+        Button { logIntake(hoursAgo: hoursAgo) } label: {
+            Text(label)
+                .noopFont(.chip)
+                .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget)
+                .padding(.horizontal, NoopTheme.Layout.s)
+                .background(NoopTheme.control, in: Capsule())
+        }
+        .buttonStyle(.noopPress)
+    }
+    #endif
 
     // MARK: - Cutoff window (PR#566) — bedtime + late-intake nudge
 
@@ -309,12 +437,14 @@ struct CaffeineLogCard: View {
     // MARK: - Controls
 
     private func logPill(_ label: LocalizedStringKey, hoursAgo: Int) -> some View {
-        pillButton(label, selected: false) {
-            let mg = Double(mgDraft.trimmingCharacters(in: .whitespaces))   // nil if blank/invalid
-            let at = Calendar.current.date(byAdding: .hour, value: -hoursAgo, to: tick) ?? tick
-            store.log(at: at, mg: mg)
-            mgDraft = ""
-        }
+        pillButton(label, selected: false) { logIntake(hoursAgo: hoursAgo) }
+    }
+
+    private func logIntake(hoursAgo: Int) {
+        let mg = Double(mgDraft.trimmingCharacters(in: .whitespaces))   // nil if blank/invalid
+        let at = Calendar.current.date(byAdding: .hour, value: -hoursAgo, to: tick) ?? tick
+        store.log(at: at, mg: mg)
+        mgDraft = ""
     }
 
     private func pillButton(_ label: LocalizedStringKey, selected: Bool,

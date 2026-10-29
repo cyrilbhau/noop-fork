@@ -43,10 +43,22 @@ final class StressNudgeCenter: ObservableObject {
 /// the master toggle off via `BiofeedbackPrefs`. Renders only when a nudge is pending.
 struct StressCheckInCard: View {
     @ObservedObject var center: StressNudgeCenter
+
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
     /// Start a one-minute breathing cue (the host wires this to the controller at the resonance/5.5 pace).
     var onBreatheNow: () -> Void
 
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled { redesignedCard } else { classicCard }
+        #else
+        classicCard
+        #endif
+    }
+
+    @ViewBuilder private var classicCard: some View {
         if let nudge = center.pending {
             StrandCard(tint: StrandPalette.restColor) {
                 VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
@@ -95,6 +107,55 @@ struct StressCheckInCard: View {
             .transition(.opacity)
         }
     }
+
+    #if os(iOS)
+    @ViewBuilder private var redesignedCard: some View {
+        if let nudge = center.pending {
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: NoopTheme.Layout.m) {
+                            Label("Stress check-in", systemImage: "wind").noopFont(.rowTitle)
+                            Spacer(minLength: NoopTheme.Layout.s)
+                            NoopPill("Passive", dot: NoopTheme.textSecondary)
+                        }
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                            Label("Stress check-in", systemImage: "wind").noopFont(.rowTitle)
+                            NoopPill("Passive", dot: NoopTheme.textSecondary)
+                        }
+                    }
+                    Text("Your HRV dipped while you were still. Want a minute to breathe?")
+                        .noopFont(.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let line = honestLine(nudge) {
+                        Text(line).noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button {
+                        center.dismiss()
+                        onBreatheNow()
+                    } label: {
+                        Label("Breathe now", systemImage: "wind")
+                    }
+                    .buttonStyle(NoopPrimaryButton())
+                    Button("Not now") { center.dismiss() }
+                        .buttonStyle(NoopSecondaryButton())
+                    Button("Turn off") {
+                        BiofeedbackPrefs.checkInEnabled = false
+                        center.dismiss()
+                    }
+                    .noopFont(.bodySmall)
+                    .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget)
+                    .buttonStyle(.noopPress)
+                    Text("Relaxation guidance from your own numbers: not a health alert, and not a diagnosis. Trends matter more than any single number.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .transition(.opacity)
+        }
+    }
+    #endif
 
     /// An honest one-liner with the two estimates the engine surfaced, framed as "your own number".
     private func honestLine(_ nudge: StressNudgeCenter.Nudge) -> String? {
