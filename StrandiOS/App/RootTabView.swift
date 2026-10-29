@@ -217,7 +217,7 @@ struct RootTabView: View {
         // its dynamic interaction with scrolling content automatically; older supported releases use
         // the corresponding system material and safe-area behaviour from the same TabView.
         tabContainer
-        .tint(StrandPalette.accent)
+        .tint(redesignEnabled ? NoopTheme.textPrimary : StrandPalette.accent)
         // Today's header avatar (Liquid and classic) reads this to open Profile instead of Settings.
         .environment(\.openProfile, OpenProfileAction { openProfile() })
         // Switching Coach off while STANDING on it leaves `selectedTab` pointing at a tag no tab claims
