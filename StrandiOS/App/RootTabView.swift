@@ -558,6 +558,7 @@ struct RootTabView: View {
                 .modifier(TabRootChrome(profileInToolbar: profileInToolbar, openProfile: openProfile))
                 .tabRouteDestinations()
                 .moreDestinations()
+                .redesignDestinations()
         }
         // Drive this tab's root scroll-to-top on an at-root re-tap (#198 follow-up); read by ScreenScaffold
         // / LiquidTodayView inside. Only THIS tab's token changes on its reselect, so the others don't scroll.

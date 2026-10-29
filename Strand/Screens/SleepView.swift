@@ -136,6 +136,15 @@ struct SleepView: View {
     @AppStorage(SleepLayoutPrefs.hiddenKey) private var sleepHiddenSectionsRaw = ""
     @State private var showSleepCustomize = false
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scrollToTopSignal) private var scrollToTopSignal
+    #endif
+
     /// The analytical cards to render, in saved order minus the hidden set.
     private var sleepVisibleSections: [SleepSection] {
         SleepLayoutPrefs.visibleOrder(orderRaw: sleepSectionOrderRaw, hiddenRaw: sleepHiddenSectionsRaw)
@@ -149,6 +158,22 @@ struct SleepView: View {
         // synchronously, so the very first frame already shows content (no empty-state flash).
         let key = dataKey
         let resolved: SleepModel? = (key == modelKey) ? model : buildModel()
+        #if os(iOS)
+        // iPhone redesign (round 2 "03 Sleep"): the same state, loading, sheets and actions under a new
+        // presentation. Off restores the classic screen below; macOS never takes this branch.
+        if redesignEnabled {
+            sleepLifecycle(redesignScreen(resolved), key: key, resolved: resolved)
+        } else {
+            classicScreen(key: key, resolved: resolved)
+        }
+        #else
+        classicScreen(key: key, resolved: resolved)
+        #endif
+    }
+
+    /// The classic Sleep screen (macOS, and iOS with the redesign switched off). Unchanged layout.
+    @ViewBuilder
+    private func classicScreen(key: SleepInputKey, resolved: SleepModel?) -> some View {
         // Title lives inside the immersive night hero (Bevel-style composition). Omit the scaffold
         // header + generic sky so the Rest world owns the upper band and everything below returns to
         // the normal Sleep canvas. Empty state still gets a plain scaffold title for orientation.
@@ -164,7 +189,7 @@ struct SleepView: View {
                        onRefresh: { await repo.refresh() },
                        lazy: true,
                        topBackground: resolved == nil ? nil : AnyView(sleepNightTopBackground)) {
-            Group {
+            sleepLifecycle(Group {
                 if let resolved {
                     // Each top-level section fades + rises in sequence on first appear (Reduce-Motion safe).
                     VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
@@ -193,7 +218,15 @@ struct SleepView: View {
                     emptyState
                     alarmsEntry
                 }
-            }
+            }, key: key, resolved: resolved)
+        }
+    }
+
+    /// The screen's data lifecycle, sheets and change observers, shared by the classic and the iPhone
+    /// redesign presentations so both run the exact same loads, edits, deletes and undo.
+    private func sleepLifecycle<Content: View>(_ content: Content, key: SleepInputKey,
+                                               resolved: SleepModel?) -> some View {
+        content
             // LiquidScoreGauge owns its own count-up animation (same as Home heroes).
             // Persist the freshly-built model so subsequent renders with the same inputs hit
             // the cache. Writing State during body is not allowed, so commit it after layout;
@@ -309,7 +342,6 @@ struct SleepView: View {
                     await repo.refresh()
                 }
             }
-        }
     }
 
     /// A direct route to the one alarm screen, available even before a night is recorded.
@@ -465,7 +497,12 @@ struct SleepView: View {
     /// the Today Rest score reads), keyed by the wake-day (sleep is filed under the day you woke) so
     /// a navigated past night reads ITS OWN score, never last night's. nil when that day has no score.
     private func performanceScore(for night: Night) -> Double? {
-        let wakeDay = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
+        performanceScore(wakeDay: Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs))))
+    }
+
+    /// The same per-day resolution keyed directly by a wake-day, so the redesign's 7-night strip and the
+    /// hero ring read one resolver and cannot disagree about a night's score.
+    private func performanceScore(wakeDay: String) -> Double? {
         if let p = repo.importedSleep[wakeDay]?.performancePct { return p }
         guard let daily = repo.days.last(where: { $0.day == wakeDay }) else { return nil }
         return AnalyticsEngine.Rest.composite(daily: daily)
