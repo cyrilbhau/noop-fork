@@ -8,7 +8,7 @@ import StrandDesign
 // "More" tab into a sheet behind the avatar at the top-right of each tab. Every row the More list carried
 // is still here, pushing the same `MoreDestination` value onto this sheet's own `NavigationStack`, so no
 // screen became unreachable in the move (Workouts, Lift Log and Health became the Training and Health
-// tabs instead). Phase 7 restyles this screen fully; this is the structural version.
+// tabs instead). Phase 7 styling: score-driven ambient wash, battery-ring strap card, `NoopListRow` groups.
 
 /// The Profile sheet: strap card, grouped destinations, and a Settings gear.
 ///
@@ -20,22 +20,39 @@ struct ProfileSheet: View {
     let onClose: () -> Void
 
     @EnvironmentObject private var profile: ProfileStore
+    @EnvironmentObject private var repo: Repository
+    @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+
+    /// D3 colours Profile from the day's scores like Today. Only today's stored Recovery is cheap to read
+    /// here (Sleep and Strain come from Today's own loaded model), so the wash carries the Recovery band
+    /// blob when there is a Recovery for today and the neutral blob otherwise. A missing score paints nothing.
+    private var ambientScores: TodayScores {
+        let today = Repository.localDayKey(Date())
+        let recovery = repo.days.last(where: { $0.day == today })?.recovery
+        return TodayScores(recovery: recovery)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
                     ProfileStrapCard()
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
                         .padding(.top, NoopTheme.Layout.xl)
-                    ForEach(ProfileGroup.all) { group in
+                        .noopEntrance(index: 0)
+                    ForEach(Array(ProfileGroup.all.enumerated()), id: \.element.id) { index, group in
                         ProfileGroupView(group: group)
+                            .noopEntrance(index: index + 1)
                     }
                 }
-                .padding(.horizontal, NoopTheme.Layout.gutter)
                 .padding(.bottom, NoopTheme.Layout.xl)
             }
-            .background(NoopTheme.canvas.ignoresSafeArea())
+            .noopAmbientBackground(ambientBlobs(for: ambientScores,
+                                                intensity: AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced),
+                                   enabled: ambientFromScores)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
@@ -74,9 +91,6 @@ struct ProfileSheet: View {
 
 /// Diameter of the header avatar in the Profile sheet (D3: 68 pt).
 private let profileAvatarSize: CGFloat = 68
-/// Small icon tile used by list rows (the mockup's `icon sm`).
-private let profileRowIconSize: CGFloat = 30
-private let profileRowIconRadius: CGFloat = 8
 
 // MARK: - Groups
 
@@ -147,18 +161,15 @@ private struct ProfileGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(group.title)
-                .noopFont(.sectionTitle)
-                .padding(.horizontal, NoopTheme.Layout.sectionSide - NoopTheme.Layout.gutter)
-                .padding(.top, NoopTheme.Layout.sectionTop)
-                .padding(.bottom, NoopTheme.Layout.sectionBottom)
-                .accessibilityAddTraits(.isHeader)
-            VStack(spacing: 0) {
-                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
-                    ProfileRow(item: item, showsDivider: index < group.items.count - 1)
+            NoopSectionHeader(group.title)
+            NoopGlassCard(flush: true) {
+                VStack(spacing: 0) {
+                    ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                        ProfileRow(item: item, showsDivider: index > 0)
+                    }
                 }
             }
-            .profileCardSurface()
+            .padding(.horizontal, NoopTheme.Layout.gutter)
         }
     }
 }
@@ -169,38 +180,35 @@ private struct ProfileRow: View {
 
     var body: some View {
         NavigationLink(value: item.route) {
-            HStack(spacing: NoopTheme.Layout.m) {
-                Image(systemName: item.icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(item.tint)
-                    .frame(width: profileRowIconSize, height: profileRowIconSize)
-                    .background(
-                        RoundedRectangle(cornerRadius: profileRowIconRadius, style: .continuous)
-                            .fill(item.tint.opacity(0.15))
-                    )
-                    .accessibilityHidden(true)
-                Text(item.title)
-                    .noopFont(.listTitle)
-                Spacer(minLength: NoopTheme.Layout.s)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NoopTheme.textTertiary)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, NoopTheme.Layout.l)
-            .padding(.vertical, NoopTheme.Layout.s)
-            .frame(minHeight: NoopTheme.Layout.minTouchTarget + NoopTheme.Layout.s)
-            .contentShape(Rectangle())
-            .overlay(alignment: .bottom) {
-                if showsDivider {
-                    Rectangle()
-                        .fill(NoopTheme.separator)
-                        .frame(height: 1)
-                        .padding(.leading, NoopTheme.Layout.l + profileRowIconSize + NoopTheme.Layout.m)
-                }
-            }
+            NoopListRow(item.title, systemImage: item.icon, color: item.tint,
+                        value: ProfileRowValue.value(for: item.route), showsDivider: showsDivider)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// The trailing value a few Profile rows carry (D3), each read from the store its own screen reads, so
+/// the row cannot disagree with the screen it opens. Rows with no cheap, already-stored value show none:
+/// Data sources' count and Stress's level would mean computing something new here.
+private enum ProfileRowValue {
+    static func value(for route: MoreDestination) -> String? {
+        switch route {
+        case .backupSync: return lastBackup
+        default: return nil
+        }
+    }
+
+    /// When the last backup ran, from the same `FolderBackup.lastBackupMs` Backup & Sync shows, or nil
+    /// before the first one (the Backup screen explains that state; a row value of "Never" would read
+    /// as a failure to someone who never turned backups on).
+    private static var lastBackup: String? {
+        let ms = FolderBackup.lastBackupMs
+        guard ms > 0 else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = AppLanguage.activeLocale
+        formatter.unitsStyle = .short
+        formatter.dateTimeStyle = .named
+        return formatter.localizedString(for: Date(timeIntervalSince1970: Double(ms) / 1000), relativeTo: Date())
     }
 }
 
@@ -209,9 +217,11 @@ private struct ProfileRow: View {
 /// Battery ring and sync state for the active device, at the top of Profile. Display-only: every value is
 /// resolved by the same helpers the Today header and the Devices screen already use
 /// (`LiquidTodayView.StrapBatteryDisplay.resolve`, `SyncChipState.resolve`), so the card cannot disagree
-/// with either. Tap opens Devices.
+/// with either. No reading on this link draws the dashed empty ring, never a number. Tap opens Devices.
 private struct ProfileStrapCard: View {
     @EnvironmentObject private var live: LiveState
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var batteryDisplay: LiquidTodayView.StrapBatteryDisplay {
         .resolve(
@@ -222,15 +232,6 @@ private struct ProfileStrapCard: View {
             ringPct: live.ouraBatteryPct,
             ringCharging: live.ouraWearState == .charging
         )
-    }
-
-    private var indicatorState: ChargeSyncIndicator.BatteryState? {
-        switch batteryDisplay {
-        case .notActiveDevice: return nil
-        case .offline: return .offline
-        case .pending(let charging): return .pending(charging: charging)
-        case .charge(let percent, let charging, _): return .charge(percent: percent, charging: charging)
-        }
     }
 
     /// The second line: sync progress or age when known, otherwise the link state. Reuses the Devices
@@ -279,51 +280,69 @@ private struct ProfileStrapCard: View {
         return nil
     }
 
+    /// The ring's fill: a reading from the current link, or nil (dashed, unanimated) when there is none.
+    private var ringFraction: Double? {
+        if case .charge(let percent, _, _) = batteryDisplay { return percent / 100 }
+        return nil
+    }
+
+    private var ringColor: Color {
+        if case .charge(let percent, _, _) = batteryDisplay, percent <= profileLowBattery { return NoopTheme.recoveryLow }
+        return NoopTheme.recovery
+    }
+
+    /// "Devices · 84%" when a reading exists; just "Devices" otherwise, never a stale or zero figure.
+    private var title: String {
+        if case .charge(let percent, _, _) = batteryDisplay {
+            return "\(String(localized: "Devices")) · \(Int(percent.rounded()))%"
+        }
+        return String(localized: "Devices")
+    }
+
+    private var ringsAnimate: Bool {
+        NoopTheme.Motion.ringsAnimate(reduceMotion: reduceMotion, fillOnLoad: ringsFillOnLoad)
+    }
+
     var body: some View {
         NavigationLink(value: MoreDestination.devices) {
-            HStack(spacing: NoopTheme.Layout.m) {
-                if let indicatorState {
-                    ChargeSyncIndicator(
-                        batteryState: indicatorState,
-                        syncing: live.backfilling,
-                        chunks: live.syncChunksThisSession
-                    )
-                    .accessibilityHidden(true)
+            NoopGlassCard {
+                HStack(spacing: NoopTheme.Layout.m) {
+                    if case .notActiveDevice = batteryDisplay {
+                        DomainIcon(systemImage: "sensor.tag.radiowaves.forward", color: NoopTheme.textSecondary)
+                    } else {
+                        NoopRing(value: ringFraction, color: ringColor, lineWidth: profileStrapRingLine,
+                                 diameter: profileStrapRing,
+                                 icon: live.charging == true ? "bolt.fill" : "sensor.tag.radiowaves.forward",
+                                 animate: ringsAnimate)
+                            .accessibilityHidden(true)
+                    }
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
+                        Text(verbatim: title)
+                            .noopFont(.listTitle)
+                        Text([detail, chargingSuffix].compactMap { $0 }.joined(separator: " · "))
+                            .noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right")
+                        .noopFont(.footnote, color: false)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(NoopTheme.textTertiary)
+                        .accessibilityHidden(true)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Devices")
-                        .noopFont(.listTitle)
-                    Text([detail, chargingSuffix].compactMap { $0 }.joined(separator: " · "))
-                        .noopFont(.footnote)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: NoopTheme.Layout.s)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NoopTheme.textTertiary)
-                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, NoopTheme.Layout.l)
-            .padding(.vertical, NoopTheme.Layout.rowVerticalPadding)
             .contentShape(Rectangle())
-            .profileCardSurface()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.noopPress)
         .accessibilityElement(children: .combine)
         .accessibilityValue(Text(verbatim: batteryAccessibility ?? ""))
     }
 }
 
-private extension View {
-    /// The redesign card: translucent fill plus a 1 pt hairline, at the card radius.
-    func profileCardSurface() -> some View {
-        let shape = RoundedRectangle(cornerRadius: NoopTheme.Layout.cardRadius, style: .continuous)
-        return self
-            .background(shape.fill(NoopTheme.card))
-            .overlay(shape.strokeBorder(NoopTheme.cardBorder, lineWidth: 1))
-            .clipShape(shape)
-    }
-}
+/// The strap card's ring (D3: 46 pt, 10 pt stroke) and the charge at or below which it turns red.
+private let profileStrapRing: CGFloat = 46
+private let profileStrapRingLine: CGFloat = 6
+private let profileLowBattery: Double = 20
 
 // MARK: - Destinations
 

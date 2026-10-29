@@ -78,7 +78,34 @@ struct DataSourcesView: View {
         }))
     }
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
+    /// Whether the redesigned presentation is showing. Always false on macOS, whose look is unchanged.
+    private var dsRedesign: Bool {
+        #if os(iOS)
+        return redesignEnabled
+        #else
+        return false
+        #endif
+    }
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            dataSourcesLifecycle(redesignScreen)
+        } else {
+            dataSourcesLifecycle(classicScreen)
+        }
+        #else
+        dataSourcesLifecycle(classicScreen)
+        #endif
+    }
+
+    /// The classic screen (macOS, and iOS with the redesign switched off). Unchanged layout.
+    private var classicScreen: some View {
         ScreenScaffold(title: "Data Sources",
                        subtitle: "Everything stays on \(Platform.deviceNounPhrase). Bring your history in once, then it's yours.",
                        onRefresh: { await repo.refresh() },
@@ -105,6 +132,11 @@ struct DataSourcesView: View {
                 liveCard.staggeredAppear(index: 9)
             }
         }
+    }
+
+    /// Lifecycle, importer and confirmation shared by both presentations, so neither can drift.
+    private func dataSourcesLifecycle<Content: View>(_ content: Content) -> some View {
+        content
         .onAppear {
             // Point the broadcaster's diagnostic sink at this screen's `live` so its broadcast-out
             // lifecycle lines land in the same exported strap log the WHOOP path uses (issue #421 parity).
@@ -137,8 +169,11 @@ struct DataSourcesView: View {
         let hasWhoop = !repo.days.isEmpty
         return card(title: String(localized: "WHOOP Export"), icon: "square.and.arrow.down.fill",
              tint: StrandPalette.accent,
+             noopTint: NoopTheme.sleep,
              status: StatePill(hasWhoop ? "Imported" : "Nothing imported",
                                tone: hasWhoop ? .accent : .neutral),
+             badge: DataSourceBadge(hasWhoop ? "Imported" : "Nothing imported",
+                                    tint: hasWhoop ? NoopTheme.recovery : NoopTheme.textSecondary),
              subtitle: String(localized: "Import your full WHOOP history (recovery, strain, sleep, workouts) from a data export (.zip). Works for WHOOP 4.0, 5.0 and MG. Get one at app.whoop.com → Data Management.")) {
             let importingWhoop = model.isImporting(.whoop)
             HStack(spacing: NoopMetrics.space3) {
@@ -148,35 +183,34 @@ struct DataSourcesView: View {
                     Label(importingWhoop ? "Importing…" : "Choose export…",
                           systemImage: "tray.and.arrow.down")
                 }
-                .buttonStyle(NoopButtonStyle(.primary))
+                .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting)
                 if importingWhoop { ProgressView().controlSize(.small) }
             }
             if let s = model.whoopImportSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(model.whoopImportFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                dataSourceResult(s, failed: model.whoopImportFailed)
             }
             Text("\(repo.days.count) days · \(repo.sleeps.count) sleeps stored")
-                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+                .modifier(DataSourceNoteStyle(redesign: dsRedesign))
         }
     }
 
     private var appleHealthCard: some View {
         card(title: "Apple Health", icon: "heart.fill",
              tint: StrandPalette.metricCyan,
+             noopTint: NoopTheme.heart,
              subtitle: String(localized: "Import an Apple Health export (Health app → profile → Export All Health Data → export.zip). 7 years of HR, HRV, sleep, SpO₂, steps and more, streamed locally. Large exports take a minute or two.")) {
             let importingAppleHealth = model.isImporting(.appleHealth)
             HStack(spacing: NoopMetrics.space3) {
                 Button { presentImporter(.appleHealth) } label: {
                     Label(importingAppleHealth ? "Working…" : "Choose export.zip…", systemImage: "tray.and.arrow.down")
                 }
-                .buttonStyle(NoopButtonStyle(.primary))
+                .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting || appleHealthDeleting)
                 if importingAppleHealth { ProgressView().controlSize(.small) }
             }
             if let s = model.appleHealthImportSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(model.appleHealthImportFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                dataSourceResult(s, failed: model.appleHealthImportFailed)
             }
             // ah-delete (#616): a destructive "Remove imported data" action wired to
             // DeviceRegistryStore.deleteAllData(deviceId: "apple-health"). Always offered (the user may
@@ -188,14 +222,13 @@ struct DataSourcesView: View {
                 } label: {
                     Label(appleHealthDeleting ? "Removing…" : "Remove imported data", systemImage: "trash")
                 }
-                .buttonStyle(NoopButtonStyle(.destructive))
+                .buttonStyle(DataSourceActionStyle(.destructive, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || appleHealthDeleting)
                 .accessibilityLabel("Remove Apple Health imported data")
                 if appleHealthDeleting { ProgressView().controlSize(.small) }
             }
             if let s = appleHealthDeletedSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(StrandPalette.statusPositive)
+                dataSourceResult(s, failed: false)
             }
         }
     }
@@ -203,19 +236,19 @@ struct DataSourcesView: View {
     private var xiaomiCard: some View {
         card(title: "Xiaomi Smart Band (Mi Band)", icon: "figure.walk.motion",
              tint: StrandPalette.metricAmber,
+             noopTint: NoopTheme.breath,
              subtitle: String(localized: "Import your Mi Band history (steps, heart rate, resting HR, sleep stages, SpO₂, stress and sleep score) straight from the Mi Fitness app. On your iPhone: Files → On My iPhone → Mi Fitness, long-press the folder → Compress, then choose the .zip here. Fully offline; no Xiaomi account or Bluetooth needed. Smart Band 8/9/10.")) {
             let importingXiaomi = model.isImporting(.xiaomi)
             HStack(spacing: NoopMetrics.space3) {
                 Button { presentImporter(.xiaomi) } label: {
                     Label(importingXiaomi ? "Importing…" : "Choose Mi Fitness export…", systemImage: "tray.and.arrow.down")
                 }
-                .buttonStyle(NoopButtonStyle(.primary))
+                .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting)
                 if importingXiaomi { ProgressView().controlSize(.small) }
             }
             if let s = model.xiaomiImportSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(model.xiaomiImportFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                dataSourceResult(s, failed: model.xiaomiImportFailed)
             }
         }
     }
@@ -223,18 +256,18 @@ struct DataSourcesView: View {
     private var nutritionCard: some View {
         card(title: String(localized: "Nutrition (.csv)"), icon: "fork.knife",
              tint: StrandPalette.metricAmber,
+             noopTint: NoopTheme.temp,
              subtitle: String(localized: "Import daily nutrition totals from a Cronometer or MacroFactor CSV export: calories in, protein, carbs, fat (and weight if present). Other trackers work too if the file has a date column and daily totals.")) {
             HStack(spacing: NoopMetrics.space3) {
                 Button { presentImporter(.nutrition) } label: {
                     Label(nutritionImporting ? "Importing…" : "Choose .csv…", systemImage: "tray.and.arrow.down")
                 }
-                .buttonStyle(NoopButtonStyle(.primary))
+                .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting)
                 if nutritionImporting { ProgressView().controlSize(.small) }
             }
             if let s = nutritionSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(nutritionFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                dataSourceResult(s, failed: nutritionFailed)
             }
         }
     }
@@ -242,18 +275,19 @@ struct DataSourcesView: View {
     private var liftingCard: some View {
         card(title: String(localized: "Lifting log (Hevy / Liftosaur)"), icon: "dumbbell.fill",
              tint: DomainTheme.effort.color,
+             noopTint: NoopTheme.lift,
+             badge: DataSourceBadge("Full sets", tint: NoopTheme.lift),
              subtitle: String(localized: "Hevy CSV imports keep exercises, sets, reps, weights and notes in Lift Log. Existing logs are kept. Liftosaur imports remain workout summaries.")) {
             HStack(spacing: NoopMetrics.space3) {
                 Button { presentImporter(.lifting) } label: {
                     Label(liftingImporting ? "Importing…" : "Choose export…", systemImage: "tray.and.arrow.down")
                 }
-                .buttonStyle(NoopButtonStyle(.primary))
+                .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting)
                 if liftingImporting { ProgressView().controlSize(.small) }
             }
             if let s = liftingSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(liftingFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                dataSourceResult(s, failed: liftingFailed)
             }
         }
     }
@@ -261,18 +295,18 @@ struct DataSourcesView: View {
     private var activityFileCard: some View {
         card(title: String(localized: "Workout file (GPX / TCX / FIT)"), icon: "point.topleft.down.curvedto.point.bottomright.up",
              tint: StrandPalette.metricAmber,
+             noopTint: NoopTheme.strain,
              subtitle: String(localized: "Import a single exported workout file from any brand (Garmin, Coros, Suunto, Wahoo, Polar, Strava, Apple) straight off your device. GPS route, distance, heart rate and calories come in where the file has them. Fully offline; nothing leaves \(Platform.deviceNounPhrase).")) {
             HStack(spacing: NoopMetrics.space3) {
                 Button { presentImporter(.activityFile) } label: {
                     Label(activityFileImporting ? "Importing…" : "Choose .gpx / .tcx / .fit…", systemImage: "tray.and.arrow.down")
                 }
-                .buttonStyle(NoopButtonStyle(.primary))
+                .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting)
                 if activityFileImporting { ProgressView().controlSize(.small) }
             }
             if let s = activityFileSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(activityFileFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                dataSourceResult(s, failed: activityFileFailed)
             }
         }
     }
@@ -280,18 +314,18 @@ struct DataSourcesView: View {
     private var wearableCard: some View {
         card(title: String(localized: "Oura / Fitbit / Garmin export"), icon: "figure.mind.and.body",
              tint: StrandPalette.metricPurple,
+             noopTint: NoopTheme.sleep,
              subtitle: String(localized: "Import your own data export from Oura, Fitbit or Garmin: sleep, resting heart rate, HRV, steps and more, where the export has them. Download it from the brand's app (Oura: Account → Export Data; Fitbit: Google Takeout; Garmin: Export Your Data), then choose the file here. Fully offline; nothing leaves \(Platform.deviceNounPhrase). Each brand's own readiness or sleep score is kept for reference only. Your scores stay yours.")) {
             HStack(spacing: NoopMetrics.space3) {
                 Button { presentImporter(.wearable) } label: {
                     Label(wearableImporting ? "Importing…" : "Choose export…", systemImage: "tray.and.arrow.down")
                 }
-                .buttonStyle(NoopButtonStyle(.primary))
+                .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                 .disabled(model.hasActiveImport || nutritionImporting || liftingImporting || activityFileImporting || wearableImporting)
                 if wearableImporting { ProgressView().controlSize(.small) }
             }
             if let s = wearableSummary {
-                Text(s).font(StrandFont.subhead)
-                    .foregroundStyle(wearableFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                dataSourceResult(s, failed: wearableFailed)
             }
         }
     }
@@ -304,20 +338,21 @@ struct DataSourcesView: View {
     /// rather than storing it in `OuraConnectModel` at construction.
     private var ouraCloudCard: some View {
         card(title: String(localized: "Oura history import"), icon: "circle.circle", tint: StrandPalette.metricPurple,
+             noopTint: NoopTheme.sleep,
              subtitle: String(localized: "A one-time import of your own Oura history over the Oura API. Runs only when you tap it.")) {
             VStack(alignment: .leading, spacing: 8) {
                 if oura.isConnected {
                     HStack {
                         Button { oura.connectAndImport(repo: repo) } label: { Label("Import again", systemImage: "arrow.clockwise") }
-                            .buttonStyle(NoopButtonStyle(.primary))
+                            .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                         Button(role: .destructive) { oura.disconnect(repo: repo) } label: { Label("Forget Oura access", systemImage: "xmark.circle") }
-                            .buttonStyle(NoopButtonStyle(.destructive))
+                            .buttonStyle(DataSourceActionStyle(.destructive, redesign: dsRedesign))
                     }.disabled(oura.busy)
                 } else {
                     Button { oura.connectAndImport(repo: repo) } label: {
                         Label(oura.busy ? "Working…" : "Import your Oura history", systemImage: "square.and.arrow.down")
                     }
-                    .buttonStyle(NoopButtonStyle(.primary))
+                    .buttonStyle(DataSourceActionStyle(.primary, redesign: dsRedesign))
                     .disabled(oura.busy || !oura.isConfigured)
                     if !oura.isConfigured {
                         Text("Add your Oura app credentials to OuraSecrets.xcconfig to enable this.")
@@ -825,24 +860,28 @@ struct DataSourcesView: View {
                         tone: hrBroadcaster.advertising ? .positive : .warning,
                         pulsing: !hrBroadcaster.advertising)
             : nil
+        let broadcastBadge = broadcastHrEnabled
+            ? DataSourceBadge(hrBroadcaster.advertising ? "Broadcasting" : "Starting…",
+                              tint: hrBroadcaster.advertising ? NoopTheme.recovery : NoopTheme.recoveryMid)
+            : DataSourceBadge("Off", tint: NoopTheme.textSecondary)
         return card(title: String(localized: "Broadcast HR from this phone"), icon: "dot.radiowaves.up.forward",
              tint: DomainTheme.effort.color,
+             noopTint: NoopTheme.heart,
              status: status ?? StatePill("Off", tone: .neutral, showsDot: false),
+             badge: broadcastBadge,
              subtitle: String(localized: "Re-share your live strap heart rate over Bluetooth as a standard heart-rate sensor, so a gym treadmill, bike, Zwift, Peloton or any fitness app nearby can read it. Local Bluetooth only. Nothing leaves \(Platform.deviceNounPhrase). Off by default.")) {
             Toggle(isOn: $broadcastHrEnabled) {
                 Text("Broadcast HR from this phone")
-                    .font(StrandFont.subhead)
-                    .foregroundStyle(StrandPalette.textPrimary)
+                    .modifier(DataSourceLabelStyle(redesign: dsRedesign))
             }
             .toggleStyle(.switch)
-            .tint(DomainTheme.effort.color)
+            .tint(dsRedesign ? NoopTheme.recovery : DomainTheme.effort.color)
             .accessibilityLabel("Broadcast heart rate as a Bluetooth sensor")
             .onChangeCompat(of: broadcastHrEnabled) { on in
                 if on { hrBroadcaster.start() } else { hrBroadcaster.stop() }
             }
             Text("Acts as a standard Bluetooth heart-rate strap. Pair NOOP from your treadmill, bike or app to see your strap's heart rate there.")
-                .font(StrandFont.footnote)
-                .foregroundStyle(StrandPalette.textTertiary)
+                .modifier(DataSourceNoteStyle(redesign: dsRedesign))
                 .fixedSize(horizontal: false, vertical: true)
 
             // FI-2 (#490) — the 4.0-vs-5.0 explainer. Broadcast works for BOTH strap generations because it
@@ -857,24 +896,20 @@ struct DataSourcesView: View {
             if broadcastHrEnabled {
                 if let note = hrBroadcaster.statusNote {
                     Text(note)
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.statusWarning)
+                        .modifier(DataSourceNoteStyle(redesign: dsRedesign, tone: .warning))
                         .fixedSize(horizontal: false, vertical: true)
                 } else if hrBroadcaster.subscriberCount > 0 {
                     let n = hrBroadcaster.subscriberCount
                     // Whole-phrase variants per count so translators never see a stitched plural.
                     Text(n == 1 ? "1 device reading your heart rate"
                                 : "\(n) devices reading your heart rate")
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textSecondary)
+                        .modifier(DataSourceNoteStyle(redesign: dsRedesign, tone: .secondary))
                 } else if let hr = live.heartRate {
                     Text("Sharing \(hr) bpm. Waiting for a device to pair.")
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .modifier(DataSourceNoteStyle(redesign: dsRedesign))
                 } else {
                     Text("No live heart rate yet. Open Live to pair your strap.")
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .modifier(DataSourceNoteStyle(redesign: dsRedesign))
                 }
             }
         }
@@ -891,27 +926,42 @@ struct DataSourcesView: View {
             generationRow(title: "WHOOP 5.0 & MG",
                           detail: String(localized: "Broadcasts the live heart rate NOOP derives from the strap once connected."))
         }
-        .padding(.top, 2)
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(DomainTheme.effort.color.opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.top, dsRedesign ? 0 : 2)
+        .padding(.horizontal, dsRedesign ? NoopTheme.Layout.m : 10)
+        .padding(.vertical, dsRedesign ? NoopTheme.Layout.s : 8)
+        .background(dsRedesign ? NoopTheme.control : DomainTheme.effort.color.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: dsRedesign ? NoopTheme.Layout.iconTileRadius : 10,
+                                         style: .continuous))
     }
 
     private func generationRow(title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(DomainTheme.effort.color)
-                .padding(.top, 1)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(StrandFont.footnote.weight(.semibold))
-                    .foregroundStyle(StrandPalette.textSecondary)
-                Text(detail)
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+            if dsRedesign {
+                Image(systemName: "checkmark.circle.fill")
+                    .noopFont(.caption, color: false)
+                    .foregroundStyle(NoopTheme.recovery)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).noopFont(.footnote, color: false).fontWeight(.semibold)
+                        .foregroundStyle(NoopTheme.textPrimary)
+                    Text(detail).noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(DomainTheme.effort.color)
+                    .padding(.top, 1)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(StrandFont.footnote.weight(.semibold))
+                        .foregroundStyle(StrandPalette.textSecondary)
+                    Text(detail)
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -926,19 +976,10 @@ struct DataSourcesView: View {
         // Written as statements rather than a ternary chain: five arms of (StrandTone,
         // LocalizedStringKey) tuples is the shape that pushes this expression past the iOS type-check
         // budget, and it fails in CI rather than here.
-        let tone: StrandTone
-        let label: LocalizedStringKey
-        if live.encryptedBond {
-            tone = .positive; label = "Bonded, streaming."
-        } else if live.bonded {
-            tone = .warning; label = "Live HR (not fully paired)"
-        } else if live.connected {
-            tone = .warning; label = "Connected."
-        } else {
-            tone = .critical; label = "Not connected. Open Live to pair."
-        }
+        let (label, tone) = liveStrapStatus
         return card(title: String(localized: "WHOOP Strap (Live BLE)"), icon: "antenna.radiowaves.left.and.right",
              tint: StrandPalette.accent,
+             noopTint: NoopTheme.recovery,
              status: StatePill(label, tone: tone, pulsing: live.connected && !live.bonded),
              subtitle: String(localized: "Pairs directly with your strap over Bluetooth: no WHOOP app, no cloud.")) {
             Toggle(isOn: $strapBroadcastHrEnabled) {
@@ -958,16 +999,46 @@ struct DataSourcesView: View {
         }
     }
 
+    /// The strap's link state, resolved once for both presentations (the classic Live BLE card and the
+    /// redesign's strap row) so the two can never read differently.
+    private var liveStrapStatus: (LocalizedStringKey, StrandTone) {
+        if live.encryptedBond { return ("Bonded, streaming.", .positive) }
+        if live.bonded { return ("Live HR (not fully paired)", .warning) }
+        if live.connected { return ("Connected.", .warning) }
+        return ("Not connected. Open Live to pair.", .critical)
+    }
+
     /// One source as a frosted, domain-tinted NoopCard: a tinted source glyph + title, an optional
     /// status pill on the trailing edge, the explainer line, then the connect/import action(s). The
     /// glyph + accents take the card's `tint` (its colour world); the status pill carries connection
     /// state. Replaces the old flat surfaceRaised rectangle with the shared Bevel card surface.
+    ///
+    /// On iPhone with the redesign on, the same source draws as a glass card with a `DomainIcon` in
+    /// `noopTint` and, where given, a small `badge` in place of the classic status pill.
     @ViewBuilder
     private func card<C: View, S: View>(title: String, icon: String,
                               tint: Color = StrandPalette.accent,
+                              noopTint: Color = NoopTheme.textSecondary,
                               status: S = EmptyView(),
+                              badge: DataSourceBadge? = nil,
                               subtitle: String,
                               @ViewBuilder content: @escaping () -> C) -> some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignSourceCard(title: title, icon: icon, tint: noopTint, badge: badge, subtitle: subtitle,
+                               content: content)
+        } else {
+            classicSourceCard(title: title, icon: icon, tint: tint, status: status, subtitle: subtitle, content: content)
+        }
+        #else
+        classicSourceCard(title: title, icon: icon, tint: tint, status: status, subtitle: subtitle, content: content)
+        #endif
+    }
+
+    /// The classic source card (macOS, and iOS with the redesign off). Unchanged.
+    private func classicSourceCard<C: View, S: View>(title: String, icon: String, tint: Color, status: S,
+                                                     subtitle: String,
+                                                     @ViewBuilder content: @escaping () -> C) -> some View {
         NoopCard(padding: 18, tint: tint) {
             VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
                 HStack(spacing: NoopMetrics.space2 + 2) {
@@ -988,3 +1059,298 @@ struct DataSourcesView: View {
         }
     }
 }
+
+// MARK: - Shared styling hooks
+
+/// A small status badge the redesigned source card shows in place of the classic status pill.
+private struct DataSourceBadge {
+    let label: LocalizedStringKey
+    let tint: Color
+
+    init(_ label: LocalizedStringKey, tint: Color) {
+        self.label = label
+        self.tint = tint
+    }
+}
+
+/// Footnote copy inside a source card. Classic keeps its exact font and colours; the redesign uses
+/// `NoopType.footnote` and `NoopTheme` colours.
+private struct DataSourceNoteStyle: ViewModifier {
+    enum Tone { case tertiary, secondary, warning }
+    let redesign: Bool
+    var tone: Tone = .tertiary
+
+    func body(content: Content) -> some View {
+        if redesign {
+            content
+                .noopFont(.footnote, color: false)
+                .foregroundStyle(tone == .warning ? NoopTheme.recoveryMid
+                                 : tone == .secondary ? NoopTheme.textPrimary : NoopTheme.textSecondary)
+        } else {
+            content
+                .font(StrandFont.footnote)
+                .foregroundStyle(tone == .warning ? StrandPalette.statusWarning
+                                 : tone == .secondary ? StrandPalette.textSecondary : StrandPalette.textTertiary)
+        }
+    }
+}
+
+/// A control label (toggle title) inside a source card.
+private struct DataSourceLabelStyle: ViewModifier {
+    let redesign: Bool
+
+    func body(content: Content) -> some View {
+        if redesign {
+            content.noopFont(.listTitle)
+        } else {
+            content.font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
+        }
+    }
+}
+
+/// The import / remove buttons. Classic keeps `NoopButtonStyle`; the redesign draws the mockup's
+/// capsule on the control fill, with the destructive label in the low-Recovery red.
+private struct DataSourceActionStyle: ButtonStyle {
+    enum Kind { case primary, destructive }
+    let kind: Kind
+    let redesign: Bool
+
+    init(_ kind: Kind, redesign: Bool) {
+        self.kind = kind
+        self.redesign = redesign
+    }
+
+    @ViewBuilder
+    func makeBody(configuration: Configuration) -> some View {
+        if redesign {
+            DataSourceCapsule(configuration: configuration,
+                              ink: kind == .destructive ? NoopTheme.recoveryLow : NoopTheme.textPrimary)
+        } else {
+            NoopButtonStyle(kind == .destructive ? .destructive : .primary).makeBody(configuration: configuration)
+        }
+    }
+}
+
+/// Mockup D4 "Import new export": a 40 pt capsule on the control fill.
+private let dataSourceCapsuleHeight: CGFloat = 40
+private let dataSourceDisabledOpacity: Double = 0.4
+private let dataSourceMinimumScale: CGFloat = 0.8
+
+private struct DataSourceCapsule: View {
+    let configuration: ButtonStyleConfiguration
+    let ink: Color
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        configuration.label
+            .noopFont(.bodySmall, color: false)
+            .fontWeight(.semibold)
+            .foregroundStyle(ink)
+            .lineLimit(1)
+            .minimumScaleFactor(dataSourceMinimumScale)
+            .padding(.horizontal, NoopTheme.Layout.l)
+            .frame(maxWidth: .infinity, minHeight: max(dataSourceCapsuleHeight, NoopTheme.Layout.minTouchTarget))
+            .background(Capsule().fill(NoopTheme.control))
+            .contentShape(Capsule())
+            .opacity(isEnabled ? 1 : dataSourceDisabledOpacity)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? NoopTheme.Motion.pressScale : 1)
+            .animation(configuration.isPressed ? NoopTheme.Motion.pressDown : NoopTheme.Motion.pressUp,
+                       value: configuration.isPressed)
+    }
+}
+
+extension DataSourcesView {
+    /// One import result line ("Imported 412 days…" / a failure). Same colours as before on the classic
+    /// screen; the redesign uses the Recovery green and amber.
+    @ViewBuilder
+    fileprivate func dataSourceResult(_ text: String, failed: Bool) -> some View {
+        if dsRedesign {
+            Text(text)
+                .noopFont(.footnote, color: false)
+                .foregroundStyle(failed ? NoopTheme.recoveryMid : NoopTheme.recovery)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(text).font(StrandFont.subhead)
+                .foregroundStyle(failed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+        }
+    }
+}
+
+// MARK: - iPhone redesign (D4)
+
+#if os(iOS)
+extension DataSourcesView {
+    /// Redesign D4 (`design/round3/coach-profile.html`): where every number comes from, then the same
+    /// importers and Bluetooth controls as the classic screen, each restyled through `card(...)`. Every
+    /// action, sheet and toggle is the classic one; only the presentation differs.
+    var redesignScreen: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                FormKitTitle("Data sources", subtitle: "Where every number comes from")
+                    .padding(.top, NoopTheme.Layout.s)
+                sourcesOverview
+                    .padding(.top, NoopTheme.Layout.xl)
+                    .noopEntrance(index: 0)
+
+                NoopSectionHeader("Import")
+                VStack(spacing: NoopTheme.Layout.cardGap) {
+                    whoopCard.noopEntrance(index: 1)
+                    liftingCard.noopEntrance(index: 2)
+                    appleHealthCard.noopEntrance(index: 3)
+                    xiaomiCard.noopEntrance(index: 4)
+                    nutritionCard.noopEntrance(index: 5)
+                    activityFileCard.noopEntrance(index: 6)
+                    wearableCard.noopEntrance(index: 7)
+                    #if OURA_CLOUD_IMPORT
+                    ouraCloudCard.noopEntrance(index: 8)
+                    #endif
+                }
+
+                NoopSectionHeader("Broadcast heart rate")
+                VStack(spacing: NoopTheme.Layout.cardGap) {
+                    strapBroadcastCard
+                    broadcastHrCard
+                }
+
+                privacyNote
+                    .padding(.top, NoopTheme.Layout.l)
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .refreshable { await repo.refresh() }
+        .formKitAmbient(.dataSources)
+    }
+
+    /// The live and passive sources that have no importer on this screen, each phrased as what NOOP
+    /// actually holds from it. The strap's state comes from `liveStrapStatus`, the same resolver the
+    /// classic Live BLE card reads.
+    private var sourcesOverview: some View {
+        let (strapLabel, strapTone) = liveStrapStatus
+        return NoopGlassCard(flush: true) {
+            VStack(alignment: .leading, spacing: 0) {
+                dataSourceOverviewRow(icon: "waveform.path.ecg", tint: NoopTheme.recovery,
+                                      title: "WHOOP Strap (Live BLE)", badge: nil, showsDivider: false) {
+                    HStack(spacing: NoopTheme.Layout.xs + NoopTheme.Layout.xs / 2) {
+                        Circle()
+                            .fill(dataSourceToneColor(strapTone))
+                            .frame(width: dataSourceDot, height: dataSourceDot)
+                            .accessibilityHidden(true)
+                        Text(strapLabel)
+                            .noopFont(.footnote, color: false)
+                            .foregroundStyle(NoopTheme.textPrimary)
+                    }
+                    Text("Pairs directly with your strap over Bluetooth: no WHOOP app, no cloud.")
+                        .noopFont(.footnote)
+                }
+                // Personal iPhone build: the Health bridge reads workout summaries only and never writes
+                // (`HealthKitBridge.importsWorkoutsOnly`). The export-file importer below is a separate path.
+                dataSourceOverviewRow(icon: "heart.fill", tint: NoopTheme.heart, title: "Apple Health",
+                                      badge: DataSourceBadge("Read only", tint: NoopTheme.textSecondary)) {
+                    Text("Import workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build.")
+                        .noopFont(.footnote)
+                }
+                // Pasted workouts live in Lift Log with every set as written (WorkoutTextImportSheet).
+                dataSourceOverviewRow(icon: "doc.on.clipboard", tint: NoopTheme.lift, title: "Pasted workouts",
+                                      badge: DataSourceBadge("Full sets", tint: NoopTheme.lift)) {
+                    Text("Paste your Hevy workout text, then review it before saving. Notes stay on this device.")
+                        .noopFont(.footnote)
+                }
+            }
+        }
+        .formKitGutter()
+    }
+
+    /// One overview row (`.src-card`): domain icon, title with an optional badge, then detail lines.
+    private func dataSourceOverviewRow<Detail: View>(icon: String, tint: Color, title: LocalizedStringKey,
+                                                     badge: DataSourceBadge?, showsDivider: Bool = true,
+                                                     @ViewBuilder detail: () -> Detail) -> some View {
+        VStack(spacing: 0) {
+            if showsDivider { FormKitDivider() }
+            HStack(alignment: .top, spacing: NoopTheme.Layout.m + NoopTheme.Layout.xs / 2) {
+                DomainIcon(systemImage: icon, color: tint)
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                        Text(title).noopFont(.rowTitle)
+                        Spacer(minLength: 0)
+                        if let badge { FormKitBadge(badge.label, tint: badge.tint) }
+                    }
+                    detail()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, NoopTheme.Layout.l)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The strap-side broadcast switch (the classic Live BLE card's toggle). Same key, same BLE call.
+    private var strapBroadcastCard: some View {
+        FormKitCard {
+            FormKitToggleRow("Broadcast heart rate from the strap",
+                             detail: "Broadcasts the strap's own live heart rate over Bluetooth.",
+                             isOn: $strapBroadcastHrEnabled, showsDivider: false)
+        }
+        .onChangeCompat(of: strapBroadcastHrEnabled) { model.ble.setBroadcastHr($0) }
+    }
+
+    /// D4's shield footer. True for this build: data lives in on-device SQLite, and there is no NOOP
+    /// account or server (Coach and the optional self-hosted export only ever talk to endpoints the
+    /// wearer configures).
+    private var privacyNote: some View {
+        NoopGlassCard {
+            HStack(spacing: NoopTheme.Layout.m) {
+                Image(systemName: "checkmark.shield.fill")
+                    .noopFont(.sectionTitle, color: false)
+                    .foregroundStyle(NoopTheme.recovery)
+                    .accessibilityHidden(true)
+                Text("Everything is stored on this iPhone. There is no NOOP account or server.")
+                    .noopFont(.footnote, color: false)
+                    .foregroundStyle(NoopTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .formKitGutter()
+    }
+
+    /// The redesigned source card: glass surface, `DomainIcon`, title and badge, explainer, then the
+    /// classic card's own controls.
+    fileprivate func redesignSourceCard<C: View>(title: String, icon: String, tint: Color, badge: DataSourceBadge?,
+                                                 subtitle: String,
+                                                 @ViewBuilder content: @escaping () -> C) -> some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack(alignment: .top, spacing: NoopTheme.Layout.m + NoopTheme.Layout.xs / 2) {
+                    DomainIcon(systemImage: icon, color: tint)
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                        HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                            Text(title).noopFont(.rowTitle)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            if let badge { FormKitBadge(badge.label, tint: badge.tint) }
+                        }
+                        Text(subtitle).noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                content()
+            }
+        }
+        .formKitGutter()
+    }
+
+    private func dataSourceToneColor(_ tone: StrandTone) -> Color {
+        switch tone {
+        case .positive: return NoopTheme.recovery
+        case .warning: return NoopTheme.recoveryMid
+        case .critical: return NoopTheme.recoveryLow
+        default: return NoopTheme.textSecondary
+        }
+    }
+}
+
+/// The strap-state dot in the overview row.
+private let dataSourceDot: CGFloat = 7
+#endif

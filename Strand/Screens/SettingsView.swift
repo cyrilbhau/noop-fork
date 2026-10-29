@@ -252,49 +252,27 @@ struct SettingsView: View {
     /// Persisted so it remembers the user's choice; mirrors the Android `noop.settingsAdvancedOpen` key.
     @AppStorage(SettingsDisclosureDefaults.advancedOpenKey) private var advancedOpen = SettingsDisclosureDefaults.advancedOpenDefault
 
+    #if os(iOS)
+    // iPhone redesign (Phase 7, mockup D5). `redesignEnabled` is the master switch "Use classic Today"
+    // inverts; the other three are the redesign's own look settings, read by the redesigned screens.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+    @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #endif
+
+    /// Whether the iPhone redesign is drawing this screen. Always false on macOS.
+    private var redesignActive: Bool {
+        #if os(iOS)
+        redesignEnabled
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
-        ScreenScaffold(title: "Settings",
-                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(Platform.deviceNounPhrase).",
-                       // The day-of-sky liquid backdrop, matching Today / Health / Sleep / Trends / Devices:
-                       // a fixed, full-bleed time-of-day sky behind the scroll content (it does not scroll).
-                       // Settings' own frosted cards sit on the dark canvas below the sky band, unchanged.
-                       topBackground: liquidScaffoldSky()) {
-            VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
-                // Everyday sections stay expanded (S3): the ones a first-run user actually needs.
-                profileCard.staggeredAppear(index: 0)
-                unitsCard.staggeredAppear(index: 1)
-                appearanceCard.staggeredAppear(index: 2)
-                strapCard.staggeredAppear(index: 3)
-                #if os(iOS)
-                liveNotificationsCard.staggeredAppear(index: 3)
-                #endif
-                streakCard.staggeredAppear(index: 4)
-                featuresCard.staggeredAppear(index: 5)
-                #if os(iOS)
-                syncCard.staggeredAppear(index: 6)
-                #endif
-
-                // Lower-frequency sections collapse behind a single default-closed disclosure so the
-                // screen opens at ~6 sections instead of 11. Nothing is removed; every section here
-                // (Recovery / advanced scoring, Test Centre, the experimental probes + raw-capture, and
-                // Backup & restore) stays one tap away. Modelled on the Test Centre "Advanced" group.
-                SettingsDisclosureGroup(
-                    title: "Advanced",
-                    subtitle: "Recovery, HRV tuning, Test Centre, experimental probes, and backup. Tucked away to keep the everyday screen tidy.",
-                    isExpanded: $advancedOpen
-                ) {
-                    recoveryCard
-                    hrvCard   // #518: Continuous HRV capture + HRV window moved here out of the always-visible Strap card
-                    testCentreCard
-                    experimentalCard
-                    backupCard
-                }
-                .staggeredAppear(index: 6)
-
-                // About stays expanded at the foot (version, links and the help sheets people return to).
-                aboutCard.staggeredAppear(index: 7)
-            }
-        }
+        settingsScaffold
         .alert(backupAlertTitle, isPresented: $showBackupAlert) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -356,6 +334,132 @@ struct SettingsView: View {
             DiagnosticsSheet(onClose: { showDiagnostics = false })
         }
         #endif
+    }
+
+    /// The page chrome: the redesign's plain column on iPhone with the redesign on (mockup D5), the
+    /// classic scaffold with its day-of-sky backdrop otherwise and on macOS. The sections are the same.
+    @ViewBuilder private var settingsScaffold: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    FormKitTitle("Settings")
+                    redesignLookAndFeelCard
+                    settingsSections
+                        .formKitGutter()
+                        .padding(.top, NoopTheme.Layout.xl)
+                }
+                .padding(.bottom, NoopTheme.Layout.xl)
+            }
+            .formKitAmbient(.settings)
+        } else {
+            classicSettingsScaffold
+        }
+        #else
+        classicSettingsScaffold
+        #endif
+    }
+
+    private var classicSettingsScaffold: some View {
+        ScreenScaffold(title: "Settings",
+                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(Platform.deviceNounPhrase).",
+                       // The day-of-sky liquid backdrop, matching Today / Health / Sleep / Trends / Devices:
+                       // a fixed, full-bleed time-of-day sky behind the scroll content (it does not scroll).
+                       // Settings' own frosted cards sit on the dark canvas below the sky band, unchanged.
+                       topBackground: liquidScaffoldSky()) {
+            settingsSections
+        }
+    }
+
+    #if os(iOS)
+    /// "Use classic Today" is the inverse of the redesign master switch.
+    private var useClassicBinding: Binding<Bool> {
+        Binding(get: { !redesignEnabled }, set: { redesignEnabled = !$0 })
+    }
+
+    /// "Rings fill on every load", shown forced off while Reduce Motion is on (rings then appear filled
+    /// regardless, `NoopTheme.Motion.ringsAnimate`). The stored choice is kept for when it is turned off.
+    private var ringsFillBinding: Binding<Bool> {
+        Binding(get: { !reduceMotion && ringsFillOnLoad },
+                set: { if !reduceMotion { ringsFillOnLoad = $0 } })
+    }
+
+    private var ambientIntensityBinding: Binding<AmbientIntensity> {
+        Binding(get: { AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced },
+                set: { ambientIntensityRaw = $0.rawValue })
+    }
+
+    /// The redesign's own look settings (mockup D5 "Look and feel"). "Colour from your scores" and its
+    /// intensity are the same keys, with the same enablement rule, as Customise Today's Background section.
+    private var redesignLookAndFeelCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            NoopSectionHeader("Look and feel")
+            FormKitCard {
+                FormKitToggleRow("Colour from your scores",
+                                 detail: "The glow follows Sleep, Recovery and Strain",
+                                 isOn: $ambientFromScores, showsDivider: false)
+                SegmentedPills(AmbientIntensity.allCases, selection: ambientIntensityBinding) { option in
+                    switch option {
+                    case .subtle: return Text("Subtle")
+                    case .balanced: return Text("Balanced")
+                    case .vivid: return Text("Vivid")
+                    }
+                }
+                .disabled(!ambientFromScores)
+                .opacity(ambientFromScores ? 1 : settingsDisabledOpacity)
+                .accessibilityLabel(Text("Intensity"))
+                .padding(.bottom, FormKitLayout.rowVertical)
+                FormKitToggleRow("Rings fill on every load",
+                                 detail: reduceMotion
+                                    ? "Off while Reduce Motion is on, so rings appear filled."
+                                    : "Off when Reduce Motion is on",
+                                 isOn: ringsFillBinding)
+                    .disabled(reduceMotion)
+                FormKitToggleRow("Use classic Today",
+                                 detail: "Also brings back the previous look on the other redesigned screens.",
+                                 isOn: useClassicBinding)
+            }
+        }
+    }
+    #endif
+
+    /// Every settings section, in order. Shared by both chromes.
+    private var settingsSections: some View {
+        VStack(alignment: .leading, spacing: redesignActive ? NoopTheme.Layout.xl : NoopMetrics.sectionSpacing) {
+            // Everyday sections stay expanded (S3): the ones a first-run user actually needs.
+            profileCard.staggeredAppear(index: 0)
+            unitsCard.staggeredAppear(index: 1)
+            appearanceCard.staggeredAppear(index: 2)
+            strapCard.staggeredAppear(index: 3)
+            #if os(iOS)
+            liveNotificationsCard.staggeredAppear(index: 3)
+            #endif
+            streakCard.staggeredAppear(index: 4)
+            featuresCard.staggeredAppear(index: 5)
+            #if os(iOS)
+            syncCard.staggeredAppear(index: 6)
+            #endif
+
+            // Lower-frequency sections collapse behind a single default-closed disclosure so the
+            // screen opens at ~6 sections instead of 11. Nothing is removed; every section here
+            // (Recovery / advanced scoring, Test Centre, the experimental probes + raw-capture, and
+            // Backup & restore) stays one tap away. Modelled on the Test Centre "Advanced" group.
+            SettingsDisclosureGroup(
+                title: "Advanced",
+                subtitle: "Recovery, HRV tuning, Test Centre, experimental probes, and backup. Tucked away to keep the everyday screen tidy.",
+                isExpanded: $advancedOpen
+            ) {
+                recoveryCard
+                hrvCard   // #518: Continuous HRV capture + HRV window moved here out of the always-visible Strap card
+                testCentreCard
+                experimentalCard
+                backupCard
+            }
+            .staggeredAppear(index: 6)
+
+            // About stays expanded at the foot (version, links and the help sheets people return to).
+            aboutCard.staggeredAppear(index: 7)
+        }
     }
 
     // MARK: - Profile
@@ -1095,7 +1199,10 @@ struct SettingsView: View {
         SettingsSection(
             icon: "circle.lefthalf.filled",
             title: "Appearance",
-            blurb: "Choose Light, Dark, or follow your system. Dark is the signature near-black; Light keeps the same clean look on a bright canvas."
+            // With the redesign on, Theme is hidden (see below), so the blurb must not offer it.
+            blurb: redesignActive
+                ? "Language, clock, Coach and display choices."
+                : "Choose Light, Dark, or follow your system. Dark is the signature near-black; Light keeps the same clean look on a bright canvas."
         ) {
             VStack(spacing: 0) {
                 // App-owned copy language. Apple binds a bundle localization at process launch, so this
@@ -1172,6 +1279,17 @@ struct SettingsView: View {
                             .accessibilityLabel("Hide bar when scrolling")
                     }
                 }
+                // The way back to the redesign. With it on, this switch lives in "Look and feel" at the
+                // top of the screen; with it off, that card is gone, so it is offered here instead.
+                if !redesignEnabled {
+                    rowDivider
+                    FormRow(label: "Use classic Today") {
+                        Toggle("", isOn: useClassicBinding)
+                            .labelsHidden()
+                            .tint(StrandPalette.accent)
+                            .accessibilityLabel("Use classic Today")
+                    }
+                }
                 #endif
                 rowDivider
                 // Theme presets — one-tap bundles coordinating accent + chart world + backdrop + card
@@ -1187,6 +1305,11 @@ struct SettingsView: View {
                     .tint(StrandPalette.accent)
                     .accessibilityLabel("Theme preset")
                 }
+                // On iPhone with the redesign on, Theme, Chart colours and Accent are hidden: the root is
+                // pinned dark and the redesigned screens draw from `NoopTheme`, so none of the three would
+                // change anything the wearer sees there. Their stored values are untouched, so turning the
+                // redesign off (Use classic Today) brings the controls back with the same choices.
+                if !redesignActive {
                 rowDivider
                 FormRow(label: "Theme") {
                     Picker("Theme", selection: $appearanceRaw) {
@@ -1213,6 +1336,7 @@ struct SettingsView: View {
                     .tint(StrandPalette.accent)
                     .accessibilityLabel("Chart colours")
                 }
+                }
                 rowDivider
                 FormRow(label: "Sleep chart") {
                     // Classic = the per-stage timeline rows (default). Filled/Ribbon = the WHOOP-style
@@ -1228,6 +1352,7 @@ struct SettingsView: View {
                     .tint(StrandPalette.accent)
                     .accessibilityLabel("Sleep chart")
                 }
+                if !redesignActive {
                 rowDivider
                 // Chrome accent colour — the links/buttons/selection tint only. The recovery/strain/sleep
                 // DATA colours follow "Chart colours" above, never this. Custom reveals a colour well.
@@ -1249,6 +1374,7 @@ struct SettingsView: View {
                             .labelsHidden()
                             .accessibilityLabel("Custom accent colour")
                     }
+                }
                 }
                 rowDivider
                 // Trend chart style (line vs bar). Display-only: flips the Trends tab's charts between the
@@ -2770,11 +2896,14 @@ struct SettingsView: View {
 
     private var rowDivider: some View {
         Rectangle()
-            .fill(StrandPalette.hairline)
+            .fill(redesignActive ? NoopTheme.separator : StrandPalette.hairline)
             .frame(height: 1)
             .padding(.vertical, 4)
     }
 }
+
+/// Opacity of a redesign control that is shown but unavailable (matches Customise Today's Background).
+private let settingsDisabledOpacity: Double = 0.45
 
 // MARK: - Advanced disclosure (S3)
 
@@ -2798,21 +2927,42 @@ private struct SettingsDisclosureGroup<Content: View>: View {
     @Binding var isExpanded: Bool
     @ViewBuilder var content: () -> Content
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
+    private var redesign: Bool {
+        #if os(iOS)
+        redesignEnabled
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
+        VStack(alignment: .leading, spacing: redesign ? NoopTheme.Layout.xl : NoopMetrics.sectionSpacing) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
             } label: {
                 HStack(alignment: .center, spacing: NoopMetrics.space3) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(StrandFont.title2)
-                            .foregroundStyle(StrandPalette.textPrimary)
-                        Text(subtitle)
-                            .font(StrandFont.subhead)
-                            .foregroundStyle(StrandPalette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .multilineTextAlignment(.leading)
+                        if redesign {
+                            Text(title)
+                                .noopFont(.sectionTitle)
+                            Text(subtitle)
+                                .noopFont(.footnote)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
+                        } else {
+                            Text(title)
+                                .font(StrandFont.title2)
+                                .foregroundStyle(StrandPalette.textPrimary)
+                            Text(subtitle)
+                                .font(StrandFont.subhead)
+                                .foregroundStyle(StrandPalette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
+                        }
                     }
                     Spacer(minLength: NoopMetrics.space2)
                     Image(systemName: "chevron.down")
@@ -2846,7 +2996,44 @@ private struct SettingsSection<Content: View>: View {
     let blurb: LocalizedStringKey
     @ViewBuilder var content: () -> Content
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignBody
+        } else {
+            classicBody
+        }
+        #else
+        classicBody
+        #endif
+    }
+
+    #if os(iOS)
+    /// The redesign's grouped section (mockup D5): a sentence-case title over a glass card holding the
+    /// blurb and the controls. No overline, no icon tile.
+    private var redesignBody: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            Text(title)
+                .noopFont(.sectionTitle)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, NoopTheme.Layout.sectionSide - NoopTheme.Layout.gutter)
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    Text(blurb)
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                    content()
+                }
+            }
+        }
+    }
+    #endif
+
+    private var classicBody: some View {
         StrandCard(padding: NoopMetrics.space5) {
             VStack(alignment: .leading, spacing: NoopMetrics.space4) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -3425,8 +3612,31 @@ struct StepsCalibrationSheet: View {
 struct FormRow<Control: View>: View {
     let label: LocalizedStringKey
     @ViewBuilder var control: () -> Control
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
 
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            // The redesign's list row: the `.lrow` title type, at least a 44 pt touch target.
+            HStack(alignment: .center, spacing: NoopTheme.Layout.m) {
+                Text(label)
+                    .noopFont(.listTitle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                control()
+                    .layoutPriority(1)
+            }
+            .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+        } else {
+            classicRow
+        }
+        #else
+        classicRow
+        #endif
+    }
+
+    private var classicRow: some View {
         HStack(alignment: .center, spacing: NoopMetrics.space4) {
             Text(label)
                 .font(StrandFont.body)

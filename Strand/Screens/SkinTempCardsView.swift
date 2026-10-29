@@ -775,8 +775,68 @@ struct HeadsUpCard: View {
     /// NOT gate this card (the engine's level already did); when the level is raised and a distance is
     /// present we append a subtle "Confidence" line so the user can gauge how strong the signal is.
     var distance: IllnessDistance.Result? = nil
+    /// The iPhone redesign's presentation (glass card, `NoopTheme` / `NoopType`), used by the redesigned
+    /// Health tab. Same title, copy, signals and confidence line; only the surface changes.
+    var redesign: Bool = false
 
     var body: some View {
+        if redesign {
+            redesignBody
+        } else {
+            classicBody
+        }
+    }
+
+    private var redesignBody: some View {
+        let tint = redesignHue
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                    DomainIcon(systemImage: glyph, color: tint, size: DomainIcon.smallSize)
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                        Text(title).noopFont(.rowTitle, color: false).foregroundStyle(tint)
+                        Text(localizedIllnessCopy(result))
+                            .noopFont(.bodySmall)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if !result.firedSignals.isEmpty {
+                    illnessRedesignReasonLine(label: "Signals up", values: result.firedSignals)
+                }
+                if !result.suppressedBy.isEmpty {
+                    let reasons = result.suppressionReasons.isEmpty
+                        ? result.suppressedBy.map(localizedConfounder)
+                        : result.suppressionReasons.map(localizedConfounder)
+                    illnessRedesignReasonLine(label: "Explained by", values: reasons)
+                }
+                if let confidence = confidenceLine {
+                    Text(confidence).noopFont(.caption)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(localizedIllnessCopy(result))")
+    }
+
+    private func illnessRedesignReasonLine(label: LocalizedStringKey, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
+            Text(label).noopFont(.footnote)
+            Text(verbatim: values.joined(separator: " · "))
+                .noopFont(.footnote, color: false)
+                .foregroundStyle(NoopTheme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// The redesign's level colour: raised / already unwell read as the amber warning, calmer levels neutral.
+    private var redesignHue: Color {
+        switch result.level {
+        case .raised, .alreadyUnwell: return NoopTheme.recoveryMid
+        case .suppressed, .mild, .quiet: return NoopTheme.textSecondary
+        }
+    }
+
+    private var classicBody: some View {
         NoopCard(padding: 14, tint: hue) {
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                 HStack(alignment: .top, spacing: 12) {
