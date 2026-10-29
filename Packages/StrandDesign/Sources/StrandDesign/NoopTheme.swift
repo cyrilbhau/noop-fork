@@ -31,7 +31,10 @@ public enum NoopTheme {
 
     public static let textPrimary = Color(hex: "#F5F5F7")
     public static let textSecondary = Color(hex: "#9B9BA3")
-    public static let textTertiary = Color(hex: "#5F5F67")
+    /// Captions and source lines. Raised from the mockups' #5F5F67 (2.7:1 on a sheet, 2.9:1 on a card) to
+    /// #8A8A93 so caption-size text meets 4.5:1 on every redesign surface (5.1:1 on `sheet`, 5.4:1 on
+    /// `card` over the canvas) while staying a step dimmer than `textSecondary`.
+    public static let textTertiary = Color(hex: "#8A8A93")
 
     // MARK: - Domains
 

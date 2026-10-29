@@ -2008,32 +2008,44 @@ private struct WizardSearchHero: View {
     private var still: Bool { !searching || motion.poseStill(reduceMotion) }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: nil, paused: still)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            ZStack {
-                ForEach(0..<WizardLayout.pulseCount, id: \.self) { i in
-                    let offset = Double(i) / Double(WizardLayout.pulseCount)
-                    let phase = still ? offset
-                        : (t / WizardLayout.pulsePeriod + offset).truncatingRemainder(dividingBy: 1)
-                    Circle()
-                        .strokeBorder(NoopTheme.breath, lineWidth: WizardLayout.pulseStroke)
-                        .frame(width: WizardLayout.pulseRing, height: WizardLayout.pulseRing)
-                        .scaleEffect(1 + phase * WizardLayout.pulseGrowth)
-                        .opacity((1 - phase) * WizardLayout.pulsePeakOpacity)
-                }
-                Circle()
-                    .fill(NoopTheme.breath.opacity(WizardLayout.discTint))
-                    .overlay(Circle().strokeBorder(NoopTheme.breath.opacity(WizardLayout.discBorder),
-                                                   lineWidth: WizardLayout.hairline))
-                    .frame(width: WizardLayout.heroDisc, height: WizardLayout.heroDisc)
-                Image(systemName: symbol)
-                    .font(.system(size: WizardLayout.heroDisc * WizardLayout.heroSymbolRatio, weight: .semibold))
-                    .foregroundStyle(NoopTheme.breath)
+        // Held still, the rings are drawn with no TimelineView behind them: a paused animation timeline
+        // still keeps the render server busy (QuietMotionCoverageTests).
+        Group {
+            if still {
+                hero(at: nil)
+            } else {
+                TimelineView(.animation) { context in hero(at: context.date) }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: WizardLayout.heroHeight)
         }
         .accessibilityHidden(true)
+    }
+
+    /// The disc and rings at `date`, or at fixed, evenly spaced radii when `date` is nil.
+    private func hero(at date: Date?) -> some View {
+        ZStack {
+            ForEach(0..<WizardLayout.pulseCount, id: \.self) { i in
+                let offset = Double(i) / Double(WizardLayout.pulseCount)
+                let phase = date.map {
+                    ($0.timeIntervalSinceReferenceDate / WizardLayout.pulsePeriod + offset)
+                        .truncatingRemainder(dividingBy: 1)
+                } ?? offset
+                Circle()
+                    .strokeBorder(NoopTheme.breath, lineWidth: WizardLayout.pulseStroke)
+                    .frame(width: WizardLayout.pulseRing, height: WizardLayout.pulseRing)
+                    .scaleEffect(1 + phase * WizardLayout.pulseGrowth)
+                    .opacity((1 - phase) * WizardLayout.pulsePeakOpacity)
+            }
+            Circle()
+                .fill(NoopTheme.breath.opacity(WizardLayout.discTint))
+                .overlay(Circle().strokeBorder(NoopTheme.breath.opacity(WizardLayout.discBorder),
+                                               lineWidth: WizardLayout.hairline))
+                .frame(width: WizardLayout.heroDisc, height: WizardLayout.heroDisc)
+            Image(systemName: symbol)
+                .font(.system(size: WizardLayout.heroDisc * WizardLayout.heroSymbolRatio, weight: .semibold))
+                .foregroundStyle(NoopTheme.breath)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: WizardLayout.heroHeight)
     }
 }
 
