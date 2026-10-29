@@ -95,9 +95,10 @@ private struct HrTraceShape: Shape {
 }
 
 struct HeartRateWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: HeartRateEntry
     private let scaleWidth: CGFloat = 28
-    private let scaleGap: CGFloat = 6
+    private let scaleGap: CGFloat = NoopTheme.Layout.s
 
     /// Pruned on the way OUT as well as on the way in, matching the Kotlin twin. A widget rendered
     /// hours after the last publish would otherwise draw a trace whose newest point is long stale, under
@@ -112,81 +113,71 @@ struct HeartRateWidgetView: View {
     private var shown: (bpm: Int?, stale: Bool) {
         HrDisplay.resolve(bpm: entry.snap?.bpm, newestPointTs: series.last?.ts, now: entry.date)
     }
-    /// The palette's HR zone-5 token, which resolves to exactly the hexes the Android widget carries as
-    /// a local mirror (#C84E1E / #E0662F) — so the two widgets are the same colour rather than two
-    /// approximations of one. Named rather than hardcoded here because, unlike Glance, this target can
-    /// read the design package; and being a token it follows the Classic theme where a hex could not.
-    private var accent: Color { StrandPalette.zone5 }
+    /// When the number shown was read: the newest trace point, or the publish itself for a first reading
+    /// that has no trace yet. Nothing when there is no number.
+    private var readAt: Date? {
+        guard shown.bpm != nil else { return nil }
+        if let ts = series.last?.ts { return Date(timeIntervalSince1970: TimeInterval(ts)) }
+        return entry.snap.map(\.updated).flatMap { $0 == .distantPast ? nil : $0 }
+    }
+    private var accent: Color { NoopTheme.heart }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(accent)
-                Text("Heart rate")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(StrandPalette.textPrimary)
+        VStack(alignment: .leading, spacing: 0) {
+            WidgetHeader(title: "Heart rate", tint: accent) {
+                if let readAt { Text(WidgetStyle.timeLabel(readAt, now: entry.date)) }
             }
-
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(shown.bpm.map(String.init) ?? "—")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(shown.stale ? StrandPalette.textSecondary : StrandPalette.textPrimary)
-                if shown.bpm != nil {
-                    Text("bpm")
-                        .font(.system(size: 12))
-                        .foregroundStyle(StrandPalette.textSecondary)
-                }
-                if let stats {
-                    Text("Min \(stats.min) • Max \(stats.max)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(StrandPalette.textPrimary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(accent.opacity(0.18), in: Capsule())
-                        .padding(.leading, 6)
-                }
-            }
-
-            if !series.isEmpty {
-                HStack(alignment: .top, spacing: scaleGap) {
-                    HrTraceChart(series: series, accent: accent)
-                    // A scale of one repeated number says nothing the headline has not, so it waits for
-                    // a range — the same rule the Android twin follows.
-                    if let stats, stats.max > stats.min {
-                        // Ticks computed ONCE, and the gap keyed on the INDEX. Comparing the value to
-                        // `.last` happened to work only because a scale is drawn solely when there is a
-                        // range; with two equal ticks it would have dropped a spacer and skewed the scale.
-                        let ticks = HrTrace.bpmTicks(stats)
-                        VStack(alignment: .trailing) {
-                            ForEach(Array(ticks.enumerated()), id: \.offset) { index, tick in
-                                Text("\(tick)")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(StrandPalette.textSecondary)
-                                if index < ticks.count - 1 { Spacer(minLength: 0) }
-                            }
-                        }
-                        .frame(width: scaleWidth)
-                    }
-                }
-                HrTimeAxis(series: series)
-                    .padding(.trailing, stats.map { $0.max > $0.min } == true ? scaleWidth + scaleGap : 0)
-            }
-
             Spacer(minLength: 0)
-            if let updated = entry.snap?.updated, updated != .distantPast {
-                HStack {
-                    Spacer()
-                    Text("Updated \(updated, format: .dateTime.hour().minute())")
-                        .font(.system(size: 10))
-                        .foregroundStyle(StrandPalette.textSecondary)
-                    Spacer()
+            if family == .systemSmall {
+                WidgetNumber(value: shown.bpm.map(String.init), unit: "bpm", dimmed: shown.stale)
+                if !series.isEmpty {
+                    HrTraceChart(series: series, accent: accent)
+                        .frame(height: 30)
+                        .padding(.top, NoopTheme.Layout.s)
                 }
+            } else {
+                medium
             }
         }
+        .padding(WidgetStyle.padding)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
+    }
+
+    /// The number beside its range, then the trace with its scale and time axis.
+    @ViewBuilder private var medium: some View {
+        HStack(alignment: .lastTextBaseline, spacing: NoopTheme.Layout.s) {
+            WidgetNumber(value: shown.bpm.map(String.init), unit: "bpm", dimmed: shown.stale)
+            if let stats {
+                Text("Min \(stats.min) • Max \(stats.max)")
+                    .noopFont(.widgetCaption)
+                    .lineLimit(1)
+            }
+        }
+        if !series.isEmpty {
+            HStack(alignment: .top, spacing: scaleGap) {
+                HrTraceChart(series: series, accent: accent)
+                // A scale of one repeated number says nothing the headline has not, so it waits for
+                // a range — the same rule the Android twin follows.
+                if let stats, stats.max > stats.min {
+                    // Ticks computed ONCE, and the gap keyed on the INDEX. Comparing the value to
+                    // `.last` happened to work only because a scale is drawn solely when there is a
+                    // range; with two equal ticks it would have dropped a spacer and skewed the scale.
+                    let ticks = HrTrace.bpmTicks(stats)
+                    VStack(alignment: .trailing) {
+                        ForEach(Array(ticks.enumerated()), id: \.offset) { index, tick in
+                            Text(verbatim: "\(tick)")
+                                .noopFont(.widgetCaption)
+                            if index < ticks.count - 1 { Spacer(minLength: 0) }
+                        }
+                    }
+                    .frame(width: scaleWidth)
+                }
+            }
+            .padding(.top, NoopTheme.Layout.s)
+            HrTimeAxis(series: series)
+                .padding(.trailing, stats.map { $0.max > $0.min } == true ? scaleWidth + scaleGap : 0)
+        }
     }
 
     /// One spoken sentence rather than a run of loose numbers. The Android twin had to settle for
@@ -217,7 +208,7 @@ private struct HrTraceChart: View {
                     startPoint: .top, endPoint: .bottom,
                 ))
             HrTraceShape(series: series, filled: false)
-                .stroke(accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .stroke(accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -235,8 +226,7 @@ private struct HrTimeAxis: View {
                 ForEach(Array(ticks.enumerated()), id: \.offset) { i, ts in
                     Text(Date(timeIntervalSince1970: TimeInterval(ts)),
                          format: .dateTime.hour().minute())
-                        .font(.system(size: 9))
-                        .foregroundStyle(StrandPalette.textSecondary)
+                        .noopFont(.widgetCaption)
                     if i < ticks.count - 1 { Spacer(minLength: 0) }
                 }
             }
@@ -251,15 +241,16 @@ struct HeartRateWidget: Widget {
         StaticConfiguration(kind: Self.kind, provider: HeartRateProvider()) { entry in
             if #available(iOS 17.0, *) {
                 HeartRateWidgetView(entry: entry)
-                    .containerBackground(StrandPalette.surfaceBase, for: .widget)
+                    .containerBackground(WidgetStyle.background, for: .widget)
             } else {
                 HeartRateWidgetView(entry: entry)
-                    .padding()
-                    .background(StrandPalette.surfaceBase)
+                    .background(WidgetStyle.background)
             }
         }
         .configurationDisplayName("Heart Rate")
         .description("Live heart rate with the last three hours as a trace.")
-        .supportedFamilies([.systemMedium])
+        // systemSmall added for R4-1 (the number and a short trace); systemMedium keeps scale and axis.
+        .supportedFamilies([.systemSmall, .systemMedium])
+        .contentMarginsDisabled()
     }
 }
