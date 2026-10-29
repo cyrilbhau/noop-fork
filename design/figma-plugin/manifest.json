@@ -1,0 +1,8 @@
+{
+  "name": "NOOP organise round 3",
+  "id": "noop-organise-round3-local",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page"
+}
