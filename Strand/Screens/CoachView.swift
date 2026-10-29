@@ -47,6 +47,8 @@ struct CoachView: View {
     #if os(iOS)
     @StateObject private var voiceInput = CoachVoiceInput()
     @State private var showChatGPTConnection = false
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
     #endif
 
     /// Sentinel tag for the "Custom…" entry in the model Picker.
@@ -58,48 +60,7 @@ struct CoachView: View {
     private var suggestions: [String] { coach.suggestions }
 
     var body: some View {
-        ScreenScaffold(title: "Coach",
-                       subtitle: "Ask about your charge, effort, rest and workouts, grounded in your own numbers.",
-                       // Liquid finish: the same full-bleed day-of-sky backdrop Today + the other liquid
-                       // tabs carry, so Coach sits in one atmosphere. Static + non-interactive; the frosted
-                       // message/setup cards below sit on the opaque canvas and stay legible.
-                       topBackground: liquidScaffoldSky()) {
-            #if os(iOS)
-            if coach.provider != .chatGPT {
-                NoopButton("ChatGPT subscription", systemImage: "person.crop.circle", kind: .secondary) {
-                    showChatGPTConnection = true
-                }
-            }
-            #endif
-            if coach.isConfigured {
-                connectedHeader
-                #if os(iOS)
-                if coach.provider == .chatGPT { chatGPTPlanBar }
-                #endif
-                transcript
-                if let error = coach.errorText, !error.isEmpty {
-                    errorBanner(error)
-                }
-                if coach.provider != .chatGPT && (coach.keyRejected || showKeyEditor) { keyRepairPanel }
-                // K7: show follow-up chips after each assistant reply (when the transcript is
-                // non-empty and the last message is from the assistant and not mid-send);
-                // otherwise show the initial contextual chips.
-                if showFollowUpChips {
-                    followUpChips
-                } else {
-                    suggestionChips
-                }
-                composer
-                // K12: show a rough token estimate when the draft is non-empty.
-                if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   let tokens = coach.estimatedTokens(forDraft: draft) {
-                    tokenEstimateBar(tokens)
-                }
-                privacyFootnote
-            } else {
-                setupCard
-            }
-        }
+        coachScreen
         // macOS only. On iOS these actions live in `connectionMenu` instead, because this bar is hidden for
         // a primary tab root and VISIBLE in the pillar sheet, so leaving them here would render nothing
         // on the Coach tab and a duplicate of the menu in the sheet. One control per platform, reachable
@@ -218,6 +179,66 @@ struct CoachView: View {
         // a conversation exists.
         .onChangeCompat(of: coach.dataConsent) { _ in
             Task { await coach.startBriefIfNeeded() }
+        }
+    }
+
+    /// The redesigned conversation on iPhone (mockup D1) with the redesign on; the classic screen
+    /// otherwise and on macOS. Both share every modifier on `body` (sheets, the brief/restore task, the
+    /// pending-prompt handoff, draft persistence), so the switch changes presentation only.
+    @ViewBuilder private var coachScreen: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignCoachScreen
+        } else {
+            classicCoachScreen
+        }
+        #else
+        classicCoachScreen
+        #endif
+    }
+
+    private var classicCoachScreen: some View {
+        ScreenScaffold(title: "Coach",
+                       subtitle: "Ask about your charge, effort, rest and workouts, grounded in your own numbers.",
+                       // Liquid finish: the same full-bleed day-of-sky backdrop Today + the other liquid
+                       // tabs carry, so Coach sits in one atmosphere. Static + non-interactive; the frosted
+                       // message/setup cards below sit on the opaque canvas and stay legible.
+                       topBackground: liquidScaffoldSky()) {
+            #if os(iOS)
+            if coach.provider != .chatGPT {
+                NoopButton("ChatGPT subscription", systemImage: "person.crop.circle", kind: .secondary) {
+                    showChatGPTConnection = true
+                }
+            }
+            #endif
+            if coach.isConfigured {
+                connectedHeader
+                #if os(iOS)
+                if coach.provider == .chatGPT { chatGPTPlanBar }
+                #endif
+                transcript
+                if let error = coach.errorText, !error.isEmpty {
+                    errorBanner(error)
+                }
+                if coach.provider != .chatGPT && (coach.keyRejected || showKeyEditor) { keyRepairPanel }
+                // K7: show follow-up chips after each assistant reply (when the transcript is
+                // non-empty and the last message is from the assistant and not mid-send);
+                // otherwise show the initial contextual chips.
+                if showFollowUpChips {
+                    followUpChips
+                } else {
+                    suggestionChips
+                }
+                composer
+                // K12: show a rough token estimate when the draft is non-empty.
+                if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   let tokens = coach.estimatedTokens(forDraft: draft) {
+                    tokenEstimateBar(tokens)
+                }
+                privacyFootnote
+            } else {
+                setupCard
+            }
         }
     }
 
@@ -523,6 +544,22 @@ struct CoachView: View {
     /// since its toolbar button existed, so this is a latent edge being written down, not a new one.
     private var connectionMenu: some View {
         Menu {
+            connectionMenuItems
+        } label: {
+            // Same affordance DevicesView uses for its per-device menu, headline size included. The
+            // size is not decoration here: the report this came from was that the option could not be
+            // FOUND, so a control that matches the one the wearer has already learned, at a size worth
+            // aiming at, is doing part of the work.
+            Image(systemName: "ellipsis.circle")
+                .font(StrandFont.headline)
+                .foregroundStyle(StrandPalette.textSecondary)
+        }
+        .accessibilityLabel("Connection")
+    }
+
+    /// The connection actions, shared by the classic menu above and the redesigned header's menu, so
+    /// both presentations offer the identical set.
+    @ViewBuilder private var connectionMenuItems: some View {
             if coach.provider == .chatGPT {
                 Button {
                     showChatGPTConnection = true
@@ -548,16 +585,6 @@ struct CoachView: View {
             } label: {
                 Label("Disconnect", systemImage: "gearshape")
             }
-        } label: {
-            // Same affordance DevicesView uses for its per-device menu, headline size included. The
-            // size is not decoration here: the report this came from was that the option could not be
-            // FOUND, so a control that matches the one the wearer has already learned, at a size worth
-            // aiming at, is doing part of the work.
-            Image(systemName: "ellipsis.circle")
-                .font(StrandFont.headline)
-                .foregroundStyle(StrandPalette.textSecondary)
-        }
-        .accessibilityLabel("Connection")
     }
     #endif
 
@@ -647,30 +674,35 @@ struct CoachView: View {
                     .frostedCardSurface(tint: StrandPalette.chargeColor, cornerRadius: 16)
                     .frame(maxWidth: 560, alignment: .leading)
                     // K8: Copy / Share / Save context menu on assistant replies.
-                    .contextMenu {
-                        Button {
-                            #if os(macOS)
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(message.text, forType: .string)
-                            #else
-                            UIPasteboard.general.string = message.text
-                            #endif
-                        } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }
-                        ShareLink(item: message.text) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                        Button {
-                            saveAdvice(message.text)
-                        } label: {
-                            Label("Save to Journal", systemImage: "square.and.pencil")
-                        }
-                    }
+                    .contextMenu { assistantReplyActions(message.text) }
                 Spacer(minLength: 48)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Coach said: \(message.text)")
+        }
+    }
+
+    /// K8: Copy / Share / Save to Journal on an assistant reply. Shared by the classic and redesigned
+    /// bubbles so both offer the same actions.
+    @ViewBuilder
+    private func assistantReplyActions(_ text: String) -> some View {
+        Button {
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            #else
+            UIPasteboard.general.string = text
+            #endif
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+        ShareLink(item: text) {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+        Button {
+            saveAdvice(text)
+        } label: {
+            Label("Save to Journal", systemImage: "square.and.pencil")
         }
     }
 
@@ -967,17 +999,20 @@ struct CoachView: View {
     }
     #endif
 
+    /// Where Coach's requests go, per provider. Shared by both layouts' footnotes.
+    @ViewBuilder private var privacyFootnoteText: some View {
+        if coach.provider == .chatGPT {
+            Text("ChatGPT requests use your plan allowance. Metric summaries require your separate data-sharing consent.")
+        } else {
+            Text(coach.provider == .custom
+                 ? "Coach talks only to the server URL you set. Point it at a local model (Ollama, LM Studio, llama.cpp) to keep everything on your own machine. Nothing is sent until you ask."
+                 : "This is the only feature that leaves \(Platform.deviceNounPhrase). It sends a summary of your metrics to \(coach.provider.displayName) using your own key. Nothing is sent until you ask.")
+        }
+    }
+
     private var privacyFootnote: some View {
         Label {
-            Group {
-                if coach.provider == .chatGPT {
-                    Text("ChatGPT requests use your plan allowance. Metric summaries require your separate data-sharing consent.")
-                } else {
-                    Text(coach.provider == .custom
-                         ? "Coach talks only to the server URL you set. Point it at a local model (Ollama, LM Studio, llama.cpp) to keep everything on your own machine. Nothing is sent until you ask."
-                         : "This is the only feature that leaves \(Platform.deviceNounPhrase). It sends a summary of your metrics to \(coach.provider.displayName) using your own key. Nothing is sent until you ask.")
-                }
-            }
+            privacyFootnoteText
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1049,3 +1084,612 @@ struct CoachView: View {
         }
     }
 }
+
+// MARK: - iPhone redesign (mockup D1, design/round3/coach-profile.html)
+
+#if os(iOS)
+/// Geometry from mockup D1 with no `NoopTheme` token.
+private enum CoachRedesignLayout {
+    static let bubbleRadius: CGFloat = 20
+    static let bubbleTail: CGFloat = 6
+    static let bubbleHorizontal: CGFloat = 15
+    static let bubbleVertical: CGFloat = 12
+    static let bubbleInset: CGFloat = 48
+    static let messageGap: CGFloat = 12
+    static let inputHeight: CGFloat = 50
+    static let inputLeading: CGFloat = 18
+    static let inputTrailing: CGFloat = 8
+    static let sendSymbol: CGFloat = 20
+    static let micSymbol: CGFloat = 19
+    static let micWidth: CGFloat = 38
+    static let composerFade: Double = 0.92
+    static let dot: CGFloat = 7
+    static let dotGap: CGFloat = 4
+    static let dotRise: CGFloat = 4
+    static let dotCycle: Double = 1.2
+    static let dotStagger: Double = 0.15
+    static let dotRestOpacity: Double = 0.4
+    static let headerVertical: CGFloat = 4
+    static let scopeTint: Double = 0.16
+}
+
+extension CoachView {
+
+    /// The redesigned conversation. Presentation only: sending, streaming, consent, voice input, the key
+    /// editor and the connection actions are the same calls the classic screen makes.
+    fileprivate var redesignCoachScreen: some View {
+        VStack(spacing: 0) {
+            redesignCoachHeader
+            if coach.isConfigured {
+                redesignTranscript
+                    .safeAreaInset(edge: .bottom, spacing: 0) { redesignComposerArea }
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
+                        if coach.provider != .chatGPT { chatGPTSubscriptionChip }
+                        redesignSetupCard
+                    }
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.vertical, NoopTheme.Layout.l)
+                }
+            }
+        }
+        .formKitAmbient(.coach)
+    }
+
+    // MARK: Header
+
+    /// Title with the connection underneath, the connection menu (#2206: the only route to Update key,
+    /// Clear conversation and Disconnect on this platform) and the Coach settings sheet.
+    private var redesignCoachHeader: some View {
+        HStack(spacing: NoopTheme.Layout.s) {
+            if coach.isConfigured {
+                Menu {
+                    connectionMenuItems
+                } label: {
+                    FormKitIconFace(systemImage: "ellipsis")
+                }
+                .accessibilityLabel("Connection")
+            } else {
+                Color.clear.frame(width: NoopTheme.Layout.minTouchTarget, height: NoopTheme.Layout.minTouchTarget)
+            }
+            VStack(spacing: 0) {
+                Text("Coach")
+                    .noopFont(.navTitle)
+                    .accessibilityAddTraits(.isHeader)
+                if coach.isConfigured {
+                    Text(verbatim: "\(coach.provider.displayName) · \(coach.modelDisplayName(coach.model))")
+                        .noopFont(.caption, color: false)
+                        .foregroundStyle(NoopTheme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            if coach.isConfigured {
+                NoopIconButton(systemImage: "slider.horizontal.3", accessibilityLabel: "Coach settings") {
+                    showSettings = true
+                }
+            } else {
+                Color.clear.frame(width: NoopTheme.Layout.minTouchTarget, height: NoopTheme.Layout.minTouchTarget)
+            }
+        }
+        .padding(.horizontal, NoopTheme.Layout.s)
+        .padding(.vertical, CoachRedesignLayout.headerVertical)
+    }
+
+    /// The route to the ChatGPT plan when another provider is in use (the classic screen's button).
+    private var chatGPTSubscriptionChip: some View {
+        Button {
+            showChatGPTConnection = true
+        } label: {
+            NoopChip("ChatGPT subscription", systemImage: "person.crop.circle")
+        }
+        .buttonStyle(.noopPress)
+    }
+
+    // MARK: Transcript
+
+    private var redesignTranscript: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: CoachRedesignLayout.messageGap) {
+                    redesignContextLine
+                    if coach.messages.isEmpty {
+                        redesignEmptyTranscript
+                    }
+                    ForEach(coach.messages) { message in
+                        redesignBubble(message).id(message.id)
+                    }
+                    if coach.sending {
+                        CoachTypingDots().id("typing")
+                    }
+                    if let error = coach.errorText, !error.isEmpty {
+                        redesignErrorBanner(error)
+                    }
+                    if coach.provider != .chatGPT && (coach.keyRejected || showKeyEditor) {
+                        redesignKeyRepairPanel
+                    }
+                    redesignPrivacyFootnote
+                }
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+                .padding(.vertical, NoopTheme.Layout.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .onChangeCompat(of: coach.messages.count) { _ in scrollToEnd(proxy) }
+            .onChangeCompat(of: coach.sending) { _ in scrollToEnd(proxy) }
+        }
+    }
+
+    /// What this conversation draws on. The scope chip appears ONLY while data sharing is on, since it
+    /// states what is being sent; the plan line names the ChatGPT account in use.
+    @ViewBuilder
+    private var redesignContextLine: some View {
+        VStack(spacing: NoopTheme.Layout.s) {
+            if coach.dataConsent {
+                HStack(spacing: NoopTheme.Layout.s) {
+                    Image(systemName: "checkmark.shield.fill").accessibilityHidden(true)
+                    Text("Using today's scores, sleep and workouts")
+                }
+                .noopFont(.pill, color: false)
+                .foregroundStyle(NoopTheme.coach)
+                .padding(.horizontal, NoopTheme.Layout.m)
+                .frame(minHeight: NoopTheme.Layout.pillHeight)
+                .background(Capsule().fill(NoopTheme.coach.opacity(CoachRedesignLayout.scopeTint)))
+            }
+            if coach.provider == .chatGPT {
+                HStack(spacing: NoopTheme.Layout.s) {
+                    if let profile = coach.chatGPTSession.activeProfile {
+                        Text(verbatim: profile.email.map { "\(profile.label) · \($0)" } ?? profile.label)
+                            .lineLimit(1)
+                    } else {
+                        Text("Using ChatGPT plan")
+                    }
+                    Link("Manage usage", destination: URL(string: "https://chatgpt.com/settings/usage")!)
+                        .foregroundStyle(NoopTheme.textPrimary)
+                }
+                .noopFont(.caption, color: false)
+                .foregroundStyle(NoopTheme.textSecondary)
+            } else {
+                chatGPTSubscriptionChip
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var redesignEmptyTranscript: some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                Text("Ask your first question")
+                    .noopFont(.listTitle)
+                Text("Coach reads a summary of your last two weeks plus 30-day averages and recent workouts, then answers in plain language. Try a suggestion below.")
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func redesignBubble(_ message: ChatMessage) -> some View {
+        switch message.role {
+        case .user:
+            HStack {
+                Spacer(minLength: CoachRedesignLayout.bubbleInset)
+                Text(message.text)
+                    .noopFont(.body, color: false)
+                    .foregroundStyle(NoopTheme.canvas)
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(.leading)
+                    .padding(.horizontal, CoachRedesignLayout.bubbleHorizontal)
+                    .padding(.vertical, CoachRedesignLayout.bubbleVertical)
+                    .background(
+                        UnevenRoundedRectangle(topLeadingRadius: CoachRedesignLayout.bubbleRadius,
+                                               bottomLeadingRadius: CoachRedesignLayout.bubbleRadius,
+                                               bottomTrailingRadius: CoachRedesignLayout.bubbleTail,
+                                               topTrailingRadius: CoachRedesignLayout.bubbleRadius,
+                                               style: .continuous)
+                            .fill(NoopTheme.textPrimary)
+                    )
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("You said: \(message.text)")
+        case .assistant:
+            // Replies arrive as Markdown; user bubbles stay verbatim so a typed `*` never formats.
+            // Context chips (mockup D1) are not drawn: a reply carries only its text, with no record of
+            // which figures it was given, so any chips would be a guess.
+            let shape = UnevenRoundedRectangle(topLeadingRadius: CoachRedesignLayout.bubbleRadius,
+                                               bottomLeadingRadius: CoachRedesignLayout.bubbleTail,
+                                               bottomTrailingRadius: CoachRedesignLayout.bubbleRadius,
+                                               topTrailingRadius: CoachRedesignLayout.bubbleRadius,
+                                               style: .continuous)
+            HStack {
+                Markdown(message.text)
+                    .markdownTheme(.strand)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, CoachRedesignLayout.bubbleHorizontal)
+                    .padding(.vertical, CoachRedesignLayout.bubbleVertical)
+                    .background {
+                        ZStack {
+                            shape.fill(.ultraThinMaterial)
+                            shape.fill(NoopTheme.card)
+                        }
+                    }
+                    .clipShape(shape)
+                    .overlay(shape.strokeBorder(NoopTheme.cardBorder, lineWidth: FormKitLayout.hairline))
+                    .contextMenu { assistantReplyActions(message.text) }
+                Spacer(minLength: CoachRedesignLayout.bubbleInset)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Coach said: \(message.text)")
+        }
+    }
+
+    private func redesignErrorBanner(_ message: String) -> some View {
+        NoopGlassCard {
+            HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(NoopTheme.recoveryLow)
+                    .accessibilityHidden(true)
+                Text(message)
+                    .noopFont(.bodySmall, color: false)
+                    .foregroundStyle(NoopTheme.recoveryLow)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Error: \(message)")
+    }
+
+    /// The replacement-key editor (same `setKey` path, same rules as the classic panel).
+    private var redesignKeyRepairPanel: some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                if coach.keyRejected {
+                    Text("Paste the corrected key. Your conversation is kept.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                SecureField("Paste your \(coach.provider.displayName) API key", text: $keyFix)
+                    .textFieldStyle(.plain)
+                    .formKitField()
+                    .onSubmit(saveRepairedKey)
+                    .accessibilityLabel(coach.keyRejected ? Text("Corrected API key") : Text("API key"))
+                Button("Update key", action: saveRepairedKey)
+                    .buttonStyle(NoopPrimaryButton())
+                    .disabled(keyFix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if showKeyEditor && !coach.keyRejected {
+                    Button("Cancel") { toggleKeyEditor() }
+                        .buttonStyle(NoopSecondaryButton())
+                }
+            }
+        }
+    }
+
+    private var redesignPrivacyFootnote: some View {
+        HStack(alignment: .top, spacing: NoopTheme.Layout.s) {
+            Image(systemName: "lock.shield")
+                .accessibilityHidden(true)
+            privacyFootnoteText
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .noopFont(.caption)
+        .padding(.top, NoopTheme.Layout.s)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Composer
+
+    /// Suggested prompts, the token estimate and the input bar, docked above the tab bar.
+    private var redesignComposerArea: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: NoopTheme.Layout.s) {
+                    let prompts = showFollowUpChips ? AICoachEngine.followUpSuggestions : suggestions
+                    ForEach(prompts, id: \.self) { prompt in
+                        Button {
+                            send(prompt)
+                        } label: {
+                            NoopChip(verbatim: prompt)
+                        }
+                        .buttonStyle(.noopPress)
+                        .disabled(coach.sending)
+                        .accessibilityLabel(showFollowUpChips ? Text("Follow-up prompt: \(prompt)") : Text("Suggested prompt: \(prompt)"))
+                    }
+                }
+                .padding(.horizontal, NoopTheme.Layout.m)
+            }
+            if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let tokens = coach.estimatedTokens(forDraft: draft) {
+                Group {
+                    if tokens > 8000 {
+                        Text("~\(tokens) tokens") + Text(verbatim: " ") + Text("· may exceed small context windows")
+                    } else {
+                        Text("~\(tokens) tokens")
+                    }
+                }
+                .noopFont(.caption)
+                .padding(.horizontal, NoopTheme.Layout.m + CoachRedesignLayout.inputLeading)
+            }
+            redesignInputBar
+                .padding(.horizontal, NoopTheme.Layout.m)
+        }
+        .padding(.top, NoopTheme.Layout.s)
+        .padding(.bottom, NoopTheme.Layout.s)
+        .background(
+            LinearGradient(colors: [NoopTheme.canvas.opacity(0), NoopTheme.canvas.opacity(CoachRedesignLayout.composerFade)],
+                           startPoint: .top, endPoint: .center)
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private var redesignInputBar: some View {
+        HStack(spacing: NoopTheme.Layout.s) {
+            HStack(spacing: 0) {
+                TextField("Ask Coach about your data…", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .noopFont(.body, color: false)
+                    .foregroundStyle(NoopTheme.textPrimary)
+                    .lineLimit(1...5)
+                    .focused($composerFocused)
+                    .onSubmit { send(draft) }
+                    .accessibilityLabel("Question")
+                redesignMicButton
+            }
+            .padding(.leading, CoachRedesignLayout.inputLeading)
+            .padding(.trailing, CoachRedesignLayout.inputTrailing)
+            .frame(minHeight: CoachRedesignLayout.inputHeight)
+            .background {
+                ZStack {
+                    Capsule().fill(.ultraThinMaterial)
+                    Capsule().fill(NoopTheme.control)
+                }
+            }
+            .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(NoopTheme.cardBorder, lineWidth: FormKitLayout.hairline))
+
+            Button {
+                send(draft)
+            } label: {
+                Group {
+                    if coach.sending {
+                        ProgressView().controlSize(.small).tint(NoopTheme.canvas)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: CoachRedesignLayout.sendSymbol, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(NoopTheme.canvas)
+                .frame(width: CoachRedesignLayout.inputHeight, height: CoachRedesignLayout.inputHeight)
+                .background(Circle().fill(NoopTheme.textPrimary))
+            }
+            .buttonStyle(.noopPress)
+            .disabled(coach.sending || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityLabel("Send")
+        }
+    }
+
+    /// K4 on-device voice input inside the field (same `CoachVoiceInput` and toggle as the classic mic).
+    private var redesignMicButton: some View {
+        Button {
+            toggleVoice()
+        } label: {
+            Image(systemName: voiceInput.isRecording ? "stop.circle.fill" : "mic.fill")
+                .font(.system(size: CoachRedesignLayout.micSymbol, weight: .medium))
+                .foregroundStyle(voiceInput.isRecording
+                                 ? NoopTheme.recoveryLow
+                                 : (canUseVoice ? NoopTheme.textPrimary : NoopTheme.textTertiary))
+                .frame(width: CoachRedesignLayout.micWidth, height: NoopTheme.Layout.minTouchTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!micButtonEnabled)
+        .accessibilityLabel(voiceInput.isRecording ? "Stop voice input" : "Voice input")
+        .accessibilityHint(voiceInput.statusMessage ?? "Transcribes your question on-device")
+        .task {
+            if voiceInput.authorization == .notDetermined {
+                voiceInput.requestAuthorization { _ in }
+            }
+        }
+    }
+
+    // MARK: Setup (no provider yet)
+
+    private var redesignSetupCard: some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                HStack(spacing: NoopTheme.Layout.m) {
+                    DomainIcon(systemImage: "sparkles", color: NoopTheme.coach)
+                    Text("Connect a provider")
+                        .noopFont(.sectionTitle)
+                }
+                providerIntroduction
+                    .noopFont(.bodySmall, color: false)
+                    .foregroundStyle(NoopTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                FormKitControlRow("Provider", showsDivider: false) {
+                    Picker("Provider", selection: $coach.provider) {
+                        ForEach(AIProvider.selectableProviders) { p in
+                            Text(p.displayName).tag(p)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .tint(NoopTheme.textSecondary)
+                    .accessibilityLabel("Provider")
+                }
+                if coach.provider == .chatGPT {
+                    Button("Continue with ChatGPT") { showChatGPTConnection = true }
+                        .buttonStyle(NoopPrimaryButton())
+                    Link("Manage usage", destination: URL(string: "https://chatgpt.com/settings/usage")!)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(NoopTheme.textPrimary)
+                    Text("Signing in does not grant access to your health data. Coach's data-sharing settings remain separate.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    redesignLegacyProviderFields
+                }
+                if let error = coach.errorText, !error.isEmpty {
+                    Text(error)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(NoopTheme.recoveryLow)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Error: \(error)")
+                }
+                FormKitDivider()
+                redesignPrivacyFootnote
+            }
+        }
+    }
+
+    /// API-key and Custom provider fields: the same bindings and actions as `legacyProviderFields`.
+    @ViewBuilder
+    private var redesignLegacyProviderFields: some View {
+        if coach.provider == .custom {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                Text("Server URL").noopFont(.footnote)
+                TextField("http://localhost:11434/v1", text: $coach.customBaseURL)
+                    .textFieldStyle(.plain)
+                    .formKitField()
+                    .disableAutocorrection(true)
+                    .textInputAutocapitalization(.never)
+                    .accessibilityLabel("Server URL")
+                Text("Any OpenAI-compatible server: Ollama, LM Studio, llama.cpp, or your own gateway. Stays on your network; nothing leaves \(Platform.deviceNounPhrase).")
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                Text("Key header").noopFont(.footnote)
+                Picker("Key header", selection: $coach.customAuthHeader) {
+                    ForEach(CustomAIAuthHeader.allCases) { header in
+                        Text(header.displayName).tag(header)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .accessibilityLabel("Key header")
+                Text("Use Bearer for most local servers; use x-api-key for gateways that require the key in that header.")
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            HStack {
+                Text("Model").noopFont(.footnote)
+                Spacer()
+                Button {
+                    Task { await coach.refreshModels() }
+                } label: {
+                    Label("Refresh models", systemImage: "arrow.clockwise")
+                        .labelStyle(.titleAndIcon)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(NoopTheme.textPrimary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!coach.canRefreshModels)
+                .accessibilityLabel("Refresh models from provider")
+            }
+            Picker("Model", selection: modelPickerSelection) {
+                ForEach(coach.availableModels, id: \.self) { m in
+                    Text(verbatim: coach.modelDisplayName(m)).tag(m)
+                }
+                Divider()
+                Text("Custom…").tag(customModelTag)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tint(NoopTheme.textSecondary)
+            .accessibilityLabel("Model")
+            if customModel {
+                HStack(spacing: NoopTheme.Layout.s) {
+                    TextField("Enter a model id", text: $customModelDraft)
+                        .textFieldStyle(.plain)
+                        .formKitField()
+                        .onSubmit(applyCustomModel)
+                        .accessibilityLabel("Custom model id")
+                    Button("Use", action: applyCustomModel)
+                        .buttonStyle(.noopPress)
+                        .noopFont(.button, color: false)
+                        .foregroundStyle(NoopTheme.textPrimary)
+                        .disabled(customModelDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel("Use custom model")
+                }
+            }
+        }
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            Text(coach.provider == .custom ? "API key (optional)" : "API key").noopFont(.footnote)
+            SecureField(coach.provider == .custom
+                        ? "Only if your server requires one"
+                        : "Paste your \(coach.provider.displayName) API key", text: $keyDraft)
+                .textFieldStyle(.plain)
+                .formKitField()
+                .onSubmit { coach.provider == .custom ? connectCustom() : saveKey() }
+                .accessibilityLabel("API key")
+        }
+        if coach.provider == .custom {
+            Button("Connect", action: connectCustom)
+                .buttonStyle(NoopPrimaryButton())
+                .disabled(coach.customBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } else {
+            Button("Save key", action: saveKey)
+                .buttonStyle(NoopPrimaryButton())
+                .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+}
+
+/// Three bouncing dots while a reply is on its way (mockup D1 `.typing`). The loop never settles, so it
+/// holds still under Reduce Motion, Low Power Mode, the in-app "Reduce motion" switch, or a covered
+/// window (`NoopMotionState.poseStill`), showing three resting dots instead.
+private struct CoachTypingDots: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var motion = NoopMotionState.shared
+
+    var body: some View {
+        let still = motion.poseStill(reduceMotion)
+        let shape = UnevenRoundedRectangle(topLeadingRadius: CoachRedesignLayout.bubbleRadius,
+                                           bottomLeadingRadius: CoachRedesignLayout.bubbleTail,
+                                           bottomTrailingRadius: CoachRedesignLayout.bubbleRadius,
+                                           topTrailingRadius: CoachRedesignLayout.bubbleRadius,
+                                           style: .continuous)
+        TimelineView(.animation(paused: still)) { timeline in
+            HStack(spacing: CoachRedesignLayout.dotGap) {
+                ForEach(0..<3, id: \.self) { index in
+                    let phase = still ? nil : Self.phase(at: timeline.date, index: index)
+                    Circle()
+                        .fill(NoopTheme.textSecondary)
+                        .frame(width: CoachRedesignLayout.dot, height: CoachRedesignLayout.dot)
+                        .opacity(phase.map { CoachRedesignLayout.dotRestOpacity + (1 - CoachRedesignLayout.dotRestOpacity) * $0 }
+                                 ?? CoachRedesignLayout.dotRestOpacity)
+                        .offset(y: -CoachRedesignLayout.dotRise * (phase ?? 0))
+                }
+            }
+            .padding(.horizontal, CoachRedesignLayout.bubbleHorizontal + NoopTheme.Layout.xs)
+            .padding(.vertical, CoachRedesignLayout.bubbleVertical + NoopTheme.Layout.xs)
+        }
+        .background {
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(NoopTheme.card)
+            }
+        }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(NoopTheme.cardBorder, lineWidth: FormKitLayout.hairline))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Coach is thinking")
+    }
+
+    /// Lift 0…1 for one dot: up over the first 30 % of the cycle, down by 60 %, resting after (the
+    /// mockup's `typing` keyframes), each dot 0.15 s behind the last.
+    private static func phase(at date: Date, index: Int) -> Double {
+        let t = date.timeIntervalSinceReferenceDate - Double(index) * CoachRedesignLayout.dotStagger
+        let cycle = CoachRedesignLayout.dotCycle
+        let local = (t.truncatingRemainder(dividingBy: cycle) + cycle).truncatingRemainder(dividingBy: cycle) / cycle
+        if local < 0.3 { return local / 0.3 }
+        if local < 0.6 { return 1 - (local - 0.3) / 0.3 }
+        return 0
+    }
+}
+#endif

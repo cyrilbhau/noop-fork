@@ -26,7 +26,27 @@ struct BackupSyncView: View {
     @State private var pendingRestore: FolderBackup.Snapshot?
     @State private var confirmRestore = false
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            backupLifecycle(redesignScreen)
+        } else {
+            backupLifecycle(classicScreen)
+        }
+        #else
+        backupLifecycle(classicScreen)
+        #endif
+    }
+
+    /// The classic screen (macOS, and iOS with the redesign switched off). Unchanged layout.
+    private var classicScreen: some View {
         ScreenScaffold(
             title: "Backup & Sync",
             subtitle: "Save a full backup to a folder you choose - point it at Google Drive, iCloud or Dropbox for off-device sync."
@@ -37,6 +57,11 @@ struct BackupSyncView: View {
                 restoreCard
             }
         }
+    }
+
+    /// Alerts, the snapshot picker and the restore confirmation, shared by both presentations.
+    private func backupLifecycle<Content: View>(_ content: Content) -> some View {
+        content
         // Result of a backup or a restore.
         .alert(alertTitle, isPresented: $showAlert) {
             Button("OK", role: .cancel) {}
@@ -62,6 +87,13 @@ struct BackupSyncView: View {
     }
 
     // MARK: - Cards
+
+    /// Auto is on but the last successful backup is stale (see `autoCard`). One predicate for both
+    /// presentations.
+    private var autoBackupIsStale: Bool {
+        auto && folderLabel != nil && lastMs > 0
+            && BackupSync.isBackupStale(lastBackupMs: lastMs, nowMs: Int(Date().timeIntervalSince1970 * 1000.0))
+    }
 
     private var folderCard: some View {
         StrandCard(padding: 20) {
@@ -144,9 +176,7 @@ struct BackupSyncView: View {
                 // Surface it so a silently-failing auto-backup is visible, not discovered only at restore.
                 // `lastMs > 0` excludes the never-backed-up state (the "No backup yet." line above owns that,
                 // and it would otherwise false-fire the moment auto is switched on, before the first backup).
-                if auto, folderLabel != nil, lastMs > 0,
-                   BackupSync.isBackupStale(lastBackupMs: lastMs,
-                                            nowMs: Int(Date().timeIntervalSince1970 * 1000.0)) {
+                if autoBackupIsStale {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(StrandPalette.statusWarning)
@@ -374,3 +404,175 @@ private struct RestorePickerSheet: View {
         return f.string(from: Date(timeIntervalSince1970: Double(ms) / 1000.0))
     }
 }
+
+// MARK: - iPhone redesign (D6)
+
+#if os(iOS)
+/// Geometry from `design/round3/coach-profile.html` D6 with no `NoopTheme` token.
+private enum BackupLayout {
+    static let heroHeight: CGFloat = 220
+    static let heroRing: CGFloat = 170
+    static let heroRingLine: CGFloat = 6
+    static let heroIcon: CGFloat = 34
+}
+
+extension BackupSyncView {
+    /// Redesign D6: a status ring for the last backup, the folder / auto-backup / retention rows, and the
+    /// two actions. Every control calls the same action as the classic screen. The ring is full only when
+    /// a backup has actually been written (`FolderBackup.lastBackupMs`), and draws dashed and empty
+    /// otherwise; it turns amber when auto-backup has gone stale, matching the warning below it.
+    var redesignScreen: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                FormKitTitle("Backup & Sync",
+                             subtitle: "Save a full backup to a folder you choose - point it at Google Drive, iCloud or Dropbox for off-device sync.")
+                    .padding(.top, NoopTheme.Layout.s)
+                backupHero
+                    .noopEntrance(index: 0)
+
+                FormKitCard {
+                    folderRow
+                    if !FolderBackup.useInternalFolder {
+                        Button { useNoopFolder() } label: {
+                            FormKitControlRow("Use NOOP's own folder (browse in Files)") { FormKitChevron() }
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy)
+                    }
+                    FormKitControlRow("Daily auto-backup",
+                                      detail: "Backs up to your folder about once a day and keeps the latest \(keep). On this platform it runs when you next open NOOP.") {
+                        Toggle("Daily auto-backup", isOn: $auto)
+                            .labelsHidden()
+                            .tint(NoopTheme.recovery)
+                            .disabled(folderLabel == nil)
+                            .onChangeCompat(of: auto) { on in FolderBackup.autoEnabled = on }
+                    }
+                    FormKitControlRow("Keep last snapshots",
+                                      detail: "Older backups beyond this many are pruned, oldest first (≈ that many days). If data ever corrupts, restore the newest.") {
+                        Picker("Keep last snapshots", selection: $keep) {
+                            ForEach(FolderBackup.keepOptions, id: \.self) { n in Text("\(n)").tag(n) }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .tint(NoopTheme.textSecondary)
+                        .onChangeCompat(of: keep) { n in FolderBackup.keepCount = n }
+                    }
+                }
+                .padding(.top, NoopTheme.Layout.l)
+                .noopEntrance(index: 1)
+
+                if autoBackupIsStale {
+                    backupWarning("Auto-backup hasn't run in a few days. Check the backup folder is still available — a moved or disconnected cloud folder stops backups silently.")
+                }
+                // #644: the snapshots are an unencrypted ZIP; say so beside the folder choice.
+                FormKitFootnote("Tip: choose a folder in iCloud Drive and your backups sync to all your Apple devices automatically, no account setup needed.")
+                backupWarning("These backups are unencrypted too. If this folder syncs to Drive, Dropbox or iCloud, the readable file goes there as well — only point it at a service you trust.")
+
+                VStack(spacing: NoopTheme.Layout.s + NoopTheme.Layout.xs / 2) {
+                    Button { backupNow() } label: { busy ? Text("Working…") : Text("Back up now") }
+                        .buttonStyle(NoopPrimaryButton())
+                        .disabled(folderLabel == nil || busy)
+                    Button("Restore from a backup…") { openRestorePicker() }
+                        .buttonStyle(NoopSecondaryButton())
+                        .disabled(folderLabel == nil || busy)
+                }
+                .formKitGutter()
+                .padding(.top, NoopTheme.Layout.xl)
+                .noopEntrance(index: 2)
+
+                FormKitFootnote("Replace this device's data with one of the backups in your folder. This overwrites current data, so back up first if you're unsure.")
+                FormKitFootnote("Your ChatGPT sign-in stays in this iPhone's Keychain and is not part of a backup.")
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .formKitAmbient(.backup)
+    }
+
+    /// The status ring. Its centre reads only what `FolderBackup` recorded: the last successful backup,
+    /// or "No backup yet." with an empty dashed ring.
+    private var backupHero: some View {
+        let hasBackup = lastMs > 0
+        let tint = autoBackupIsStale ? NoopTheme.recoveryMid : NoopTheme.recovery
+        return ZStack {
+            NoopRing(value: hasBackup ? 1 : nil, color: tint, lineWidth: BackupLayout.heroRingLine,
+                     diameter: BackupLayout.heroRing,
+                     animate: NoopTheme.Motion.ringsAnimate(reduceMotion: reduceMotion, fillOnLoad: ringsFillOnLoad))
+                .accessibilityHidden(true)
+            VStack(spacing: NoopTheme.Layout.xs) {
+                Image(systemName: hasBackup ? "checkmark" : "externaldrive")
+                    .font(.system(size: BackupLayout.heroIcon, weight: .semibold))
+                    .foregroundStyle(hasBackup ? tint : NoopTheme.textTertiary)
+                    .accessibilityHidden(true)
+                if hasBackup {
+                    Text("Backed up")
+                        .noopFont(.navTitle)
+                    Text(verbatim: heroTime(lastMs))
+                        .noopFont(.footnote)
+                } else {
+                    Text("No backup yet.")
+                        .noopFont(.navTitle)
+                }
+            }
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .combine)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: BackupLayout.heroHeight)
+    }
+
+    /// The folder row: the chosen folder, or the explanation of why to pick one. Tapping opens the picker.
+    private var folderRow: some View {
+        Button { chooseFolder() } label: {
+            Group {
+                if let folderLabel {
+                    FormKitControlRow("Backup folder", showsDivider: false) {
+                        FormKitValue(verbatim: folderLabel)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        FormKitChevron()
+                    }
+                } else {
+                    FormKitControlRow("Backup folder",
+                                      detail: "No folder chosen yet. Pick one your cloud app already syncs, or any local folder.",
+                                      showsDivider: false) {
+                        FormKitValue("Choose folder")
+                        FormKitChevron()
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
+        .accessibilityHint(Text(folderLabel == nil ? "Choose folder" : "Change folder"))
+    }
+
+    private func backupWarning(_ key: LocalizedStringKey) -> some View {
+        HStack(alignment: .top, spacing: NoopTheme.Layout.s) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .noopFont(.caption, color: false)
+                .foregroundStyle(NoopTheme.recoveryMid)
+                .accessibilityHidden(true)
+            Text(key)
+                .noopFont(.footnote, color: false)
+                .foregroundStyle(NoopTheme.recoveryMid)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+        .padding(.top, NoopTheme.Layout.m)
+    }
+
+    /// "Today at 3:12 AM": the date relative to today plus the reader's clock.
+    private func heroTime(_ ms: Int) -> String {
+        let f = DateFormatter()
+        f.locale = AppClock.formattingLocale
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        f.doesRelativeDateFormatting = true
+        return f.string(from: Date(timeIntervalSince1970: Double(ms) / 1000.0))
+    }
+}
+#endif

@@ -481,6 +481,13 @@ struct MetricExplorerView: View {
     /// hint in the header, never gating the rows: the catalog is static, so every row's label/icon/unit
     /// must paint immediately even before any series read returns (#199).
     @State private var probing = true
+    #if os(iOS)
+    /// The iPhone redesign (A2 "All metrics"); off falls back to the classic Explore list below.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    /// The redesign's search filter over the catalog titles and categories.
+    @State private var searchQuery = ""
+    #endif
 
     var body: some View {
         #if os(macOS)
@@ -491,8 +498,14 @@ struct MetricExplorerView: View {
         // iOS: Explore is pushed INSIDE the More tab's NavigationStack. A nested NavigationStack made
         // tapping a metric bounce straight back to the More list (#199) — so use the ambient stack; the
         // rows push their detail with a direct closure-based NavigationLink (#38).
-        exploreScaffold
-            .task(id: repo.refreshSeq) { await probeEmptiness(refreshSeq: repo.refreshSeq) }
+        Group {
+            if redesignEnabled {
+                redesignExplore
+            } else {
+                exploreScaffold
+            }
+        }
+        .task(id: repo.refreshSeq) { await probeEmptiness(refreshSeq: repo.refreshSeq) }
         #endif
     }
 
@@ -754,7 +767,11 @@ struct MetricDetailView: View {
     }
     private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
     private var skinTempPreferred: SkinTempDisplay.Kind {
-        SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute
+        #if os(iOS)
+        // The redesign shows skin temperature only relative to the wearer's baseline.
+        if redesignEnabled { return .deviation }
+        #endif
+        return SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute
     }
     private func fmt(_ v: Double) -> String {
         if isStepsDetail { return MetricDetailSteps.valueLabel(v, resolution: .daily) }
@@ -797,6 +814,13 @@ struct MetricDetailView: View {
     @State private var correlationCache: [CorrRow] = []
     /// The (metricID, range) the cache was built for; nil means "not yet computed".
     @State private var correlationKey: String? = nil
+    #if os(iOS)
+    /// The iPhone redesign (A3 "Metric detail"); off falls back to the classic dossier below.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    /// The redesign chart's tapped point (x = seconds since 1970 of the reading's day).
+    @State private var selectedChartX: Double?
+    #endif
     private var loadTaskID: String {
         MetricDetailSteps.loadIdentity(metricID: metric.id, refreshSequence: repo.refreshSeq,
                                        skinTemperatureStyle: skinTempDisplayRaw, range: range)
@@ -955,6 +979,18 @@ struct MetricDetailView: View {
     // MARK: Body
 
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignDetail
+        } else {
+            classicDetail
+        }
+        #else
+        classicDetail
+        #endif
+    }
+
+    private var classicDetail: some View {
         // Compute the heavy window derivations ONCE per body eval, then hand them to
         // the subviews — instead of every subview re-deriving `effectiveRange` /
         // `windowed` (each of which re-parses + re-filters the full history).
@@ -1191,6 +1227,17 @@ struct MetricDetailView: View {
                 case .absolute:   leadsAbsolute = anyAbsolute
                 case .deviation:  leadsAbsolute = !anyDeviation && anyAbsolute
                 }
+                #if os(iOS)
+                if redesignEnabled && leadsAbsolute {
+                    // The redesign never shows an absolute skin temperature: with no baseline difference on
+                    // any night there is nothing relative to plot, so the screen says so instead.
+                    series = []
+                    sourceByDay = [:]
+                    skinTempNote = String(localized: "No baseline difference yet. NOOP needs about 4 worn nights to learn your skin-temperature baseline.")
+                    loaded = true
+                    return
+                }
+                #endif
                 if leadsAbsolute {
                     // An absolute-led series takes EVERY absolute reading, whichever column holds it.
                     // `skinTempC` is the on-device computed absolute; `skinTempDevC` may hold a CSV-imported
