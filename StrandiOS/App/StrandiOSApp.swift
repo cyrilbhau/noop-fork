@@ -607,6 +607,15 @@ enum DemoScreens {
         // + self-service pairing guidance, screenshot-able WITHOUT reproducing the bond refusal on real
         // hardware.
         case "bondrefused": return AnyView(BondRefusedDemoScreen())
+        // The iPhone redesign's screens (docs/personal/REDESIGN-IMPLEMENTATION.md), so each can be captured
+        // populated (`--demo-seed`) and empty (no seed) for comparison with the mockups in design/.
+        case "redesigntoday": return AnyView(RedesignTodayView())
+        case "recovery": return AnyView(RecoveryDetailView(dayKey: nil))
+        case "strain": return AnyView(StrainDetailView(dayKey: nil))
+        case "training": return AnyView(TrainingHubView())
+        case "redesignhealth": return AnyView(RedesignHealthView())
+        case "profile": return AnyView(ProfileDemoHost())
+        case "gallery": return AnyView(NoopDesignGallery())
         default:         return nil
         }
     }
@@ -615,6 +624,12 @@ enum DemoScreens {
 #endif
 
 #if DEBUG
+/// DEBUG-only host so `--demo-screen profile` can render the Profile sheet, which needs a path binding.
+private struct ProfileDemoHost: View {
+    @State private var path = NavigationPath()
+    var body: some View { ProfileSheet(path: $path, onClose: {}) }
+}
+
 /// DEBUG-only host so `--demo-screen addwizard` can render the multi-step Add-a-device wizard.
 /// A SwiftUI View body is main-actor, so it can pull the injected LiveState and hand it to the
 /// wizard's `init(live:)` (the nonisolated DemoScreens switch can't construct a LiveState itself).

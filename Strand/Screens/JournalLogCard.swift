@@ -77,7 +77,26 @@ struct JournalLogCard: View {
         collapsedGroupsRaw = set.sorted().joined(separator: ",")
     }
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic card.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     var body: some View {
+        Group {
+            #if os(iOS)
+            // iPhone redesign (C5): the same catalog, day picker, answers, numeric fields, edit mode and
+            // custom-item flow, restyled.
+            if redesignEnabled { journalRedesignBody } else { classicBody }
+            #else
+            classicBody
+            #endif
+        }
+        .sheet(item: $renaming) { item in renameSheet(item) }
+    }
+
+    /// The classic journal card (macOS, and iOS with the redesign switched off). Unchanged layout.
+    private var classicBody: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             HStack(alignment: .center) {
                 SectionHeader("Journal", overline: "Log")
@@ -130,7 +149,6 @@ struct JournalLogCard: View {
                 }
             }
         }
-        .sheet(item: $renaming) { item in renameSheet(item) }
     }
 
     // MARK: - Group block
@@ -409,14 +427,32 @@ private struct NumericLogField: View {
     let value: Double?
     let placeholder: String
     let onCommit: (Double) -> Void
+    /// The redesigned journal's plain numeral field instead of the classic rounded border.
+    var redesign = false
 
     @State private var text = ""
 
     var body: some View {
-        TextField(placeholder, text: $text)
+        #if os(iOS)
+        if redesign {
+            field
+                .textFieldStyle(.plain)
+                .noopFont(.statNumber)
+        } else {
+            field
+                .textFieldStyle(.roundedBorder)
+                .font(StrandFont.number(15))
+        }
+        #else
+        field
             .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.center)
             .font(StrandFont.number(15))
+        #endif
+    }
+
+    private var field: some View {
+        TextField(placeholder, text: $text)
+            .multilineTextAlignment(.center)
             .onAppear { text = value.map(Self.format) ?? "" }
             .onChangeCompat(of: value) { v in text = v.map(Self.format) ?? "" }
             .onSubmit { commit() }
@@ -434,3 +470,280 @@ private struct NumericLogField: View {
         v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)
     }
 }
+
+
+// MARK: - iPhone redesign (C5 Journal)
+//
+// `design/round3/sleep-health.html` C5 over this card's own state and writes: the same day picker, the
+// same tri-state yes/no answers, numeric fields and steppers, collapsible groups, edit mode (rename,
+// regroup, convert, remove, restore) and custom items. The answered count is a plain count of the
+// selected day's answers; nothing is scored here.
+
+#if os(iOS)
+extension JournalLogCard {
+    /// The visible items for the selected day (hidden ones only while editing).
+    private var journalRdItems: [JournalCatalogItem] {
+        JournalGroup.displayOrder.flatMap { items(in: $0) }.filter { !$0.hidden }
+    }
+
+    private var journalRdAnsweredCount: Int {
+        journalRdItems.filter { item in
+            item.kind.isNumeric ? numericAnswers[item.canonical] != nil : answers[item.canonical] != nil
+        }.count
+    }
+
+    var journalRedesignBody: some View {
+        let total = journalRdItems.count
+        let answered = journalRdAnsweredCount
+        return VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack(alignment: .firstTextBaseline) {
+                    (Text(journalDayLabel(dayOffset)) + Text(verbatim: " · ") + Text("\(answered) of \(total) answered"))
+                        .noopFont(.footnote)
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    Button { editing.toggle() } label: {
+                        NoopChip(editing ? "Done" : "Edit", isSelected: editing)
+                    }
+                    .buttonStyle(.noopPress)
+                }
+                InsightsProgressBar(fraction: total > 0 ? Double(answered) / Double(total) : nil, color: NoopTheme.sleep)
+                    .accessibilityHidden(true)
+                if !editing { journalRdDayPicker }
+                Text(editing
+                     ? "Rename, regroup, or remove an item to tidy your list. Renaming keeps the original question behind the scenes, so a WHOOP import still lines up. Custom items are deleted; built-in ones are hidden and can be restored below."
+                     : dayOffset == -1
+                     ? "Logging ahead for tomorrow: today's activities inform tomorrow's recovery, just as yesterday's are reflected in today's. Tomorrow's answers line up with tomorrow's morning."
+                     : "Answers are about the night and day leading into this morning, the same attribution a WHOOP export uses, so logged and imported days line up.")
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+
+            ForEach(JournalGroup.displayOrder, id: \.self) { group in
+                journalRdGroup(group)
+            }
+
+            InsightsSectionTitle("Add a custom item…")
+            journalRdAddCard
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+
+            Text("Answers feed What moves you. They stay on your \(Platform.deviceNoun).")
+                .noopFont(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                .padding(.top, NoopTheme.Layout.m)
+        }
+    }
+
+    // MARK: Day picker
+
+    private var journalRdDayPicker: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: NoopTheme.Layout.s) {
+                    ForEach(Self.journalDayOffsets, id: \.self) { off in
+                        Button {
+                            dayOffset = off
+                            onChanged()   // reload the selected day's answers
+                        } label: {
+                            NoopChip(journalDayLabel(off), isSelected: dayOffset == off)
+                        }
+                        .buttonStyle(.noopPress)
+                        .id(off)
+                    }
+                }
+            }
+            // Deferred a tick, as in the classic picker, so the scroll lands after layout.
+            .onAppear { DispatchQueue.main.async { proxy.scrollTo(dayOffset, anchor: .center) } }
+            .onChangeCompat(of: dayOffset) { _ in proxy.scrollTo(dayOffset, anchor: .center) }
+        }
+    }
+
+    // MARK: Groups
+
+    @ViewBuilder
+    private func journalRdGroup(_ group: JournalGroup) -> some View {
+        let groupItems = items(in: group)
+        if !groupItems.isEmpty || editing {
+            let collapsed = collapsedGroups.contains(group.rawValue)
+            Button { toggleCollapsed(group) } label: {
+                HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                    Text(verbatim: group.title).noopFont(.sectionTitle)
+                    Text(verbatim: "\(groupItems.count)").noopFont(.caption)
+                    Spacer()
+                    Image(systemName: collapsed ? "chevron.right" : "chevron.down")
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(NoopTheme.textTertiary)
+                        .accessibilityHidden(true)
+                }
+                .padding(.top, NoopTheme.Layout.sectionTop)
+                .padding(.bottom, NoopTheme.Layout.sectionBottom)
+                .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(group.title), \(groupItems.count) items, \(collapsed ? "collapsed" : "expanded")")
+
+            if !collapsed && !groupItems.isEmpty {
+                NoopGlassCard(flush: true) {
+                    ForEach(Array(groupItems.enumerated()), id: \.element.id) { index, item in
+                        journalRdRow(item, showsDivider: index > 0)
+                    }
+                }
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+            }
+        }
+    }
+
+    private func journalRdRow(_ item: JournalCatalogItem, showsDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            if showsDivider {
+                Rectangle().fill(NoopTheme.separator).frame(height: 1).accessibilityHidden(true)
+            }
+            HStack(spacing: NoopTheme.Layout.m) {
+                Text(verbatim: item.display)
+                    .noopFont(.listTitle, color: false)
+                    .foregroundStyle(item.hidden ? NoopTheme.textTertiary : NoopTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if editing {
+                    journalRdEditControls(item)
+                } else if item.kind.isNumeric {
+                    journalRdNumeric(item)
+                } else {
+                    journalRdAnswerChip("Yes", q: item.canonical, value: true)
+                    journalRdAnswerChip("No", q: item.canonical, value: false)
+                }
+            }
+            .padding(.vertical, NoopTheme.Layout.m)
+            .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+        }
+    }
+
+    /// Tri-state, as in the classic pill: re-tapping the selected answer clears it (scoped to the
+    /// native journal source; imported rows are never removed this way).
+    private func journalRdAnswerChip(_ label: LocalizedStringKey, q: String, value: Bool) -> some View {
+        let selected = answers[q] == value
+        return Button {
+            Task {
+                if selected {
+                    await repo.clearJournalAnswer(day: dayKey, question: q)
+                } else {
+                    await repo.saveJournalAnswer(day: dayKey, question: q, answeredYes: value)
+                }
+                onChanged()
+            }
+        } label: {
+            NoopChip(label, isSelected: selected)
+                .overlay(Capsule().strokeBorder(selected ? NoopTheme.sleep : .clear, lineWidth: 1))
+        }
+        .buttonStyle(.noopPress)
+    }
+
+    private func journalRdNumeric(_ item: JournalCatalogItem) -> some View {
+        let current = numericAnswers[item.canonical]
+        return HStack(spacing: NoopTheme.Layout.s) {
+            NoopIconButton(systemImage: "minus", accessibilityLabel: "Decrease") {
+                commitNumeric(item.canonical, value: max(0, (current ?? 0) - 1))
+            }
+            NumericLogField(value: current, placeholder: "—",
+                            onCommit: { v in commitNumeric(item.canonical, value: v) }, redesign: true)
+                .frame(width: InsightsLayout.numericField)
+            if let unit = item.kind.unitLabel, !unit.isEmpty {
+                Text(verbatim: unit).noopFont(.unit)
+            }
+            NoopIconButton(systemImage: "plus", accessibilityLabel: "Increase") {
+                commitNumeric(item.canonical, value: (current ?? 0) + 1)
+            }
+            if current != nil {
+                Button {
+                    Task { await repo.clearJournalAnswer(day: dayKey, question: item.canonical); onChanged() }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(NoopTheme.textTertiary)
+                        .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear \(item.display)")
+            }
+        }
+    }
+
+    // MARK: Edit mode
+
+    private func journalRdEditControls(_ item: JournalCatalogItem) -> some View {
+        HStack(spacing: NoopTheme.Layout.s) {
+            if item.hidden {
+                Button { catalog.restore(item.canonical) } label: { NoopChip("Restore") }
+                    .buttonStyle(.noopPress)
+            } else {
+                Menu {
+                    Button("Rename…") { startRename(item) }
+                    Menu("Group") {
+                        ForEach(JournalGroup.displayOrder, id: \.self) { g in
+                            Button(g.title) { catalog.setGroup(item.canonical, to: g) }
+                        }
+                    }
+                    if item.kind.isNumeric {
+                        Button("Change to Yes/No") { catalog.setKind(item.canonical, to: .bool) }
+                    } else {
+                        Button("Change to Number") { catalog.setKind(item.canonical, to: .numeric(unitLabel: nil)) }
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundStyle(NoopTheme.textSecondary)
+                        .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                }
+                .accessibilityLabel("Edit \(item.display)")
+                Button { catalog.remove(item.canonical) } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .foregroundStyle(NoopTheme.recoveryLow)
+                        .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.custom ? "Delete \(item.display)" : "Hide \(item.display)")
+            }
+        }
+    }
+
+    // MARK: Add a custom item
+
+    private var journalRdAddCard: some View {
+        let trimmed = customDraft.trimmingCharacters(in: .whitespaces)
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                TextField("Add a custom item…", text: $customDraft)
+                    .textFieldStyle(.plain)
+                    .noopFont(.listTitle)
+                HStack(spacing: NoopTheme.Layout.s) {
+                    Button { customIsNumeric.toggle() } label: {
+                        NoopChip(customIsNumeric ? "Number" : "Yes/No", isSelected: customIsNumeric)
+                    }
+                    .buttonStyle(.noopPress)
+                    Picker("Group", selection: $customGroup) {
+                        ForEach(JournalGroup.displayOrder, id: \.self) { g in
+                            Text(verbatim: g.title).tag(g)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .tint(NoopTheme.textSecondary)
+                    .accessibilityLabel("New item group")
+                    Spacer(minLength: 0)
+                }
+                Button {
+                    guard !trimmed.isEmpty else { return }
+                    catalog.addCustom(trimmed,
+                                      kind: customIsNumeric ? .numeric(unitLabel: nil) : .bool,
+                                      group: customGroup)
+                    customDraft = ""
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+                .buttonStyle(NoopSecondaryButton())
+                .disabled(trimmed.isEmpty)
+            }
+        }
+    }
+}
+#endif

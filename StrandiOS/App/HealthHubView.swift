@@ -1,13 +1,20 @@
 #if os(iOS)
 import SwiftUI
+import StrandDesign
 
-/// The Health tab root (redesign round 2 "05 Health"), structural version. It hosts the existing
-/// `HealthView` unchanged, so every vitals, Fitness Age and skin-temperature section stays reachable and
-/// reads the same data. Phase 6 replaces the presentation with the redesigned vitals; keeping a dedicated
-/// root now means that change does not touch the tab shell again.
+/// The Health tab root. With the redesign on (the default) it is the round 2 "05 Health" screen,
+/// `RedesignHealthView`, which reads the same vital-sign, Fitness Age and skin-temperature data as the
+/// classic screen and keeps every classic section one tap away. With it off, the classic `HealthView`.
+/// Only the root content swaps, so flipping the preference does not remount the tab's navigation stack.
 struct HealthHubView: View {
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+
     var body: some View {
-        HealthView()
+        if redesignEnabled {
+            RedesignHealthView()
+        } else {
+            HealthView()
+        }
     }
 }
 

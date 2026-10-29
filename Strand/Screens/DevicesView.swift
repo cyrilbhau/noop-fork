@@ -20,7 +20,45 @@ struct DevicesView: View {
     // whole screen on every ~1 Hz strap tick for no visible change — `live` is still in the environment
     // for `DevicesContent` and the Add-device wizard, so nothing downstream loses its live readout.
 
+    fileprivate var flag = DevicesRedesignFlag()
+
     var body: some View {
+        #if os(iOS)
+        if flag.on {
+            redesignBody
+        } else {
+            classicBody
+        }
+        #else
+        classicBody
+        #endif
+    }
+
+    #if os(iOS)
+    /// The iPhone redesign (A6): a plain scroll column on the strap's ambient wash. The title moves into the
+    /// navigation bar both hosts already show (the Profile push and the Devices sheet).
+    private var redesignBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let registry = model.deviceRegistry {
+                    DevicesContent(registry: registry)
+                } else {
+                    DataPendingNote(
+                        title: "Getting your devices ready",
+                        message: "NOOP is opening your on-device data. Your paired bands will appear here in a moment.",
+                        symbol: "badge.plus.radiowaves.right")
+                        .formKitGutter()
+                }
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .formKitAmbient(.strap)
+        .navigationTitle(Text("Devices"))
+    }
+    #endif
+
+    private var classicBody: some View {
         ScreenScaffold(title: "Devices",
                        subtitle: "Pair and manage the bands NOOP reads from.",
                        // The day-of-sky liquid backdrop, matching Today / Health / Sleep / Trends: a fixed,
@@ -137,153 +175,22 @@ private struct DevicesContent: View {
         .accessibilityLabel("Reconnect help: \(guide)")
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
-            // #802: the re-pair guide belongs HERE too, not only on Live. A strap that connects but never
-            // finishes bonding leaves the user on this screen — it is where you go to fix a device — while
-            // the four steps that resolve it were rendered one tab away. The reporter in #802 filed an issue
-            // with the guide already armed, because nothing on Devices said so. Same state and same string
-            // as LiveView's banner; no new copy.
-            if let guide = live.reconnectGuide { repairGuideBanner(guide) }
-            DeviceSyncStatusCard()
-                // #1300 tier 2: compute the two-strap comparison off the giant body-modifier chain (attaching
-                // .task to the whole `body` tips the iOS type-check budget on this already-heavy view).
-                .task(id: activeDevices.count) { await loadStrapCompare() }
-            // UPPERCASE overline section header, matching the liquid Today. Counts the paired bands so the
-            // multi-WHOOP reality reads at a glance.
-            sectionHead("YOUR BANDS", trailing: activeDevices.count == 1
-                        ? String(localized: "1 paired")
-                        : String(localized: "\(activeDevices.count) paired"))
-            // #1300: a prominent switcher to flip which strap is active — the "switch, don't combine"
-            // option for a user with two straps (e.g. a 4.0 + a 5/MG). Shown only with 2+ straps, so it
-            // auto-collapses when one is forgotten. Reuses the existing active-strap confirmation.
-            if activeDevices.count > 1 { strapSwitcher }
-            ForEach(Array(activeDevices.enumerated()), id: \.element.id) { idx, device in
-                // Shared read-only probe gate (Test Centre → Connection + a live WHOOP), hoisted so the two
-                // probe closures below don't each re-inline a 4-term && chain — which tips the iOS Swift
-                // type-checker over its budget ("unable to type-check this expression in reasonable time").
-                let probeGate = device.status == .active && live.connected
-                    && SourceCoordinator.isWhoop(device) && TestCentre.active(.connection)
-                // The ECG probe WRITES to the strap, so it carries two gates the read-only probes don't:
-                // the Experimental opt-in, and a strap that has positively attested itself a WHOOP MG
-                // (a plain 5.0 has no electrodes; `.unknown` is not MG).
-                //
-                // `|| model.ecgMayBeRunning` keeps the entry — and therefore Stop — reachable after the
-                // opt-in has been switched off mid-session. Turning a feature off must not remove the
-                // only control that turns the STRAP off; the MG gate still applies either way.
-                let ecgGate = probeGate && (ecgEnabled || model.ecgMayBeRunning) && model.isWhoop5MG
-                DeviceCard(
-                    device: device,
-                    isActive: device.status == .active,
-                    isLiveConnected: device.status == .active && live.connected,
-                    // #221: a WHOOP 5/MG can be BLE-connected yet have its ENCRYPTED bond refused (the
-                    // WHOOP app, or a stale iOS pairing, holds the single-app bond) — no HR/biometric data
-                    // flows even though the link is up, so "Active · Live" overstates it. pairingHint is
-                    // set only once that refusal is genuinely detected (#78), never during a normal
-                    // connect, so this can't false-alarm a working 4.0 (its pairingHint stays nil) or a
-                    // fresh 5/MG connect.
-                    bondRefused: device.status == .active && live.connected && live.pairingHint != nil,
-                    // The full #78 how-to-fix guidance, surfaced on the card itself when bondRefused so
-                    // the fix is self-service instead of buried in the strap log.
-                    pairingHint: device.status == .active ? live.pairingHint : nil,
-                    // Reboot in flight + link currently down → "Reconnecting…" (#166).
-                    isReconnecting: device.status == .active && live.rebootInProgress && !live.connected,
-                    // The live battery belongs to whichever device is ACTIVE + connected. A WHOOP, a
-                    // generic strap and an FTMS machine all funnel into live.batteryPct, but an Oura ring
-                    // does NOT: it reports its own charge, so an active ring row used to draw the strap's
-                    // stale number under the ring's name (#2075). Asked PER ROW rather than of the active
-                    // device, which is the stronger question and the one this loop can actually answer.
-                    liveBatteryPct: (device.status == .active && live.connected)
-                        ? LiveConsoleReadout.batteryPercent(
-                            activeIsWhoop: SourceCoordinator.isWhoop(device),
-                            whoopPct: live.batteryPct, ringPct: live.ouraBatteryPct)
-                        : nil,
-                    liveBatteryMv: (device.status == .active && live.connected) ? live.batteryMv : nil,
-                    livePackSocPct: (device.status == .active && live.connected
-                                     && DeviceFamily.isWhoop5Registry(model: device.model,
-                                                                      brand: device.brand))
-                        ? live.packSocPct : nil,
-                    // Firmware version for the ACTIVE strap. It's a STABLE property (NOOP can't change a
-                    // strap's firmware), so prefer the live handshake value but fall back to the last-known
-                    // persisted firmware (written on connect in FrameRouter) when the live value is momentarily
-                    // nil — mid-handshake, or a connection that hasn't re-read GET_HELLO/REPORT_VERSION_INFO
-                    // yet this session. Without this the "· FW x" blanks out while actively connected. The
-                    // persisted fallback is WHOOP-only: "noop.lastFirmware" is written solely from a WHOOP
-                    // handshake, so a non-WHOOP active device (Oura) must NOT inherit it. Single last-connected-
-                    // strap key, so a not-yet-connected active strap can briefly show the other strap's build on
-                    // a multi-WHOOP install until it republishes. Twin of Android.
-                    // #1633 follow-up: resolve against THIS device, never the last strap to connect. The old
-                    // fallback read one global key, so with two straps paired a 5/MG reported the 4.0's firmware.
-                    // The legacy key is honoured only when a single device is paired, where it cannot belong to
-                    // anything else.
-                    liveFirmware: FirmwareAttribution.resolve(
-                        live: device.status == .active ? live.strapFirmware : nil,
-                        perDevice: SourceCoordinator.isWhoop(device)
-                            ? FirmwareAttribution.prefKey(peripheralId: device.peripheralId)
-                                .flatMap { UserDefaults.standard.string(forKey: $0) } : nil,
-                        legacyGlobal: SourceCoordinator.isWhoop(device)
-                            ? UserDefaults.standard.string(forKey: "noop.lastFirmware") : nil,
-                        pairedCount: registry.devices.count),
-                    // Historical record layout (v24/v25 on WHOOP 4.0) observed from this connection's
-                    // backfill. Distinct from the strap firmware build shown as FW.
-                    liveHistoryLayout: (device.status == .active && live.connected) ? live.strapRange?.firmwareLayout : nil,
-                    // #987: clock latch + frame freshness + the 1970/71 RTC warning, active card only.
-                    liveClockLine: device.status == .active ? strapClockState?.line : nil,
-                    liveClockWarning: device.status == .active ? strapClockState?.warning : nil,
-                    onMakeActive: { switchTarget = device },
-                    onRename: { renameDraft = device.nickname ?? device.displayName; renameTarget = device },
-                    onRemove: { removeTarget = device },
-                    // Restart is offered only for a live-connected WHOOP that is NOT a 4.0: the strap-log
-                    // analysis on #275 showed no safe frame reboots a 4.0 (empty bodies are ignored; any
-                    // non-empty body just wedges the BLE link for ~7s, sensor stays on), so a 4.0 Restart
-                    // button could never work. 5.0/MG reboot on the production frame. nil otherwise.
-                    onReboot: (device.status == .active && live.connected
-                               && SourceCoordinator.isWhoop(device)
-                               && !model.ble.isWhoop4) ? { rebootTarget = device } : nil,
-                    // 4.0 reboot probe: only offered when Test Centre → Connection is on AND the live
-                    // strap is a WHOOP 4.0 (a 5.0 already reboots on the production frame). nil otherwise.
-                    onRebootProbe: (device.status == .active && live.connected
-                                    && SourceCoordinator.isWhoop(device)
-                                    && model.ble.isWhoop4
-                                    && TestCentre.active(.connection)) ? { probeTarget = device } : nil,
-                    // #592 extended-battery probe: read-only, BOTH families (the 4.0 is discriminating).
-                    // Same Test Centre → Connection gate as the reboot probe, minus the 4.0-only clause.
-                    onExtendedBatteryProbe: probeGate ? { batteryProbeTarget = device } : nil,
-                    // #690 body-location probe: read-only, both families. Same Test Centre → Connection gate.
-                    onBodyLocationProbe: probeGate ? { bodyLocationProbeTarget = device } : nil,
-                    // #761 feature-flag ENUMERATION probe: read-only (names only, nothing written), both
-                    // families. Same Test Centre → Connection gate.
-                    onFeatureFlagProbe: probeGate ? { featureFlagProbeTarget = device } : nil,
-                    // Stop an offload already in flight. Offered ONLY while one is running on this
-                    // strap — not a Test Centre probe but an ordinary escape hatch, because until now
-                    // a long drain could only be ended by the 15-minute timeout or walking out of
-                    // range. Nothing is lost: unacked records stay on the strap.
-                    onAbortSync: (device.status == .active && live.connected && live.backfilling
-                                  && SourceCoordinator.isWhoop(device))
-                        ? { model.ble.abortBackfill() } : nil,
-                    // MG ECG probe: the Test Centre gate PLUS the Experimental ECG opt-in PLUS a
-                    // positively-identified MG. `ecgGate` is hoisted for the same type-checker reason as
-                    // `probeGate`; BLEManager gates the sends again, so the UI gate is defence in depth,
-                    // never the only thing standing between a 5.0 and an ECG command.
-                    onEcgProbe: ecgGate ? { ecgProbeTarget = device } : nil,
-                    // #103 device-config READ probe: read-only (asks for VALUES, writes none), both
-                    // families. Same Test Centre → Connection gate.
-                    onDeviceConfigProbe: probeGate ? { deviceConfigProbeTarget = device } : nil)
-                    .staggeredAppear(index: idx)
-            }
+    fileprivate var flag = DevicesRedesignFlag()
 
-            addButton
-                .staggeredAppear(index: activeDevices.count)
-
-            // #1300 tier 2: read-only "compare straps" card — how the two straps' most recent shared day
-            // lines up per metric (agree / a little different / conflict), reusing the fusion tolerances.
-            // Never mixes into a score (I2). Shown only when 2 WHOOP straps share a readable day.
-            if let strapCompare { compareCard(strapCompare) }
-
-            if !removedDevices.isEmpty { removedSection }
-
-            whoopFirstFooter
+    @ViewBuilder private var layout: some View {
+        #if os(iOS)
+        if flag.on {
+            redesignLayout
+        } else {
+            classicLayout
         }
+        #else
+        classicLayout
+        #endif
+    }
+
+    var body: some View {
+        layout
         // Add a device — guided, branching wizard (asks the device TYPE first, then runs the right
         // scan/register path: WHOOP present-scan for WHOOP families, StandardHRSource for HR straps).
         .sheet(isPresented: $showAddWizard) {
@@ -423,6 +330,188 @@ private struct DevicesContent: View {
         }
     }
 
+    /// The classic layout (macOS, and iOS with the redesign off). Unchanged.
+    private var classicLayout: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
+            // #802: the re-pair guide belongs HERE too, not only on Live. A strap that connects but never
+            // finishes bonding leaves the user on this screen — it is where you go to fix a device — while
+            // the four steps that resolve it were rendered one tab away. The reporter in #802 filed an issue
+            // with the guide already armed, because nothing on Devices said so. Same state and same string
+            // as LiveView's banner; no new copy.
+            if let guide = live.reconnectGuide { repairGuideBanner(guide) }
+            DeviceSyncStatusCard()
+                // #1300 tier 2: compute the two-strap comparison off the giant body-modifier chain (attaching
+                // .task to the whole `body` tips the iOS type-check budget on this already-heavy view).
+                .task(id: activeDevices.count) { await loadStrapCompare() }
+            // UPPERCASE overline section header, matching the liquid Today. Counts the paired bands so the
+            // multi-WHOOP reality reads at a glance.
+            sectionHead("YOUR BANDS", trailing: activeDevices.count == 1
+                        ? String(localized: "1 paired")
+                        : String(localized: "\(activeDevices.count) paired"))
+            // #1300: a prominent switcher to flip which strap is active — the "switch, don't combine"
+            // option for a user with two straps (e.g. a 4.0 + a 5/MG). Shown only with 2+ straps, so it
+            // auto-collapses when one is forgotten. Reuses the existing active-strap confirmation.
+            if activeDevices.count > 1 { strapSwitcher }
+            ForEach(Array(activeDevices.enumerated()), id: \.element.id) { idx, device in
+                bandCard(device)
+                    .staggeredAppear(index: idx)
+            }
+
+            addButton
+                .staggeredAppear(index: activeDevices.count)
+
+            // #1300 tier 2: read-only "compare straps" card — how the two straps' most recent shared day
+            // lines up per metric (agree / a little different / conflict), reusing the fusion tolerances.
+            // Never mixes into a score (I2). Shown only when 2 WHOOP straps share a readable day.
+            if let strapCompare { compareCard(strapCompare) }
+
+            if !removedDevices.isEmpty { removedSection }
+
+            whoopFirstFooter
+        }
+    }
+
+    /// One paired, non-removed band as a `DeviceCard`, wired to this screen's actions and live state. Shared
+    /// by both layouts so the two cannot offer different actions.
+    @ViewBuilder private func bandCard(_ device: PairedDevice) -> some View {
+        // Shared read-only probe gate (Test Centre → Connection + a live WHOOP), hoisted so the two
+        // probe closures below don't each re-inline a 4-term && chain — which tips the iOS Swift
+        // type-checker over its budget ("unable to type-check this expression in reasonable time").
+        let probeGate = device.status == .active && live.connected
+            && SourceCoordinator.isWhoop(device) && TestCentre.active(.connection)
+        // The ECG probe WRITES to the strap, so it carries two gates the read-only probes don't:
+        // the Experimental opt-in, and a strap that has positively attested itself a WHOOP MG
+        // (a plain 5.0 has no electrodes; `.unknown` is not MG).
+        //
+        // `|| model.ecgMayBeRunning` keeps the entry — and therefore Stop — reachable after the
+        // opt-in has been switched off mid-session. Turning a feature off must not remove the
+        // only control that turns the STRAP off; the MG gate still applies either way.
+        let ecgGate = probeGate && (ecgEnabled || model.ecgMayBeRunning) && model.isWhoop5MG
+        DeviceCard(
+            device: device,
+            isActive: device.status == .active,
+            isLiveConnected: device.status == .active && live.connected,
+            // #221: a WHOOP 5/MG can be BLE-connected yet have its ENCRYPTED bond refused (the
+            // WHOOP app, or a stale iOS pairing, holds the single-app bond) — no HR/biometric data
+            // flows even though the link is up, so "Active · Live" overstates it. pairingHint is
+            // set only once that refusal is genuinely detected (#78), never during a normal
+            // connect, so this can't false-alarm a working 4.0 (its pairingHint stays nil) or a
+            // fresh 5/MG connect.
+            bondRefused: device.status == .active && live.connected && live.pairingHint != nil,
+            // The full #78 how-to-fix guidance, surfaced on the card itself when bondRefused so
+            // the fix is self-service instead of buried in the strap log.
+            pairingHint: device.status == .active ? live.pairingHint : nil,
+            // Reboot in flight + link currently down → "Reconnecting…" (#166).
+            isReconnecting: device.status == .active && live.rebootInProgress && !live.connected,
+            // The live battery belongs to whichever device is ACTIVE + connected. A WHOOP, a
+            // generic strap and an FTMS machine all funnel into live.batteryPct, but an Oura ring
+            // does NOT: it reports its own charge, so an active ring row used to draw the strap's
+            // stale number under the ring's name (#2075). Asked PER ROW rather than of the active
+            // device, which is the stronger question and the one this loop can actually answer.
+            liveBatteryPct: (device.status == .active && live.connected)
+                ? LiveConsoleReadout.batteryPercent(
+                    activeIsWhoop: SourceCoordinator.isWhoop(device),
+                    whoopPct: live.batteryPct, ringPct: live.ouraBatteryPct)
+                : nil,
+            liveBatteryMv: (device.status == .active && live.connected) ? live.batteryMv : nil,
+            livePackSocPct: (device.status == .active && live.connected
+                             && DeviceFamily.isWhoop5Registry(model: device.model,
+                                                              brand: device.brand))
+                ? live.packSocPct : nil,
+            // Firmware version for the ACTIVE strap. It's a STABLE property (NOOP can't change a
+            // strap's firmware), so prefer the live handshake value but fall back to the last-known
+            // persisted firmware (written on connect in FrameRouter) when the live value is momentarily
+            // nil — mid-handshake, or a connection that hasn't re-read GET_HELLO/REPORT_VERSION_INFO
+            // yet this session. Without this the "· FW x" blanks out while actively connected. The
+            // persisted fallback is WHOOP-only: "noop.lastFirmware" is written solely from a WHOOP
+            // handshake, so a non-WHOOP active device (Oura) must NOT inherit it. Single last-connected-
+            // strap key, so a not-yet-connected active strap can briefly show the other strap's build on
+            // a multi-WHOOP install until it republishes. Twin of Android.
+            // #1633 follow-up: resolve against THIS device, never the last strap to connect. The old
+            // fallback read one global key, so with two straps paired a 5/MG reported the 4.0's firmware.
+            // The legacy key is honoured only when a single device is paired, where it cannot belong to
+            // anything else.
+            liveFirmware: FirmwareAttribution.resolve(
+                live: device.status == .active ? live.strapFirmware : nil,
+                perDevice: SourceCoordinator.isWhoop(device)
+                    ? FirmwareAttribution.prefKey(peripheralId: device.peripheralId)
+                        .flatMap { UserDefaults.standard.string(forKey: $0) } : nil,
+                legacyGlobal: SourceCoordinator.isWhoop(device)
+                    ? UserDefaults.standard.string(forKey: "noop.lastFirmware") : nil,
+                pairedCount: registry.devices.count),
+            // Historical record layout (v24/v25 on WHOOP 4.0) observed from this connection's
+            // backfill. Distinct from the strap firmware build shown as FW.
+            liveHistoryLayout: (device.status == .active && live.connected) ? live.strapRange?.firmwareLayout : nil,
+            // #987: clock latch + frame freshness + the 1970/71 RTC warning, active card only.
+            liveClockLine: device.status == .active ? strapClockState?.line : nil,
+            liveClockWarning: device.status == .active ? strapClockState?.warning : nil,
+            onMakeActive: { switchTarget = device },
+            onRename: { renameDraft = device.nickname ?? device.displayName; renameTarget = device },
+            onRemove: { removeTarget = device },
+            // Restart is offered only for a live-connected WHOOP that is NOT a 4.0: the strap-log
+            // analysis on #275 showed no safe frame reboots a 4.0 (empty bodies are ignored; any
+            // non-empty body just wedges the BLE link for ~7s, sensor stays on), so a 4.0 Restart
+            // button could never work. 5.0/MG reboot on the production frame. nil otherwise.
+            onReboot: (device.status == .active && live.connected
+                       && SourceCoordinator.isWhoop(device)
+                       && !model.ble.isWhoop4) ? { rebootTarget = device } : nil,
+            // 4.0 reboot probe: only offered when Test Centre → Connection is on AND the live
+            // strap is a WHOOP 4.0 (a 5.0 already reboots on the production frame). nil otherwise.
+            onRebootProbe: (device.status == .active && live.connected
+                            && SourceCoordinator.isWhoop(device)
+                            && model.ble.isWhoop4
+                            && TestCentre.active(.connection)) ? { probeTarget = device } : nil,
+            // #592 extended-battery probe: read-only, BOTH families (the 4.0 is discriminating).
+            // Same Test Centre → Connection gate as the reboot probe, minus the 4.0-only clause.
+            onExtendedBatteryProbe: probeGate ? { batteryProbeTarget = device } : nil,
+            // #690 body-location probe: read-only, both families. Same Test Centre → Connection gate.
+            onBodyLocationProbe: probeGate ? { bodyLocationProbeTarget = device } : nil,
+            // #761 feature-flag ENUMERATION probe: read-only (names only, nothing written), both
+            // families. Same Test Centre → Connection gate.
+            onFeatureFlagProbe: probeGate ? { featureFlagProbeTarget = device } : nil,
+            // Stop an offload already in flight. Offered ONLY while one is running on this
+            // strap — not a Test Centre probe but an ordinary escape hatch, because until now
+            // a long drain could only be ended by the 15-minute timeout or walking out of
+            // range. Nothing is lost: unacked records stay on the strap.
+            onAbortSync: (device.status == .active && live.connected && live.backfilling
+                          && SourceCoordinator.isWhoop(device))
+                ? { model.ble.abortBackfill() } : nil,
+            // MG ECG probe: the Test Centre gate PLUS the Experimental ECG opt-in PLUS a
+            // positively-identified MG. `ecgGate` is hoisted for the same type-checker reason as
+            // `probeGate`; BLEManager gates the sends again, so the UI gate is defence in depth,
+            // never the only thing standing between a 5.0 and an ECG command.
+            onEcgProbe: ecgGate ? { ecgProbeTarget = device } : nil,
+            // #103 device-config READ probe: read-only (asks for VALUES, writes none), both
+            // families. Same Test Centre → Connection gate.
+            onDeviceConfigProbe: probeGate ? { deviceConfigProbeTarget = device } : nil,
+            showsLiveBattery: showsCardBattery)
+    }
+
+    /// Whether the band cards draw their own live battery row. Under the iPhone redesign the hero ring above
+    /// the list states the active device's charge, so its card does not repeat it (one readout of one fact),
+    /// unless the hero has no charge to show for that device (an HR strap, an FTMS machine).
+    private var showsCardBattery: Bool {
+        #if os(iOS)
+        if flag.on { return heroBattery == .notActiveDevice }
+        #endif
+        return true
+    }
+
+    /// One removed (archived) band as a `DeviceCard`, shared by both layouts.
+    private func removedBandCard(_ device: PairedDevice) -> some View {
+        DeviceCard(
+            device: device,
+            isActive: false,
+            isLiveConnected: false,
+            dimmed: true,
+            onMakeActive: { switchTarget = device },
+            onRename: { renameDraft = device.nickname ?? device.displayName; renameTarget = device },
+            onRemove: nil,
+            onReAdd: { registry.setActive(device.id) },
+            onDeleteData: { deleteDataTarget = device },
+            onForget: { forgetTarget = device })
+    }
+
     // MARK: Pieces
 
     private var addButton: some View {
@@ -436,17 +525,7 @@ private struct DevicesContent: View {
         VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
             sectionHead("REMOVED", trailing: String(localized: "Data kept"))
             ForEach(removedDevices) { device in
-                DeviceCard(
-                    device: device,
-                    isActive: false,
-                    isLiveConnected: false,
-                    dimmed: true,
-                    onMakeActive: { switchTarget = device },
-                    onRename: { renameDraft = device.nickname ?? device.displayName; renameTarget = device },
-                    onRemove: nil,
-                    onReAdd: { registry.setActive(device.id) },
-                    onDeleteData: { deleteDataTarget = device },
-                    onForget: { forgetTarget = device })
+                removedBandCard(device)
             }
         }
     }
@@ -635,6 +714,404 @@ private struct DevicesContent: View {
     }
 }
 
+// MARK: - iPhone redesign (A6)
+
+/// The iPhone redesign switch, readable from any view in this file. Constant off on macOS.
+private struct DevicesRedesignFlag: DynamicProperty {
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var stored = true
+    var on: Bool { stored }
+    #else
+    var on: Bool { false }
+    #endif
+}
+
+/// Geometry from `design/round3/today.html` A6 with no `NoopTheme` token.
+private enum DevicesLayout {
+    static let heroRing: CGFloat = 210
+    static let heroRingLine: CGFloat = 7
+    static let heroHeight: CGFloat = 250
+    static let cardRing: CGFloat = 30
+    static let cardRingLine: CGFloat = 4
+    static let statusDot: CGFloat = 7
+    static let actionHeight: CGFloat = 76
+    static let actionGap: CGFloat = 6
+    static let warningBorder: Double = 0.5
+    static let dimmedOpacity: Double = 0.6
+    static let capabilityIcon: CGFloat = 14
+    static let hairline: CGFloat = 1
+    /// Battery bands, the same buckets the classic card's tube uses.
+    static let batteryLow = 15
+    static let batteryMid = 35
+}
+
+/// The charge-band colour of a battery percentage in the redesign palette (classic buckets).
+private func devicesBatteryTint(_ pct: Int) -> Color {
+    pct < DevicesLayout.batteryLow ? NoopTheme.recoveryLow
+        : pct < DevicesLayout.batteryMid ? NoopTheme.recoveryMid : NoopTheme.recovery
+}
+
+/// The redesign colour of a device state pill's tone.
+private func devicesToneColor(_ tone: StrandTone) -> Color {
+    switch tone {
+    case .positive: return NoopTheme.recovery
+    case .warning: return NoopTheme.recoveryMid
+    case .critical: return NoopTheme.recoveryLow
+    case .accent: return NoopTheme.strain
+    case .neutral: return NoopTheme.textTertiary
+    }
+}
+
+#if os(iOS)
+extension DevicesContent {
+    /// The active (status `.active`) paired device, if any. The same predicate `currentActiveName` uses.
+    fileprivate var activeDevice: PairedDevice? {
+        registry.devices.first(where: { $0.status == .active })
+    }
+
+    /// The hero's charge, through the SAME resolver (and the same inputs) the Today header and the Profile
+    /// strap card use, so the three cannot disagree about the strap's battery.
+    fileprivate var heroBattery: LiquidTodayView.StrapBatteryDisplay {
+        .resolve(
+            activeIsWhoop: live.activeIsWhoop,
+            connected: live.connected,
+            batteryPct: live.batteryPct,
+            charging: live.charging,
+            ringPct: live.ouraBatteryPct,
+            ringCharging: live.ouraWearState == .charging
+        )
+    }
+
+    /// The active card's state pill, resolved with exactly the inputs `bandCard` hands that card, so the hero's
+    /// status line and the card's pill are one fact read once.
+    fileprivate func activePillState(_ device: PairedDevice) -> DevicePillState {
+        DevicePillState.resolve(isArchived: false, isActive: true,
+                                isReconnecting: live.rebootInProgress && !live.connected,
+                                bondRefused: live.connected && live.pairingHint != nil,
+                                isLiveConnected: live.connected)
+    }
+
+    /// "~X left" from `live.batteryEstimate`, reproduced from `LiquidTodayView.estimateText` (same strings,
+    /// same rounding): only for the strap's own reading, never while charging, nil when there is no estimate.
+    fileprivate var heroEstimate: String? {
+        guard case .charge(_, false, false) = heroBattery,
+              live.charging != true, let est = live.batteryEstimate else { return nil }
+        let hours = est.hoursRemaining
+        guard hours.isFinite, hours > 0 else { return nil }
+        if hours < 48 {
+            return String(localized: "~\(Int(hours.rounded()))h left")
+        }
+        let days = Int((hours / 24).rounded())
+        return days == 1
+            ? String(localized: "~1 day left")
+            : String(localized: "~\(days) days left")
+    }
+
+    fileprivate var pairedCountText: String {
+        activeDevices.count == 1
+            ? String(localized: "1 paired")
+            : String(localized: "\(activeDevices.count) paired")
+    }
+
+    var redesignLayout: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // #802: same state and string as the classic banner, restyled.
+            if let guide = live.reconnectGuide {
+                devicesRepairGuideCard(guide)
+                    .formKitGutter()
+                    .padding(.bottom, NoopTheme.Layout.cardGap)
+            }
+            if let active = activeDevice {
+                DevicesStrapHero(
+                    name: active.displayName,
+                    model: DeviceCapabilityProfile.make(for: active).displayModel,
+                    symbol: devicesSymbol(for: active),
+                    battery: heroBattery,
+                    estimate: heroEstimate,
+                    pill: activePillState(active))
+                    .noopEntrance(index: 0)
+                if SourceCoordinator.isWhoop(active) {
+                    devicesQuickActions
+                        .formKitGutter()
+                        .padding(.top, NoopTheme.Layout.l)
+                        .noopEntrance(index: 1)
+                }
+            }
+            DeviceSyncStatusCard()
+            devicesSectionHeader("Your bands", trailing: pairedCountText)
+                // #1300 tier 2: the two-strap comparison, on a view that is always drawn (the classic layout
+                // hangs it on the sync card, which renders nothing when there is no sync state).
+                .task(id: activeDevices.count) { await loadStrapCompare() }
+            VStack(spacing: NoopTheme.Layout.cardGap) {
+                if activeDevices.count > 1 { redesignStrapSwitcher }
+                ForEach(Array(activeDevices.enumerated()), id: \.element.id) { idx, device in
+                    bandCard(device)
+                        .noopEntrance(index: idx + 2)
+                }
+                Button {
+                    showAddWizard = true
+                } label: {
+                    Label("Add a device", systemImage: "plus")
+                }
+                .buttonStyle(NoopPrimaryButton())
+                .accessibilityLabel("Add a device")
+                .padding(.top, NoopTheme.Layout.xs)
+            }
+            .formKitGutter()
+            if let strapCompare {
+                devicesSectionHeader("How your straps compare", trailing: nil)
+                redesignCompareCard(strapCompare)
+                    .formKitGutter()
+            }
+            if !removedDevices.isEmpty {
+                devicesSectionHeader("Removed", trailing: String(localized: "Data kept"))
+                VStack(spacing: NoopTheme.Layout.cardGap) {
+                    ForEach(removedDevices) { device in
+                        removedBandCard(device)
+                    }
+                }
+                .formKitGutter()
+            }
+            FormKitFootnote("WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps are an early, in-development addition: they stream live heart rate and HRV, but not WHOOP's deeper sleep and recovery data.")
+                .padding(.top, NoopTheme.Layout.s)
+        }
+    }
+
+    /// Sentence-case section header with an optional muted trailing note.
+    fileprivate func devicesSectionHeader(_ title: LocalizedStringKey, trailing: String?) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .noopFont(.sectionTitle)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: NoopTheme.Layout.s)
+            if let trailing {
+                Text(verbatim: trailing).noopFont(.footnote)
+            }
+        }
+        .padding(.top, NoopTheme.Layout.sectionTop)
+        .padding(.bottom, NoopTheme.Layout.sectionBottom)
+        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+    }
+
+    fileprivate func devicesSymbol(for device: PairedDevice) -> String {
+        if device.sourceKind == .ftms { return "figure.run.treadmill" }
+        if device.sourceKind == .huami { return "waveform.path.ecg.rectangle" }
+        if device.sourceKind == .liveAppleWatch { return "applewatch" }
+        if device.sourceKind == .oura { return "circle.circle" }
+        return SourceCoordinator.isWhoop(device) ? "applewatch.side.right" : "heart.circle"
+    }
+
+    /// The two strap actions the app already offers elsewhere: a manual history sync (pull-to-sync on Today,
+    /// the Health screen's control) and the one-shot buzz (Live's "Buzz strap"). Both need the strap linked,
+    /// and both already ignore a tap when they cannot act; the disabled state just says so up front.
+    fileprivate var devicesQuickActions: some View {
+        HStack(spacing: NoopTheme.Layout.cardGap) {
+            devicesActionTile("Sync now", systemImage: "arrow.triangle.2.circlepath",
+                              enabled: live.connected && !live.backfilling) {
+                model.ble.syncNow()
+            }
+            devicesActionTile("Buzz strap", systemImage: "waveform.path", enabled: live.connected) {
+                // #921: the confirmed one-shot sequence, the same call Live's button makes.
+                model.buzzStrapOnce()
+            }
+        }
+    }
+
+    fileprivate func devicesActionTile(_ title: LocalizedStringKey, systemImage: String, enabled: Bool,
+                                       action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: DevicesLayout.actionGap) {
+                Image(systemName: systemImage)
+                    .noopFont(.sectionTitle, color: false)
+                    .accessibilityHidden(true)
+                Text(title).noopFont(.footnote, color: false)
+            }
+            .foregroundStyle(NoopTheme.textPrimary)
+            .frame(maxWidth: .infinity, minHeight: DevicesLayout.actionHeight)
+            .noopGlassBackground(cornerRadius: NoopTheme.Layout.tileRadius)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.noopPress)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : DevicesLayout.dimmedOpacity)
+    }
+
+    fileprivate func devicesRepairGuideCard(_ guide: String) -> some View {
+        NoopGlassCard {
+            HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(NoopTheme.recoveryMid)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text("Can't connect: your strap's pairing was reset")
+                        .noopFont(.listTitle)
+                    Text(guide)
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: NoopTheme.Layout.cardRadius, style: .continuous)
+            .strokeBorder(NoopTheme.recoveryMid.opacity(DevicesLayout.warningBorder), lineWidth: DevicesLayout.hairline))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Reconnect help: \(guide)")
+    }
+
+    /// #1300: the strap switcher as chips. The active strap is the selected chip; tapping another opens the
+    /// same "Make active?" confirmation as the classic switcher.
+    fileprivate var redesignStrapSwitcher: some View {
+        HStack(spacing: NoopTheme.Layout.s) {
+            ForEach(activeDevices, id: \.id) { device in
+                let isActive = device.status == .active
+                Button { if !isActive { switchTarget = device } } label: {
+                    NoopChip(verbatim: device.displayName, isSelected: isActive)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.noopPress)
+                .disabled(isActive)
+            }
+        }
+    }
+
+    fileprivate func redesignCompareCard(_ c: StrapCompareData) -> some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack {
+                    Text(c.aName).noopFont(.caption, color: false).foregroundStyle(NoopTheme.textSecondary)
+                    Spacer()
+                    Text(c.bName).noopFont(.caption, color: false).foregroundStyle(NoopTheme.textSecondary)
+                }
+                ForEach(c.rows, id: \.metric) { row in
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        Text(metricLabel(row.metric))
+                            .noopFont(.bodySmall)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(compareValue(row.a)).noopFont(.footnote, color: false).monospacedDigit()
+                            .foregroundStyle(NoopTheme.textPrimary)
+                        Text(compareValue(row.b)).noopFont(.footnote, color: false).monospacedDigit()
+                            .foregroundStyle(NoopTheme.textPrimary)
+                        redesignAgreementPill(row.agreement)
+                    }
+                }
+                Text(compareFootnote)
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder fileprivate func redesignAgreementPill(_ a: AgreementState) -> some View {
+        switch a {
+        case .agree:      NoopPill("match", tint: NoopTheme.recovery)
+        case .minorDelta: NoopPill("close", tint: NoopTheme.textSecondary)
+        case .conflict:   NoopPill("differs", tint: NoopTheme.recoveryMid)
+        case .single:     NoopPill("one strap", tint: NoopTheme.textSecondary)
+        }
+    }
+}
+
+/// A6's hero: the active device's charge as a large ring (dashed and "—" when there is no reading from the
+/// current link), the runtime estimate or charging state beneath, then the device and its state.
+private struct DevicesStrapHero: View {
+    let name: String
+    let model: String
+    let symbol: String
+    let battery: LiquidTodayView.StrapBatteryDisplay
+    let estimate: String?
+    let pill: DevicePillState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+
+    private var percent: Int? {
+        if case .charge(let pct, _, _) = battery { return Int(pct.rounded()) }
+        return nil
+    }
+
+    private var charging: Bool {
+        switch battery {
+        case .charge(_, let charging, _): return charging
+        case .pending(let charging): return charging
+        case .offline, .notActiveDevice: return false
+        }
+    }
+
+    /// The line under the ring: charging, else the runtime estimate, else why there is no number.
+    private var caption: String? {
+        if charging { return String(localized: "Charging") }
+        if let estimate { return estimate }
+        if case .offline = battery { return String(localized: "Not connected") }
+        return nil
+    }
+
+    /// The same VoiceOver sentences the Today header and the Profile strap card read.
+    private var batteryAccessibility: String {
+        switch battery {
+        case .notActiveDevice:
+            return ""
+        case .offline:
+            return String(localized: "Strap battery, strap not connected")
+        case .pending(let charging):
+            return charging
+                ? String(localized: "Strap battery charging, no reading yet")
+                : String(localized: "Strap battery, no reading yet")
+        case .charge(let pct, let charging, let isRing):
+            let n = Int(pct.rounded())
+            if isRing {
+                return charging
+                    ? String(localized: "Ring battery \(n) percent, charging")
+                    : String(localized: "Ring battery \(n) percent")
+            }
+            return charging
+                ? String(localized: "Strap battery \(n) percent, charging")
+                : String(localized: "Strap battery \(n) percent")
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: NoopTheme.Layout.s) {
+            if battery == .notActiveDevice {
+                DomainIcon(systemImage: symbol, color: NoopTheme.textSecondary)
+                    .padding(.top, NoopTheme.Layout.xl)
+            } else {
+                NoopRing(
+                    value: percent.map { Double($0) / 100 },
+                    color: percent.map(devicesBatteryTint) ?? NoopTheme.textTertiary,
+                    lineWidth: DevicesLayout.heroRingLine,
+                    diameter: DevicesLayout.heroRing,
+                    label: percent.map { "\($0)" } ?? "—",
+                    unit: percent == nil ? nil : "%",
+                    icon: symbol,
+                    animate: NoopTheme.Motion.ringsAnimate(reduceMotion: reduceMotion, fillOnLoad: ringsFillOnLoad))
+                    .frame(height: DevicesLayout.heroHeight)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text(verbatim: batteryAccessibility))
+                if let caption {
+                    Text(verbatim: caption).noopFont(.footnote)
+                }
+            }
+            Text(verbatim: name)
+                .noopFont(.sectionTitle)
+                .multilineTextAlignment(.center)
+                .padding(.top, NoopTheme.Layout.s)
+            if model != name {
+                Text(verbatim: model).noopFont(.footnote)
+            }
+            HStack(spacing: NoopTheme.Layout.s) {
+                Circle()
+                    .fill(devicesToneColor(pill.tone))
+                    .frame(width: DevicesLayout.statusDot, height: DevicesLayout.statusDot)
+                    .accessibilityHidden(true)
+                Text(LocalizedStringKey(pill.label)).noopFont(.footnote)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+        .accessibilityElement(children: .combine)
+    }
+}
+#endif
+
 // MARK: - Strap-history sync card
 
 /// The sync status formerly shown as a compact control in the Today header. Devices is the natural home
@@ -642,8 +1119,76 @@ private struct DevicesContent: View {
 /// Today's primary actions. This remains display-only and resolves through the existing shared state.
 private struct DeviceSyncStatusCard: View {
     @EnvironmentObject private var live: LiveState
+    fileprivate var flag = DevicesRedesignFlag()
 
     var body: some View {
+        #if os(iOS)
+        if flag.on {
+            redesignBody
+        } else {
+            classicBody
+        }
+        #else
+        classicBody
+        #endif
+    }
+
+    #if os(iOS)
+    /// A6's strap-history row: the same resolver and strings as the classic card, under a section header,
+    /// and nothing at all when there is no sync state to report.
+    @ViewBuilder private var redesignBody: some View {
+        switch SyncChipState.resolve(live: live) {
+        case .syncing(let chunks, _):
+            redesignRow(systemImage: "arrow.triangle.2.circlepath",
+                        detail: chunks > 0
+                            ? String(localized: "Syncing… \(chunks) chunks")
+                            : String(localized: "Syncing…"),
+                        tint: NoopTheme.strain,
+                        accessibility: String(localized: "Syncing strap history, \(chunks) chunks"))
+        case .synced(let agoText):
+            redesignRow(systemImage: "checkmark.circle.fill",
+                        detail: String(localized: "Synced \(agoText) ago"),
+                        tint: NoopTheme.recovery,
+                        accessibility: String(localized: "Strap history synced \(agoText) ago"))
+        case .experimentalLive:
+            redesignRow(systemImage: "checkmark.circle.fill",
+                        detail: String(localized: "Connected; strap history sync is experimental on this strap"),
+                        tint: NoopTheme.textSecondary,
+                        accessibility: String(localized: "Connected; strap history sync is experimental on this strap"))
+        case .hidden:
+            EmptyView()
+        }
+    }
+
+    private func redesignRow(systemImage: String, detail: String, tint: Color, accessibility: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Strap history")
+                .noopFont(.sectionTitle)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.top, NoopTheme.Layout.sectionTop)
+                .padding(.bottom, NoopTheme.Layout.sectionBottom)
+                .padding(.horizontal, NoopTheme.Layout.sectionSide)
+            FormKitCard {
+                HStack(spacing: NoopTheme.Layout.m) {
+                    Image(systemName: systemImage)
+                        .noopFont(.listTitle, color: false)
+                        .foregroundStyle(tint)
+                        .accessibilityHidden(true)
+                    Text(verbatim: detail)
+                        .noopFont(.listTitle)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, FormKitLayout.rowVertical)
+                .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(accessibility))
+        }
+    }
+    #endif
+
+    @ViewBuilder private var classicBody: some View {
         switch SyncChipState.resolve(live: live) {
         case .syncing(let chunks, _):
             statusCard(
@@ -795,10 +1340,27 @@ private struct DeviceCard: View {
     /// Hard-delete: purge the registry entry itself (and its data), so a duplicate/stale strap can be
     /// removed from the list for good rather than lingering in "Removed" forever (#1193). Archived-only.
     var onForget: (() -> Void)? = nil
+    /// False when the screen states this device's charge elsewhere (the redesign's hero ring), so the card
+    /// does not repeat it. Always true on the classic layout.
+    var showsLiveBattery: Bool = true
+    fileprivate var flag = DevicesRedesignFlag()
 
-    /// The card's visible content. The required `body` wraps this in the whole-card liquid press button +
-    /// the ⋮ menu overlay.
-    private var cardContent: some View {
+    /// The card's visible content: the classic card, or the redesign's glass card on iPhone.
+    @ViewBuilder private var cardContent: some View {
+        #if os(iOS)
+        if flag.on {
+            redesignCardContent
+        } else {
+            classicCardContent
+        }
+        #else
+        classicCardContent
+        #endif
+    }
+
+    /// The classic card's visible content. The required `body` wraps this in the whole-card liquid press
+    /// button + the ⋮ menu overlay.
+    private var classicCardContent: some View {
         StrandCard(padding: 18, tint: isActive ? StrandPalette.accent : nil) {
             VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
                 HStack(alignment: .top, spacing: NoopMetrics.space3) {
@@ -859,7 +1421,7 @@ private struct DeviceCard: View {
 
                 // Live battery for the active+connected device, shown as a liquid tube that fills to the
                 // charge — same surface for WHOOP / strap / FTMS. The tube reads the charge band's colour.
-                if let pct = liveBatteryPct {
+                if let pct = liveBatteryPct, showsLiveBattery {
                     batteryTube(pct)
                 }
 
@@ -935,6 +1497,144 @@ private struct DeviceCard: View {
         .accessibilityElement(children: .contain)
     }
 
+    #if os(iOS)
+    /// The redesign card (A6 "Details" surfaces): a glass card in the redesign type and palette carrying
+    /// exactly the classic card's facts, hints and warnings. The battery row is a small ring rather than a
+    /// liquid tube, and is left out when the screen's hero already states this device's charge.
+    private var redesignCardContent: some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                    DomainIcon(systemImage: icon, color: isActive ? NoopTheme.recovery : NoopTheme.textSecondary)
+                    VStack(alignment: .leading, spacing: FormKitLayout.detailGap) {
+                        Text(device.displayName).noopFont(.listTitle)
+                        Text(profile.displayModel).noopFont(.footnote)
+                    }
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    if device.sourceKind == .oura {
+                        NoopPill("Beta", tint: NoopTheme.recoveryMid)
+                    }
+                    redesignStatePill
+                }
+
+                if device.sourceKind == .oura && !isLiveConnected && device.status == .paired {
+                    redesignCaptionRow(symbol: "info.circle",
+                                       text: String(localized: "Paired locally. NOOP owns this ring while it holds the key. If you reset it again or set it up in the Oura app, NOOP no longer owns it and you would re-add it to take it over."),
+                                       tint: NoopTheme.recoveryMid)
+                }
+
+                redesignCaptionRow(symbol: "waveform.path.ecg", text: profile.captures, tint: NoopTheme.textSecondary)
+                redesignCaptionRow(symbol: "bolt.fill", text: profile.powers, tint: NoopTheme.textSecondary)
+                if !profile.footnote.isEmpty {
+                    Text(profile.footnote)
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if bondRefused, let hint = pairingHint {
+                    Text(hint)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(NoopTheme.recoveryMid)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(hint)
+                }
+
+                if let pct = liveBatteryPct, showsLiveBattery {
+                    HStack(spacing: NoopTheme.Layout.m) {
+                        NoopRing(value: Double(pct) / 100, color: devicesBatteryTint(pct),
+                                 lineWidth: DevicesLayout.cardRingLine, diameter: DevicesLayout.cardRing,
+                                 animate: false)
+                        Text("\(pct)%").noopFont(.bodySmall)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Battery \(pct) percent")
+                }
+
+                if let clockLine = liveClockLine {
+                    Text(clockLine)
+                        .noopFont(.footnote)
+                        .accessibilityLabel(clockLine)
+                }
+                if let warning = liveClockWarning {
+                    Text(warning)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(NoopTheme.recoveryMid)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(warning)
+                }
+
+                redesignFooterRow
+            }
+        }
+        .opacity(dimmed ? DevicesLayout.dimmedOpacity : 1)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The classic footer facts (last seen, firmware, voltage, pack, history layout, tap hint) in the
+    /// redesign type, leaving room for the ⋮ menu overlay at the bottom-trailing corner.
+    private var redesignFooterRow: some View {
+        HStack(spacing: NoopTheme.Layout.xs) {
+            Text(lastSeenLine).noopFont(.footnote, color: false).foregroundStyle(NoopTheme.textTertiary)
+            if let fw = liveFirmware {
+                redesignFooterDot
+                Text("FW \(fw)")
+                    .noopFont(.footnote)
+                    .accessibilityLabel("Firmware version \(fw)")
+            }
+            if let mv = liveBatteryMv {
+                redesignFooterDot
+                Text("\(Double(mv) / 1000.0, specifier: "%.2f") V")
+                    .noopFont(.footnote)
+                    .accessibilityLabel("Battery voltage \(Double(mv) / 1000.0, specifier: "%.2f") volts")
+            }
+            if let soc = livePackSocPct {
+                redesignFooterDot
+                Text("Battery pack \(soc, specifier: "%.1f")%").noopFont(.footnote)
+            }
+            if let layout = liveHistoryLayout {
+                redesignFooterDot
+                Text("v\(layout) history")
+                    .noopFont(.footnote)
+                    .accessibilityLabel("Historical record layout v\(layout)")
+            }
+            if let hint = primaryActionHint {
+                redesignFooterDot
+                Text(hint).noopFont(.footnote, color: false).fontWeight(.semibold)
+                    .foregroundStyle(NoopTheme.textPrimary)
+                Image(systemName: "chevron.right")
+                    .noopFont(.caption, color: false)
+                    .foregroundStyle(NoopTheme.textPrimary)
+                    .accessibilityHidden(true)
+            }
+            Spacer(minLength: NoopTheme.Layout.minTouchTarget)
+        }
+    }
+
+    private var redesignFooterDot: some View {
+        Text(verbatim: "·").noopFont(.footnote, color: false).foregroundStyle(NoopTheme.textTertiary)
+    }
+
+    private var redesignStatePill: some View {
+        let state = pillState
+        return NoopPill(LocalizedStringKey(state.label), dot: state.showsDot ? devicesToneColor(state.tone) : nil,
+                        tint: devicesToneColor(state.tone))
+    }
+
+    private func redesignCaptionRow(symbol: String, text: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: NoopTheme.Layout.s) {
+            Image(systemName: symbol)
+                .noopFont(.caption, color: false)
+                .foregroundStyle(NoopTheme.textTertiary)
+                .frame(width: DevicesLayout.capabilityIcon)
+                .accessibilityHidden(true)
+            Text(text)
+                .noopFont(.footnote, color: false)
+                .foregroundStyle(tint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    #endif
+
     /// The whole-card liquid press wrapper: tapping the card performs its PRIMARY action (make active for a
     /// paired band, re-add for a removed one), with the settle-in `LiquidPressStyle`. The ⋮ menu is layered
     /// on top as an overlay so it captures its own taps; cards with no primary action (the active one, or a
@@ -942,8 +1642,13 @@ private struct DeviceCard: View {
     var body: some View {
         Group {
             if let action = primaryAction {
-                Button(action: action) { cardContent }
-                    .buttonStyle(LiquidPressStyle())
+                if flag.on {
+                    Button(action: action) { cardContent }
+                        .buttonStyle(.noopPress)
+                } else {
+                    Button(action: action) { cardContent }
+                        .buttonStyle(LiquidPressStyle())
+                }
             } else {
                 cardContent
             }
@@ -1089,7 +1794,9 @@ private struct DeviceCard: View {
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(StrandFont.headline)
-                .foregroundStyle(StrandPalette.textSecondary)
+                .foregroundStyle(flag.on ? NoopTheme.textSecondary : StrandPalette.textSecondary)
+                .frame(minWidth: flag.on ? NoopTheme.Layout.minTouchTarget : nil,
+                       minHeight: flag.on ? NoopTheme.Layout.minTouchTarget : nil)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -1282,6 +1989,23 @@ struct DeviceCapabilityProfile {
 /// Internal (not private) so the Add-a-device wizard reuses the same indicator.
 struct SignalBars: View {
     let rssi: Int
+    fileprivate var flag = DevicesRedesignFlag()
+
+    init(rssi: Int) { self.rssi = rssi }
+
+    /// Lit / unlit bar colours: the classic accent, or the redesign's pairing teal on its track.
+    private var barOn: Color {
+        #if os(iOS)
+        if flag.on { return NoopTheme.breath }
+        #endif
+        return StrandPalette.accent
+    }
+    private var barOff: Color {
+        #if os(iOS)
+        if flag.on { return NoopTheme.track }
+        #endif
+        return StrandPalette.hairlineStrong
+    }
 
     static func level(for rssi: Int) -> Int {
         switch rssi {
@@ -1298,7 +2022,7 @@ struct SignalBars: View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(0..<4, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .fill(i < level ? StrandPalette.accent : StrandPalette.hairlineStrong)
+                    .fill(i < level ? barOn : barOff)
                     .frame(width: 3, height: 6 + CGFloat(i) * 3)
             }
         }

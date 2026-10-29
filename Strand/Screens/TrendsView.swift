@@ -74,6 +74,16 @@ struct TrendsView: View {
     @AppStorage(UnitPrefs.trendChartStyleKey) private var trendChartStyleRaw = TrendChartStyle.line.rawValue
     private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #endif
+
     // yyyy-MM-dd → Date (en_US_POSIX, UTC), per task spec.
     private static let dayParser: DateFormatter = {
         let f = DateFormatter()
@@ -285,11 +295,36 @@ struct TrendsView: View {
         // them instead (once per stack — a double registration double-pushes, #38).
         NavigationStack { scaffold.tabRouteDestinations() }
         #else
-        scaffold
+        // iPhone redesign (C2): the same range, resolved windows, week stepper, report sheet and loads,
+        // drawn with the redesign components. The classic scaffold stays as the fallback.
+        trendsLifecycle(Group {
+            if redesignEnabled { trendsRedesignScreen } else { classicScaffold }
+        })
         #endif
     }
 
-    private var scaffold: some View {
+    private var scaffold: some View { trendsLifecycle(classicScaffold) }
+
+    /// The report sheet and the Rest-series load, shared by the classic and redesigned layouts so both
+    /// present the same exporter and plot the same sleep_performance composite.
+    private func trendsLifecycle<V: View>(_ content: V) -> some View {
+        content
+            // #436 — present the offline trends-report exporter (range picker + PDF export).
+            .sheet(isPresented: $showingReport) {
+                TrendsReportSheet(days: repo.days)
+            }
+            // #732 — load the resolved sleep_performance series so Rest plots the SAME composite the Today
+            // Rest score uses (not raw efficiency). Mirrors TodayView's restScore read. Keyed on the day
+            // count so a newly-banked/-scored night refreshes Rest reactively, like the other metrics that
+            // read `repo.days` directly (and like the Android LaunchedEffect(days) twin).
+            .task(id: repo.days.count) {
+                let s = await repo.exploreSeries(key: "sleep_performance", source: "my-whoop")
+                sleepPerfByDay = Dictionary(s.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+                sleepPerfRevision += 1
+            }
+    }
+
+    private var classicScaffold: some View {
         ScreenScaffold(title: "Trends", subtitle: "The thread of you over time.",
                        // PERF (scroll): lazy column — byte-identical layout (LazyVStack == eager VStack
                        // alignment/spacing/header). The content is one inner eager VStack, so the staggered
@@ -333,19 +368,6 @@ struct TrendsView: View {
                     }
                 }
             }
-        }
-        // #436 — present the offline trends-report exporter (range picker + PDF export).
-        .sheet(isPresented: $showingReport) {
-            TrendsReportSheet(days: repo.days)
-        }
-        // #732 — load the resolved sleep_performance series so Rest plots the SAME composite the Today
-        // Rest score uses (not raw efficiency). Mirrors TodayView's restScore read. Keyed on the day
-        // count so a newly-banked/-scored night refreshes Rest reactively, like the other metrics that
-        // read `repo.days` directly (and like the Android LaunchedEffect(days) twin).
-        .task(id: repo.days.count) {
-            let s = await repo.exploreSeries(key: "sleep_performance", source: "my-whoop")
-            sleepPerfByDay = Dictionary(s.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
-            sleepPerfRevision += 1
         }
     }
 
@@ -855,6 +877,375 @@ struct TrendsView: View {
             .background(NoopPanelSurface(cornerRadius: 12))
     }
 }
+
+// MARK: - iPhone redesign (C2 Trends)
+//
+// `design/round3/sleep-health.html` C2 over this screen's own state: the same `range`, the same memoized
+// resolved windows (with their widening fallback and captions), the same week stepper and digest, the
+// training-load card, the recovery calendar and the report exporter. Charts are `NoopLineChart`s with no
+// horizontal lines; the ambient wash follows the window's own averages.
+
+#if os(iOS)
+/// Domain colours and the UTC day formatter for the redesigned Trends screen.
+private enum TrendsRedesignStyle {
+    /// Day keys are parsed at UTC midnight (`dayParser`), so captions must format in UTC too.
+    static let axisDate: Date.FormatStyle = {
+        var style = Date.FormatStyle.dateTime.day().month(.abbreviated)
+        style.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        return style
+    }()
+}
+
+extension TrendsView {
+    var trendsRedesignScreen: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                InsightsScreenHeader("Trends", subtitle: "The thread of you over time.")
+                    .noopEntrance(index: 0)
+                if repo.days.isEmpty {
+                    trendsRdEmpty
+                } else {
+                    let metrics = resolvedMetrics
+                    trendsRdRangeControl(metrics.recovery)
+                        .noopEntrance(index: 1)
+                    trendsRdHero(metrics.recovery)
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.l)
+                        .noopEntrance(index: 2)
+                    trendsRdGrid(metrics)
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.cardGap)
+                        .noopEntrance(index: 3)
+                    trendsRdWeekInReview
+                        .noopEntrance(index: 4)
+                    InsightsSectionTitle("Training load")
+                    TrainingLoadCard(days: repo.days)
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .noopEntrance(index: 5)
+                    trendsRdCalendar
+                        .noopEntrance(index: 6)
+                    trendsRdExportRow
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.xl)
+                        .noopEntrance(index: 7)
+                }
+            }
+            .padding(.bottom, NoopMetrics.tabBarClearance)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .refreshable { await repo.refresh() }
+        .noopAmbientBackground(trendsRdAmbient, enabled: ambientFromScores)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    // MARK: Ambient
+
+    /// The Today-style score wash (the mockup's `data-ambient="today:…"`) from the selected window's own
+    /// averages: Sleep performance, Recovery and Strain on 0–21. A missing average adds no blob.
+    private var trendsRdAmbient: [AmbientBlob] {
+        let intensity = AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced
+        guard !repo.days.isEmpty else { return ambientBlobs(for: .empty, intensity: intensity) }
+        let metrics = resolvedMetrics
+        let scores = TodayScores(
+            sleep: mean(metrics.rest.points),
+            recovery: mean(metrics.recovery.points),
+            strain: mean(metrics.strain.points).map { UnitFormatter.effortValue($0, scale: .whoop) })
+        return ambientBlobs(for: scores, intensity: intensity)
+    }
+
+    // MARK: Empty
+
+    private var trendsRdEmpty: some View {
+        NoopGlassCard {
+            Text(repo.loaded
+                 ? "Trends need history to draw. Import your WHOOP export in Data Sources to see weeks, months and years instantly."
+                 : "Loading your history…")
+                .noopFont(.bodySmall)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .noopSkeleton(!repo.loaded)
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+        .padding(.top, NoopTheme.Layout.l)
+    }
+
+    // MARK: Range
+
+    private func trendsRdRangeControl(_ recovery: ResolvedMetric) -> some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            SegmentedPills(Range.allCases, selection: $range) { Text(verbatim: $0.label) }
+                .accessibilityLabel(Text(rangeSubtitle))
+            // The authoritative reading count for the window, amber when it had to widen.
+            Text(verbatim: recovery.caption)
+                .noopFont(.caption, color: false)
+                .foregroundStyle(recovery.widened ? NoopTheme.recoveryMid : NoopTheme.textTertiary)
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+        .padding(.top, NoopTheme.Layout.m)
+    }
+
+    // MARK: Hero (Recovery)
+
+    private func trendsRdHero(_ recovery: ResolvedMetric) -> some View {
+        let pts = recovery.points
+        let avg = mean(pts)
+        let color = avg.map { NoopTheme.recoveryColor(for: $0) } ?? NoopTheme.textTertiary
+        return NavigationLink(value: TabRoute.metric("recovery")) {
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                            Text("Recovery").noopFont(.rowTitle, color: false).foregroundStyle(color)
+                            HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
+                                Text(verbatim: avg.map { "\(Int($0.rounded()))" } ?? "—").noopFont(.tileNumber)
+                                if avg != nil { Text(verbatim: "%").noopFont(.unit) }
+                            }
+                            Text(verbatim: rangeSubtitle).noopFont(.caption)
+                        }
+                        Spacer(minLength: NoopTheme.Layout.s)
+                        trendsRdChange(pts, color: color, format: { "\(Int($0.rounded()))" })
+                    }
+                    trendsRdChart(pts, color: color, height: InsightsLayout.trendsHeroChart, captions: true,
+                                  name: String(localized: "Recovery"), format: { "\(Int($0.rounded()))%" })
+                }
+            }
+        }
+        .buttonStyle(.noopPress)
+        .accessibilityHint(Text("Opens the full \(String(localized: "Recovery")) metric."))
+    }
+
+    /// The window's recent-half minus earlier-half change (the classic Trend chip's value), in the metric's
+    /// colour. Nothing for a window too short to split.
+    @ViewBuilder
+    private func trendsRdChange(_ pts: [TrendPoint], color: Color, format: (Double) -> String) -> some View {
+        if let d = periodChange(pts), abs(d) > 0.0001 {
+            let text = "\(d >= 0 ? "+" : "−")\(format(abs(d)))"
+            VStack(alignment: .trailing, spacing: NoopTheme.Layout.xs / 2) {
+                Text("Trend").noopFont(.caption)
+                Text(verbatim: text).noopFont(.rowTitle, color: false).foregroundStyle(color)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: "\(String(localized: "Trend")): \(text)"))
+        }
+    }
+
+    /// A gradient line for a resolved window, or the honest sparse note when it has fewer than two points.
+    @ViewBuilder
+    private func trendsRdChart(_ pts: [TrendPoint], color: Color, height: CGFloat, captions: Bool,
+                               name: String, format: @escaping (Double) -> String) -> some View {
+        if pts.count >= 2 {
+            NoopLineChart(
+                points: pts.map { NoopChartPoint(date: $0.date, y: $0.value) },
+                color: color,
+                xLabels: captions ? trendsRdAxisLabels(pts) : [],
+                animates: true,
+                accessibilityLabel: Text(verbatim: String(localized: "\(name) trend")),
+                valueFormat: format)
+                .frame(height: height)
+        } else {
+            Text("Not enough data for this window.")
+                .noopFont(.footnote)
+                .frame(maxWidth: .infinity, minHeight: height, alignment: .center)
+        }
+    }
+
+    /// First, middle and last day of the plotted window, formatted in UTC like the day keys.
+    private func trendsRdAxisLabels(_ pts: [TrendPoint]) -> [String] {
+        guard let first = pts.first, let last = pts.last else { return [] }
+        let middle = pts[pts.count / 2]
+        let style = TrendsRedesignStyle.axisDate.locale(locale)
+        return [first.date.formatted(style), middle.date.formatted(style), last.date.formatted(style)]
+    }
+
+    // MARK: Small multiples
+
+    private func trendsRdGrid(_ metrics: ResolvedMetrics) -> some View {
+        let columns = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        let strainPts = metrics.strain.points.map {
+            TrendPoint(date: $0.date, value: UnitFormatter.effortValue($0.value, scale: effortScale))
+        }
+        let strainFormat: (Double) -> String = { effortScale == .whoop ? String(format: "%.1f", $0) : "\(Int($0.rounded()))" }
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap, alignment: .top),
+                           count: columns),
+            spacing: NoopTheme.Layout.cardGap
+        ) {
+            trendsRdTile("HRV", name: String(localized: "HRV"), color: NoopTheme.hrv, metricKey: "hrv",
+                         points: metrics.hrv.points, unit: "ms", format: { "\(Int($0.rounded()))" })
+            trendsRdTile("Resting HR", name: String(localized: "Resting HR"), color: NoopTheme.heart,
+                         metricKey: "rhr", points: metrics.rhr.points, unit: "bpm",
+                         format: { "\(Int($0.rounded()))" })
+            trendsRdTile("Strain", name: String(localized: "Strain"), color: NoopTheme.strain, metricKey: "strain",
+                         points: strainPts,
+                         unit: String(localized: "of \(UnitFormatter.effortScaleMax(effortScale))"),
+                         format: strainFormat)
+            // Sleep is the sleep_performance composite, the same number the Sleep score shows (#732).
+            trendsRdTile("Sleep", name: String(localized: "Sleep"), color: NoopTheme.sleep,
+                         metricKey: "sleep_performance", points: metrics.rest.points, unit: "%",
+                         format: { "\(Int($0.rounded()))" })
+        }
+    }
+
+    private func trendsRdTile(_ title: LocalizedStringKey, name: String, color: Color, metricKey: String,
+                              points pts: [TrendPoint], unit: String,
+                              format: @escaping (Double) -> String) -> some View {
+        let avg = mean(pts)
+        return NavigationLink(value: TabRoute.metric(metricKey)) {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text(title).noopFont(.rowTitle, color: false).foregroundStyle(color)
+                    HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
+                        Text(verbatim: avg.map(format) ?? "—").noopFont(.statNumber)
+                        if avg != nil { Text(verbatim: unit).noopFont(.unit) }
+                    }
+                }
+                .padding([.horizontal, .top], NoopTheme.Layout.l)
+                Spacer(minLength: 0)
+                // The chart bleeds to the tile's bottom edge, as in the mockup.
+                trendsRdChart(pts, color: color, height: InsightsLayout.trendsTileChart, captions: false,
+                              name: name, format: { "\(format($0)) \(unit)" })
+            }
+            .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.tileMinHeight, alignment: .topLeading)
+            .noopGlassBackground(cornerRadius: NoopTheme.Layout.tileRadius)
+        }
+        .buttonStyle(.noopPress)
+        .accessibilityHint(Text("Opens the full \(name) metric."))
+    }
+
+    // MARK: Week in review
+
+    private var trendsRdWeekInReview: some View {
+        let digest = WeeklyDigestSource.digest(from: repo.days, anchorDay: weekAnchorDay)
+        let atOldest = weekOffset <= minWeekOffset
+        let atNewest = weekOffset >= 0
+        return VStack(alignment: .leading, spacing: 0) {
+            InsightsSectionTitle("Week in review",
+                                 trailing: "\(weeklyDigestRangeLabel(digest)) · \(String(localized: "\(digest.daysWithData)/7 days"))")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    HStack(spacing: NoopTheme.Layout.m) {
+                        NoopIconButton(systemImage: "chevron.left", accessibilityLabel: "Previous week") { stepWeek(-1) }
+                            .disabled(atOldest)
+                            .opacity(atOldest ? InsightsLayout.levelDimmed : 1)
+                        Text(verbatim: weekOffset == 0 ? String(localized: "This week") : weekOffsetLabel)
+                            .noopFont(.rowTitle)
+                            .frame(maxWidth: .infinity)
+                        NoopIconButton(systemImage: "chevron.right", accessibilityLabel: "Next week") { stepWeek(1) }
+                            .disabled(atNewest)
+                            .opacity(atNewest ? InsightsLayout.levelDimmed : 1)
+                    }
+                    if digest.isEmpty {
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                            Text("No readings this week").noopFont(.rowTitle)
+                            Text("Step to another week with the arrows above to see its review.")
+                                .noopFont(.footnote)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } else {
+                        trendsRdWeekRings(digest)
+                        if !digest.focalPoints.isEmpty {
+                            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                                ForEach(Array(digest.focalPoints.enumerated()), id: \.offset) { _, line in
+                                    Text(verbatim: MetricCatalog.scoreDisplayText(line))
+                                        .noopFont(.bodySmall, color: false)
+                                        .foregroundStyle(NoopTheme.textPrimary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        Button {
+                            let page = WeeklyDigestContent(digest: digest, compact: true, showsHeader: true)
+                                .frame(width: 380)
+                                .padding(24)
+                                .background(StrandPalette.surfaceBase)
+                                .environment(\.colorScheme, colorScheme)
+                            TrendsReportRenderer.exportPNG(page: page, suggestedName: "noop-recap-\(weekAnchorDay).png")
+                        } label: {
+                            Label("Share recap", systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(NoopSecondaryButton())
+                    }
+                }
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        }
+    }
+
+    /// Sleep, Recovery and Strain for the week as three rings (the week's own means from the digest). A
+    /// metric with no reading that week is a dashed empty ring, never a zero.
+    private func trendsRdWeekRings(_ digest: WeeklyDigest) -> some View {
+        let animate = NoopTheme.Motion.ringsAnimate(reduceMotion: reduceMotion, fillOnLoad: ringsFillOnLoad)
+        let rest = digest.summary(.rest).flatMap { $0.thisWeek.n > 0 ? $0.thisWeek.mean : nil }
+        let charge = digest.summary(.charge).flatMap { $0.thisWeek.n > 0 ? $0.thisWeek.mean : nil }
+        let effort = digest.summary(.effort).flatMap { $0.thisWeek.n > 0 ? $0.thisWeek.mean : nil }
+        return HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+            trendsRdWeekRing(name: String(localized: "Sleep"), value: rest.map { $0 / 100 },
+                             color: NoopTheme.sleep, label: rest.map { "\(Int($0.rounded()))" }, animate: animate)
+            trendsRdWeekRing(name: String(localized: "Recovery"), value: charge.map { $0 / 100 },
+                             color: charge.map { NoopTheme.recoveryColor(for: $0) } ?? NoopTheme.recovery,
+                             label: charge.map { "\(Int($0.rounded()))" }, animate: animate)
+            trendsRdWeekRing(name: String(localized: "Strain"), value: effort.map { $0 / 100 },
+                             color: NoopTheme.strain,
+                             label: effort.map { UnitFormatter.effortDisplay($0, scale: effortScale) }, animate: animate)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func trendsRdWeekRing(name: String, value: Double?, color: Color, label: String?,
+                                  animate: Bool) -> some View {
+        VStack(spacing: NoopTheme.Layout.s) {
+            NoopRing(value: value, color: color, diameter: InsightsLayout.weekRing, label: label ?? "—",
+                     animate: animate && value != nil,
+                     accessibilityLabel: name,
+                     accessibilityValue: label ?? String(localized: "No data"))
+            Text(verbatim: name).noopFont(.caption)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Calendar
+
+    private var trendsRdCalendar: some View {
+        let stripDays = max(range.days ?? repo.days.count, 365)
+        let recoveryDays: [RecoveryDay] = repo.days.suffix(stripDays).compactMap { d in
+            guard let dt = date(d.day) else { return nil }
+            return RecoveryDay(date: dt, score: d.recovery)
+        }
+        let allHistory = range == .all && repo.days.count > 365
+        return VStack(alignment: .leading, spacing: 0) {
+            InsightsSectionTitle(allHistory ? "Recovery, all history" : "Recovery, past year",
+                                 trailing: String(localized: "\(recoveryDays.filter { $0.score != nil }.count) days"))
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                    if recoveryDays.isEmpty {
+                        Text("Not enough data for this window.").noopFont(.footnote)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            YearHeatStrip(days: recoveryDays)
+                        }
+                        legend
+                    }
+                }
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        }
+    }
+
+    // MARK: Export
+
+    private var trendsRdExportRow: some View {
+        Button { showingReport = true } label: {
+            NoopGlassCard(flush: true) {
+                NoopListRow("Export trends report", systemImage: "doc.richtext", color: NoopTheme.hrv,
+                            detail: String(localized: "A shareable one-page PDF of recovery, sleep, HRV, resting HR and strain over a range, saved on your \(Platform.deviceNoun)."),
+                            showsDivider: false)
+            }
+        }
+        .buttonStyle(.noopPress)
+    }
+}
+#endif
 
 #if DEBUG
 @MainActor
