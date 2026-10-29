@@ -25,6 +25,8 @@ struct CoachSettingsView: View {
     @State private var briefStatus: String?
     #if os(iOS)
     @State private var showChatGPTConnection = false
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
     #endif
 
     /// The coach-instructions editor, collapsed until asked for.
@@ -32,6 +34,34 @@ struct CoachSettingsView: View {
     @State private var promptDraft: String = ""
 
     var body: some View {
+        settingsScreen
+        // Opening this screen is the moment a stale catalogue is worth refreshing: a key exists here by
+        // definition, and the picker above is about to be read. Rate-limited and silent on failure.
+        .task { await coach.refreshModelsIfStale() }
+        #if os(iOS)
+        .sheet(isPresented: $showChatGPTConnection) {
+            ChatGPTConnectionView(session: coach.chatGPTSession,
+                                  hasConversation: !coach.messages.isEmpty,
+                                  onProfileChanged: { coach.clearConversation() })
+        }
+        #endif
+    }
+
+    /// The redesigned screen on iPhone (mockup D2) with the redesign on; the classic one otherwise and on
+    /// macOS. The model refresh task and the ChatGPT sheet on `body` serve both.
+    @ViewBuilder private var settingsScreen: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignSettingsScreen
+        } else {
+            classicSettingsScreen
+        }
+        #else
+        classicSettingsScreen
+        #endif
+    }
+
+    private var classicSettingsScreen: some View {
         // Literals, not String(localized:): `title`/`subtitle` are LocalizedStringKey, which converts
         // from a string LITERAL only, so a String value does not type-check here. The catalog keys are
         // these exact English strings.
@@ -66,16 +96,6 @@ struct CoachSettingsView: View {
             systemPromptBar
             morningBriefBar
         }
-        // Opening this screen is the moment a stale catalogue is worth refreshing: a key exists here by
-        // definition, and the picker above is about to be read. Rate-limited and silent on failure.
-        .task { await coach.refreshModelsIfStale() }
-        #if os(iOS)
-        .sheet(isPresented: $showChatGPTConnection) {
-            ChatGPTConnectionView(session: coach.chatGPTSession,
-                                  hasConversation: !coach.messages.isEmpty,
-                                  onProfileChanged: { coach.clearConversation() })
-        }
-        #endif
     }
 
     /// Which model answers, and the control that refreshes the list of them.
@@ -292,14 +312,7 @@ struct CoachSettingsView: View {
                         .labelsHidden().toggleStyle(.switch).tint(StrandPalette.accent)
                         .accessibilityLabel("Morning brief")
                 }
-                .onChangeCompat(of: briefEnabled) { on in
-                    CoachBriefScheduler.setEnabled(on, generateBrief: { await coach.generateBrief() }) { outcome in
-                        if outcome == .denied {
-                            briefEnabled = false
-                            briefStatus = "Notifications are off for NOOP — enable them in Settings first."
-                        }
-                    }
-                }
+                .onChangeCompat(of: briefEnabled) { on in briefEnabledChanged(on) }
 
                 if briefEnabled {
                     Divider().overlay(StrandPalette.hairline)
@@ -327,6 +340,16 @@ struct CoachSettingsView: View {
                         Text(briefStatus).font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     }
                 }
+            }
+        }
+    }
+
+    /// The brief switch moved: schedule or cancel it, reverting with a reason when notifications are off.
+    private func briefEnabledChanged(_ on: Bool) {
+        CoachBriefScheduler.setEnabled(on, generateBrief: { await coach.generateBrief() }) { outcome in
+            if outcome == .denied {
+                briefEnabled = false
+                briefStatus = "Notifications are off for NOOP — enable them in Settings first."
             }
         }
     }
@@ -362,3 +385,239 @@ struct CoachSettingsView: View {
         }
     }
 }
+
+// MARK: - iPhone redesign (mockup D2, design/round3/coach-profile.html)
+
+#if os(iOS)
+/// Geometry from mockup D2 with no `NoopTheme` token.
+private enum CoachSettingsRedesignLayout {
+    static let connectionIcon: CGFloat = 52
+    static let statusDot: CGFloat = 7
+    static let editorMinHeight: CGFloat = 140
+    static let editorMaxHeight: CGFloat = 240
+}
+
+extension CoachSettingsView {
+
+    /// The redesigned settings sheet. Every switch is the engine's own binding (the data-sharing consent
+    /// stays its own toggle, separate from signing in), and the brief uses the same scheduler calls.
+    fileprivate var redesignSettingsScreen: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("Coach settings")
+                        .noopFont(.navTitle)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .noopFont(.button, color: false)
+                        .foregroundStyle(NoopTheme.textPrimary)
+                        .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+                        .accessibilityLabel("Close coach settings")
+                }
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+                .padding(.top, NoopTheme.Layout.s)
+
+                redesignConnectionCard
+                    .padding(.top, NoopTheme.Layout.m)
+                redesignModelCard
+                    .padding(.top, NoopTheme.Layout.cardGap)
+
+                NoopSectionHeader("What Coach can see")
+                FormKitCard {
+                    FormKitToggleRow("Let the coach use my data",
+                                     detail: coach.dataConsent
+                                        ? "On: your charge, rest, HRV and workouts are sent to the provider, each workout with its sport, duration, distance and heart rate."
+                                        : "Off: the coach answers generally and sends none of your metrics.",
+                                     isOn: $coach.dataConsent, showsDivider: false)
+                    if coach.dataConsent {
+                        FormKitToggleRow("Also share my patterns & Lab Book",
+                                         detail: coach.includeOnDeviceSignals
+                                            ? "On: a short summary of your strongest patterns and logged health numbers is added. Summaries only, never raw readings."
+                                            : "Off: only your core metrics are shared, not your patterns or Lab Book.",
+                                         isOn: $coach.includeOnDeviceSignals)
+                    }
+                    if coach.dataConsent && coach.provider == .gemini {
+                        FormKitToggleRow("Send chart image to Gemini",
+                                         detail: coach.multimodalChartEnabled
+                                            ? "On: a chart snapshot of your trends is sent with each question. Gemini can analyze the visual."
+                                            : "Off: only text is sent. Enable to let Gemini see your charts.",
+                                         isOn: $coach.multimodalChartEnabled)
+                    }
+                }
+
+                NoopSectionHeader("Coach instructions")
+                redesignInstructionsCard
+
+                NoopSectionHeader("Morning brief")
+                redesignBriefCard
+
+                if coach.provider == .chatGPT {
+                    FormKitFootnote("Your sign-in lives in this iPhone's Keychain. It is never in backups or widgets.")
+                }
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .formKitAmbient(.coachConnection)
+    }
+
+    /// Which provider answers and whether it is connected. On the ChatGPT plan the card opens the
+    /// subscription screen (the classic "ChatGPT subscription" button).
+    @ViewBuilder
+    private var redesignConnectionCard: some View {
+        let content = HStack(spacing: NoopTheme.Layout.m) {
+            DomainIcon(systemImage: "sparkles", color: NoopTheme.coach, size: CoachSettingsRedesignLayout.connectionIcon)
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                Text(verbatim: coach.provider.displayName)
+                    .noopFont(.listTitle)
+                HStack(spacing: NoopTheme.Layout.s) {
+                    Circle()
+                        .fill(coach.isConfigured ? NoopTheme.recovery : NoopTheme.textTertiary)
+                        .frame(width: CoachSettingsRedesignLayout.statusDot, height: CoachSettingsRedesignLayout.statusDot)
+                        .accessibilityHidden(true)
+                    if coach.provider == .chatGPT, let profile = coach.chatGPTSession.activeProfile {
+                        Text(verbatim: profile.email.map { "\(profile.label) · \($0)" } ?? profile.label)
+                            .noopFont(.footnote)
+                            .lineLimit(1)
+                    } else {
+                        Text(coach.isConfigured ? "Connected" : "Not connected")
+                            .noopFont(.footnote)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if coach.provider == .chatGPT { FormKitChevron() }
+        }
+        if coach.provider == .chatGPT {
+            Button { showChatGPTConnection = true } label: {
+                NoopGlassCard { content }
+            }
+            .buttonStyle(.noopPress)
+            .accessibilityHint(Text("ChatGPT subscription"))
+            .formKitGutter()
+        } else {
+            NoopGlassCard { content }
+                .formKitGutter()
+        }
+    }
+
+    /// The model picker and its refresh (see `modelBar` for why it lives here), plus where history is kept.
+    private var redesignModelCard: some View {
+        FormKitCard {
+            FormKitControlRow("Model", showsDivider: false) {
+                Picker("Model", selection: $coach.model) {
+                    ForEach(coach.availableModels, id: \.self) { m in
+                        Text(verbatim: coach.modelDisplayName(m)).tag(m)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(NoopTheme.textSecondary)
+                .accessibilityLabel("Model")
+            }
+            FormKitDivider()
+            Button {
+                Task { await coach.refreshModels() }
+            } label: {
+                Label("Refresh models", systemImage: "arrow.clockwise")
+                    .labelStyle(.titleAndIcon)
+                    .noopFont(.listTitle, color: false)
+                    .foregroundStyle(coach.canRefreshModels ? NoopTheme.textPrimary : NoopTheme.textTertiary)
+                    .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!coach.canRefreshModels)
+            .accessibilityLabel("Refresh models from provider")
+            FormKitControlRow("Conversation history") {
+                FormKitValue("On this iPhone")
+            }
+        }
+    }
+
+    /// The editable system prompt: same engine binding, same reset, collapsed until asked for.
+    private var redesignInstructionsCard: some View {
+        FormKitCard {
+            Button {
+                withAnimation(NoopTheme.Motion.reduced) {
+                    promptExpanded.toggle()
+                    if promptExpanded { promptDraft = coach.customSystemPrompt }
+                }
+            } label: {
+                FormKitControlRow("Coach instructions",
+                                  detail: coach.hasCustomSystemPrompt
+                                    ? "Customised. Your edited instructions frame every reply."
+                                    : "Edit how the coach thinks and talks. Takes effect on your next message.",
+                                  showsDivider: false) {
+                    Image(systemName: promptExpanded ? "chevron.up" : "chevron.down")
+                        .noopFont(.footnote, color: false)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(NoopTheme.textTertiary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(promptExpanded ? "Collapse coach instructions" : "Edit coach instructions")
+            if promptExpanded {
+                TextEditor(text: $promptDraft)
+                    .noopFont(.bodySmall, color: false)
+                    .foregroundStyle(NoopTheme.textPrimary)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: CoachSettingsRedesignLayout.editorMinHeight,
+                           maxHeight: CoachSettingsRedesignLayout.editorMaxHeight)
+                    .padding(NoopTheme.Layout.s)
+                    .background(RoundedRectangle(cornerRadius: FormKitLayout.fieldRadius, style: .continuous)
+                        .fill(NoopTheme.control))
+                    .onChangeCompat(of: promptDraft) { newValue in
+                        coach.customSystemPrompt = newValue
+                    }
+                    .accessibilityLabel("Coach instructions editor")
+                Button {
+                    coach.resetSystemPrompt()
+                    promptDraft = coach.customSystemPrompt
+                } label: {
+                    Label("Reset to default", systemImage: "arrow.uturn.backward")
+                        .labelStyle(.titleAndIcon)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(coach.hasCustomSystemPrompt ? NoopTheme.textPrimary : NoopTheme.textTertiary)
+                        .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget, alignment: .trailing)
+                }
+                .buttonStyle(.plain)
+                .disabled(!coach.hasCustomSystemPrompt)
+                .accessibilityLabel("Reset coach instructions to default")
+            }
+        }
+    }
+
+    /// The scheduled brief: same switch, time and "Generate now" as the classic card. iOS decides when the
+    /// background work runs, and the copy says so plainly.
+    private var redesignBriefCard: some View {
+        FormKitCard {
+            FormKitToggleRow("Morning brief",
+                             detail: briefEnabled
+                                ? "Your selected provider generates a readiness and training brief, delivered as a local notification."
+                                : "Off: nothing is generated or sent on a schedule.",
+                             isOn: $briefEnabled, showsDivider: false)
+                .onChangeCompat(of: briefEnabled) { on in briefEnabledChanged(on) }
+            if briefEnabled {
+                FormKitControlRow("Time", detail: "Timing is up to iOS, so it can arrive late") {
+                    DatePicker("", selection: briefTimeBinding, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        .accessibilityLabel("Morning brief time")
+                }
+                FormKitDivider()
+                Button(briefGenerating ? "Generating…" : "Generate now") { generateBriefNow() }
+                    .buttonStyle(NoopSecondaryButton())
+                    .disabled(briefGenerating)
+                    .padding(.vertical, FormKitLayout.rowVertical)
+                if let briefStatus {
+                    Text(briefStatus)
+                        .noopFont(.footnote)
+                        .padding(.bottom, FormKitLayout.rowVertical)
+                }
+            }
+        }
+    }
+}
+#endif
