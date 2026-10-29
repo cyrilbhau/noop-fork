@@ -337,6 +337,14 @@ enum UnitFormatter {
         unit == .fahrenheit ? "°F" : "°C"
     }
 
+    /// One rounded sleep-duration readout for Today and Sleep, preserving Sleep's existing copy and
+    /// rounding. Callers keep missing values optional instead of substituting zero.
+    static func nightSleepDurationDisplay(minutes: Double) -> String {
+        let m = Swift.max(0, Int(minutes.rounded()))
+        if m < 60 { return String(localized: "\(m)m") }
+        return String(localized: "\(m / 60)h \(m % 60)m")
+    }
+
     // MARK: Effort scale (stored 0–100 — #268)
 
     /// NOOP stores Effort 0–100 (StrainScorer.maxStrain = 100). WHOOP's Day Strain axis is 0–21, and

@@ -408,8 +408,7 @@ struct RedesignTodayView: View {
 
     /// The selected night's asleep time, "7h 42m", or nil.
     private var sleepDurationText: String? {
-        guard let m = displayDay?.totalSleepMin else { return nil }
-        return "\(Int(m) / 60)h \(Int(m) % 60)m"
+        displayDay?.totalSleepMin.map { UnitFormatter.nightSleepDurationDisplay(minutes: $0) }
     }
 
     /// The Recovery band word, from the existing catalogue (Low / Moderate / High). The band thresholds are

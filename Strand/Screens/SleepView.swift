@@ -2154,9 +2154,7 @@ struct SleepView: View {
     }
 
     private func durationText(_ minutes: Double) -> String {
-        let m = Swift.max(0, Int(minutes.rounded()))
-        if m < 60 { return String(localized: "\(m)m") }
-        return String(localized: "\(m / 60)h \(m % 60)m")
+        UnitFormatter.nightSleepDurationDisplay(minutes: minutes)
     }
 
     // The metric-grid `spark(_:)` sparkline helper moved to `NightDetailCard` with the grid.

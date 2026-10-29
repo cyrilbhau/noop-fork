@@ -231,6 +231,15 @@ final class UnitFormatterTests: XCTestCase {
         XCTAssertEqual(UnitPrefs.resolveDistance(system: .imperial, override: "unknown"), .imperial)
     }
 
+    func testSleepDurationRoundsConsistentlyAcrossMinuteAndHourBoundaries() {
+        XCTAssertEqual(UnitFormatter.nightSleepDurationDisplay(minutes: 408.9), "6h 49m")
+        XCTAssertEqual(UnitFormatter.nightSleepDurationDisplay(minutes: 408.49), "6h 48m")
+        XCTAssertEqual(UnitFormatter.nightSleepDurationDisplay(minutes: 408.5), "6h 49m")
+        XCTAssertEqual(UnitFormatter.nightSleepDurationDisplay(minutes: 59.49), "59m")
+        XCTAssertEqual(UnitFormatter.nightSleepDurationDisplay(minutes: 59.5), "1h 0m")
+        XCTAssertEqual(UnitFormatter.nightSleepDurationDisplay(minutes: 24), "24m")
+    }
+
     // MARK: - Unit labels
 
     func testUnitLabels() {
