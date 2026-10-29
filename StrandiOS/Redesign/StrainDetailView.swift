@@ -16,6 +16,7 @@ struct StrainDetailView: View {
 
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var profile: ProfileStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
     @AppStorage(DayCycleMode.storageKey) private var dayCycleModeRaw = DayCycleMode.sleepOnset.rawValue
@@ -92,7 +93,7 @@ struct StrainDetailView: View {
                 color: NoopTheme.strain,
                 targetBand: targetShown.map { ($0.lowerBound / scaleMax)...($0.upperBound / scaleMax) },
                 number: shown.map { ScoreDetailFormat.score($0, decimals: decimals) } ?? "—",
-                caption: gaugeCaption,
+                caption: dynamicTypeSize.isAccessibilitySize ? nil : gaugeCaption,
                 animate: shown != nil && NoopTheme.Motion.ringsAnimate(reduceMotion: reduceMotion,
                                                                        fillOnLoad: ringsFillOnLoad),
                 accessibilityLabel: gaugeCaption,
@@ -102,6 +103,10 @@ struct StrainDetailView: View {
             )
             .frame(maxWidth: .infinity)
             .padding(.top, NoopTheme.Layout.l)
+            if dynamicTypeSize.isAccessibilitySize {
+                Text(verbatim: gaugeCaption).noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
                 Text(verbatim: headline)
