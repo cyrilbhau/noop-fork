@@ -585,6 +585,7 @@ enum DemoScreens {
         case "live":     return AnyView(LiveView())
         case "stress":   return AnyView(StressView())
         case "workouts": return AnyView(WorkoutsView())
+        case "liftsession": return AnyView(LiftSessionDemoHost())
         case "health":   return AnyView(HealthView())
         case "insights": return AnyView(InsightsView())
         case "explore":  return AnyView(MetricExplorerView())
@@ -624,6 +625,23 @@ enum DemoScreens {
 #endif
 
 #if DEBUG
+/// Synthetic lifting editor with inert strap callbacks, for simulator-only visual review.
+private struct LiftSessionDemoHost: View {
+    @StateObject private var demoSession = LiftSessionController(buzz: { _ in }, setStrapHandler: { _ in })
+
+    var body: some View {
+        LiftSessionView(onFinished: {})
+            .environmentObject(demoSession)
+            .task {
+                guard demoSession.engine == nil else { return }
+                demoSession.start(plan: [
+                    LiftPlanItem(exercise: "Bench press", targetSets: 3, targetRepsLow: 8, targetWeightKg: 60),
+                    LiftPlanItem(exercise: "Dumbbell row", targetSets: 3, targetRepsLow: 10, targetWeightKg: 24)
+                ], programId: nil, programName: "Demo session")
+            }
+    }
+}
+
 /// DEBUG-only host so `--demo-screen profile` can render the Profile sheet, which needs a path binding.
 private struct ProfileDemoHost: View {
     @State private var path = NavigationPath()

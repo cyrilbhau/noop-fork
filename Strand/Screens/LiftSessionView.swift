@@ -66,6 +66,17 @@ struct LiftSessionView: View {
     /// dropped when focus leaves and the row goes back to the canonical formatting.
     @State private var draft: [FocusTarget: String] = [:]
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+    private var redesignActive: Bool {
+        #if os(iOS)
+        return redesignEnabled
+        #else
+        return false
+        #endif
+    }
+
     private var engine: LiftSessionEngine? { session.engine }
 
     var body: some View {
@@ -78,7 +89,12 @@ struct LiftSessionView: View {
                     controlBar(engine)
                 }
             } else {
-                ComingSoon(what: "No session running", symbol: "dumbbell")
+                if redesignActive {
+                    Text("No session running").noopFont(.body)
+                        .padding(NoopTheme.Layout.cardPadding)
+                } else {
+                    ComingSoon(what: "No session running", symbol: "dumbbell")
+                }
             }
         }
         #if os(iOS)
@@ -86,7 +102,7 @@ struct LiftSessionView: View {
         #else
         .frame(width: 560, height: 800)
         #endif
-        .background(StrandPalette.surfaceBase)
+        .background(liftCanvas)
         .keyboardDoneToolbar($focused)
         .dismissesKeyboardOnTap($focused)
         // Re-read whenever the session's exercises change, so an exercise added mid-session that was
@@ -106,7 +122,7 @@ struct LiftSessionView: View {
     private func sheet(_ engine: LiftSessionEngine) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                VStack(alignment: .leading, spacing: redesignActive ? NoopTheme.Layout.cardGap : NoopMetrics.sectionGap) {
                     header(engine)
                     ForEach(Array(engine.plan.enumerated()), id: \.offset) { index, item in
                         exerciseCard(engine, index: index, item: item)
@@ -114,7 +130,7 @@ struct LiftSessionView: View {
                     addExerciseRow(engine)
                     Color.clear.frame(height: 8)
                 }
-                .padding(.horizontal, NoopMetrics.screenPadding)
+                .padding(.horizontal, redesignActive ? NoopTheme.Layout.gutter : NoopMetrics.screenPadding)
                 .padding(.top, 18)
             }
             .onChange(of: engine.currentSlot) { slot in
@@ -149,15 +165,15 @@ struct LiftSessionView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                Text("Add exercise").font(StrandFont.body)
+                    .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowTitle, classic: .system(size: 17, weight: .semibold)))
+                Text("Add exercise").modifier(LiftSessionTypography(enabled: redesignActive, style: .body, classic: StrandFont.body))
             }
-            .foregroundStyle(canAdd ? StrandPalette.effortColor : StrandPalette.textTertiary)
+            .foregroundStyle(canAdd ? liftAccent : liftTertiary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
-                    .strokeBorder(StrandPalette.textTertiary.opacity(0.35),
+                    .strokeBorder(liftTertiary.opacity(0.35),
                                   style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
             .contentShape(Rectangle())
         }
@@ -168,11 +184,11 @@ struct LiftSessionView: View {
     private func header(_ engine: LiftSessionEngine) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(session.programName ?? String(localized: "Session"))
-                .font(StrandFont.title1)
-                .foregroundStyle(StrandPalette.textPrimary)
+                .modifier(LiftSessionTypography(enabled: redesignActive, style: .largeTitle, classic: StrandFont.title1))
+                .foregroundStyle(liftPrimary)
             Text(String(localized: "\(engine.completedWorkingSets) of \(engine.plannedWorkingSets) sets done"))
-                .font(StrandFont.caption)
-                .foregroundStyle(StrandPalette.textSecondary)
+                .modifier(LiftSessionTypography(enabled: redesignActive, style: .caption, classic: StrandFont.caption))
+                .foregroundStyle(liftSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -180,40 +196,32 @@ struct LiftSessionView: View {
     // MARK: - One exercise, with all its sets
 
     private func exerciseCard(_ engine: LiftSessionEngine, index: Int, item: LiftPlanItem) -> some View {
-        NoopCard {
-            VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
+        liftSessionSurface {
+            VStack(alignment: .leading, spacing: redesignActive ? NoopTheme.Layout.m : NoopMetrics.rowSpacing) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.exercise)
-                        .font(StrandFont.headline)
-                        .foregroundStyle(StrandPalette.textPrimary)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .sectionTitle, classic: StrandFont.headline))
+                        .foregroundStyle(liftPrimary)
                     Text(LiftMuscleSummary.line(primary: item.primaryMuscle,
                                                 secondaries: item.secondaryMuscles))
-                        .font(StrandFont.caption)
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .caption, classic: StrandFont.caption))
+                        .foregroundStyle(liftTertiary)
                 }
                 if let note = item.note, !note.isEmpty {
                     Text(note)
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textSecondary)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .footnote, classic: StrandFont.footnote))
+                        .foregroundStyle(liftSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         // Belt and braces with the entry cap: the sets are what this screen is for,
                         // and a note must never be able to push them off it.
-                        .lineLimit(4)
+                        .lineLimit(redesignActive ? nil : 4)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(StrandPalette.metricAmber.opacity(0.12),
+                        .background(liftRest.opacity(0.12),
                                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
 
-                columnHeadings
-
-                ForEach(engine.slots(forExercise: index), id: \.self) { slot in
-                    setRow(engine, slot: slot)
-                    // The rest belongs BETWEEN two sets, because that is where it happens.
-                    if isRestingAfter(engine, slot: slot) { restBand(engine) }
-                }
-
-                setCountRow(engine, index: index, item: item)
+                liftSessionSets(engine, index: index, item: item)
             }
         }
         .id(index)
@@ -239,11 +247,12 @@ struct LiftSessionView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "plus.circle")
-                        .font(.system(size: 17, weight: .semibold))
-                    Text("Add set").font(StrandFont.caption)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowTitle, classic: .system(size: 17, weight: .semibold)))
+                    Text("Add set").modifier(LiftSessionTypography(enabled: redesignActive, style: .caption, classic: StrandFont.caption))
                 }
-                .foregroundStyle(canAdd ? StrandPalette.effortColor : StrandPalette.textTertiary)
+                .foregroundStyle(canAdd ? liftAccent : liftTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: redesignActive ? NoopTheme.Layout.minTouchTarget : nil)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -254,12 +263,13 @@ struct LiftSessionView: View {
                 session.removeSet(fromExercise: index)
             } label: {
                 Image(systemName: "minus.circle")
-                    .font(.system(size: 17, weight: .semibold))
+                    .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowTitle, classic: .system(size: 17, weight: .semibold)))
                     // Dimmed rather than gone: the pair reads as one control, and a minus that
                     // disappears once the last set is done looks like a feature that broke.
-                    .foregroundStyle(canRemove ? StrandPalette.textSecondary
-                                               : StrandPalette.textTertiary.opacity(0.4))
-                    .frame(width: Self.tickColumnWidth)
+                    .foregroundStyle(canRemove ? liftSecondary
+                                               : liftTertiary.opacity(0.4))
+                    .frame(width: liftTickWidth)
+                    .frame(minHeight: redesignActive ? NoopTheme.Layout.minTouchTarget : nil)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -285,12 +295,12 @@ struct LiftSessionView: View {
 
     private var columnHeadings: some View {
         HStack(spacing: 8) {
-            Text("Set").strandOverline()
-                .frame(width: Self.setColumnWidth, alignment: .center)
-            Text(weightHeading).strandOverline().frame(maxWidth: .infinity, alignment: .leading)
-            Text("Reps").strandOverline().frame(maxWidth: .infinity, alignment: .leading)
-            Text("RPE").strandOverline().frame(maxWidth: .infinity, alignment: .leading)
-            Color.clear.frame(width: Self.tickColumnWidth)
+            Text("Set").modifier(LiftSessionOverline(enabled: redesignActive))
+                .frame(width: liftSetWidth, alignment: .center)
+            Text(weightHeading).modifier(LiftSessionOverline(enabled: redesignActive)).frame(maxWidth: .infinity, alignment: .leading)
+            Text("Reps").modifier(LiftSessionOverline(enabled: redesignActive)).frame(maxWidth: .infinity, alignment: .leading)
+            Text("RPE").modifier(LiftSessionOverline(enabled: redesignActive)).frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear.frame(width: liftTickWidth)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.8)
@@ -314,12 +324,13 @@ struct LiftSessionView: View {
                 toggleWarmup(slot)
             } label: {
                 Text(isWarmup(slot) ? String(localized: "W") : "\(slot.setIndex)")
-                    .font(StrandFont.captionNumber)
+                    .modifier(LiftSessionTypography(enabled: redesignActive, style: .footnote, classic: StrandFont.captionNumber))
                     .foregroundStyle(isWarmup(slot)
-                                     ? StrandPalette.metricAmber
-                                     : (isWorking ? StrandPalette.textPrimary
-                                                  : StrandPalette.textSecondary))
-                    .frame(width: Self.setColumnWidth, alignment: .center)
+                                     ? liftRest
+                                     : (isWorking ? liftPrimary
+                                                  : liftSecondary))
+                    .frame(width: liftSetWidth, alignment: .center)
+                    .frame(minHeight: redesignActive ? NoopTheme.Layout.minTouchTarget : nil)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -343,13 +354,14 @@ struct LiftSessionView: View {
                 if recorded == nil { session.start(slot) } else { session.start(slot) }
             } label: {
                 Image(systemName: recorded == nil ? "circle" : "checkmark.circle.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowTitle, classic: .system(size: 20, weight: .semibold)))
                     .foregroundStyle(recorded == nil
-                                     ? StrandPalette.textTertiary
-                                     : StrandPalette.statusPositive)
+                                     ? liftTertiary
+                                     : liftWorking)
+                    .frame(minHeight: redesignActive ? NoopTheme.Layout.minTouchTarget : nil)
             }
             .buttonStyle(.plain)
-            .frame(width: Self.tickColumnWidth)
+            .frame(width: liftTickWidth)
             .accessibilityLabel(recorded == nil
                                 ? String(localized: "Start this set")
                                 : String(localized: "Redo this set"))
@@ -374,8 +386,8 @@ struct LiftSessionView: View {
     /// is over, and what is running is the gap after it. The rest is drawn as its own band between
     /// the two set rows instead — see `restBand`.
     private func rowBackground(isWorking: Bool, done: Bool) -> Color {
-        if isWorking { return StrandPalette.statusPositive.opacity(0.20) }
-        if done { return StrandPalette.surfaceRaised.opacity(0.5) }
+        if isWorking { return liftWorking.opacity(0.20) }
+        if done { return liftControl.opacity(0.5) }
         return .clear
     }
 
@@ -397,19 +409,19 @@ struct LiftSessionView: View {
     /// sheet is scrolled to a later exercise, the band is the only thing that says which rest.
     private func restBand(_ engine: LiftSessionEngine) -> some View {
         HStack(spacing: 8) {
-            Text("Rest period").strandOverline()
-                .foregroundStyle(StrandPalette.metricAmber)
+            Text("Rest period").modifier(LiftSessionOverline(enabled: redesignActive))
+                .foregroundStyle(liftRest)
             Spacer(minLength: 0)
             LiftRunningClock { engine.restRemaining(now: $0) ?? 0 }
-                .font(StrandFont.captionNumber)
-                .foregroundStyle(StrandPalette.metricAmber)
+                .modifier(LiftSessionTypography(enabled: redesignActive, style: .footnote, classic: StrandFont.captionNumber))
+                .foregroundStyle(liftRest)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.75)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity)
-        .background(StrandPalette.metricAmber.opacity(0.22),
+        .background(liftRest.opacity(0.22),
                     in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .padding(.horizontal, 8)
         .accessibilityElement(children: .combine)
@@ -419,11 +431,11 @@ struct LiftSessionView: View {
                              text: Binding<String>, ghost: String) -> some View {
         TextField(ghost, text: text)
             .textFieldStyle(.plain)
-            .font(StrandFont.bodyNumber)
-            .foregroundStyle(StrandPalette.textPrimary)
+            .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowNumber, classic: StrandFont.bodyNumber))
+            .foregroundStyle(liftPrimary)
             .numericKeyboard()
             .focused($focused, equals: field)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: redesignActive ? NoopTheme.Layout.minTouchTarget : nil, alignment: .leading)
     }
 
     // MARK: - Ghost values
@@ -533,27 +545,29 @@ struct LiftSessionView: View {
     // MARK: - The control bar
 
     private func controlBar(_ engine: LiftSessionEngine) -> some View {
-        VStack(spacing: NoopMetrics.rowSpacing) {
-            HStack(spacing: 14) {
-                clock(String(localized: "Session"), tint: StrandPalette.textPrimary) { $0 - engine.startTs }
+        VStack(spacing: redesignActive ? NoopTheme.Layout.m : NoopMetrics.rowSpacing) {
+            liftClockStrip {
+                clock(String(localized: "Session"), tint: liftPrimary) { $0 - engine.startTs }
                 stageClock(engine)
                 heartRate()
                 Spacer(minLength: 0)
                 Button { session.undo() } label: {
                     Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 15, weight: .semibold))
+                        .frame(minWidth: redesignActive ? NoopTheme.Layout.minTouchTarget : nil,
+                               minHeight: redesignActive ? NoopTheme.Layout.minTouchTarget : nil)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowTitle, classic: .system(size: 15, weight: .semibold)))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(engine.canUndo ? StrandPalette.textSecondary : StrandPalette.textTertiary)
+                .foregroundStyle(engine.canUndo ? liftSecondary : liftTertiary)
                 .disabled(!engine.canUndo)
                 .accessibilityLabel("Undo")
             }
 
-            HStack(spacing: NoopMetrics.rowSpacing) {
+            liftActionLayout {
                 Button { session.advance() } label: {
                     Text(actionLabel(engine)).frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.noopPrimary)
+                .modifier(LiftSessionActionStyle(enabled: redesignActive, primary: true))
 
                 Button {
                     unfinishedChoice = nil
@@ -563,15 +577,15 @@ struct LiftSessionView: View {
                 } label: {
                     Text("Finish")
                 }
-                .buttonStyle(NoopButtonStyle(.secondary))
+                .modifier(LiftSessionActionStyle(enabled: redesignActive, primary: false))
             }
         }
-        .padding(.horizontal, NoopMetrics.screenPadding)
+        .padding(.horizontal, redesignActive ? NoopTheme.Layout.gutter : NoopMetrics.screenPadding)
         .padding(.top, 10)
         .padding(.bottom, 14)
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) {
-            Rectangle().fill(StrandPalette.textTertiary.opacity(0.15)).frame(height: 0.5)
+            Rectangle().fill(liftTertiary.opacity(0.15)).frame(height: 0.5)
         }
     }
 
@@ -588,14 +602,14 @@ struct LiftSessionView: View {
     private func clock(_ label: String, tint: Color, seconds: @escaping (Int) -> Int) -> some View {
         labelled(label) {
             LiftRunningClock(seconds: seconds)
-                .font(StrandFont.bodyNumber)
+                .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowNumber, classic: StrandFont.bodyNumber))
                 .foregroundStyle(tint)
         }
     }
 
     private func labelled<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(label).strandOverline()
+            Text(label).modifier(LiftSessionOverline(enabled: redesignActive))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             value()
@@ -606,18 +620,18 @@ struct LiftSessionView: View {
     private func stageClock(_ engine: LiftSessionEngine) -> some View {
         switch engine.stage {
         case .working:
-            clock(String(localized: "This set"), tint: StrandPalette.statusPositive) {
+            clock(String(localized: "This set"), tint: liftWorking) {
                 $0 - engine.stageStartedAt
             }
         case .resting:
             // "Rest period", never "Rest": the catalog's "Rest" key is NOOP's SLEEP metric, so this
             // label rendered as "Erholung" (recovery) in German — the exact collision CLAUDE.md and
             // the handover brief both warn about. Reintroduced by the workout-sheet rewrite.
-            clock(String(localized: "Rest period"), tint: StrandPalette.metricAmber) {
+            clock(String(localized: "Rest period"), tint: liftRest) {
                 engine.restRemaining(now: $0) ?? 0
             }
         case .warmup, .finished:
-            clock(String(localized: "Warm-up"), tint: StrandPalette.textSecondary) {
+            clock(String(localized: "Warm-up"), tint: liftSecondary) {
                 $0 - engine.stageStartedAt
             }
         }
@@ -639,21 +653,20 @@ struct LiftSessionView: View {
         let asksAboutProgram = !setCountChanges.isEmpty || !addedExercises.isEmpty
         let answered = (unfinished == 0 || unfinishedChoice != nil)
             && (!asksAboutProgram || programChoice != nil)
-        return ScreenScaffold(title: "Finish session",
-                              subtitle: "One number for the whole session, so a leg day can be compared with a run.") {
-            VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
-                NoopCard {
-                    VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-                        Text("How hard was the whole session? (1–10)").strandOverline()
+        return liftFinishScaffold {
+            VStack(alignment: .leading, spacing: redesignActive ? NoopTheme.Layout.cardGap : NoopMetrics.sectionGap) {
+                liftSessionSurface {
+                    VStack(alignment: .leading, spacing: redesignActive ? NoopTheme.Layout.m : NoopMetrics.gap) {
+                        Text("How hard was the whole session? (1–10)").modifier(LiftSessionOverline(enabled: redesignActive))
                         TextField("7", text: $sessionRpeText)
                             .textFieldStyle(.plain)
-                            .font(StrandFont.bodyNumber)
-                            .foregroundStyle(StrandPalette.textPrimary)
+                            .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowNumber, classic: StrandFont.bodyNumber))
+                            .foregroundStyle(liftPrimary)
                             .numericKeyboard()
                             .focused($focused, equals: .sessionRpe)
                         Text("This is session RPE. Multiplied by the session's length it gives session load — the one figure that compares across completely different training.")
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textTertiary)
+                            .modifier(LiftSessionTypography(enabled: redesignActive, style: .footnote, classic: StrandFont.footnote))
+                            .foregroundStyle(liftTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -663,13 +676,13 @@ struct LiftSessionView: View {
                 // One way to save. Session RPE above is optional, so an empty field is simply no rating;
                 // a separate "Skip" saved exactly the same way and read as a second choice.
                 Button("Save session") { Task { await save() } }
-                    .buttonStyle(.noopPrimary)
+                    .modifier(LiftSessionActionStyle(enabled: redesignActive, primary: true))
                     .disabled(saving || !answered)
                     .opacity(saving || !answered ? NoopButtonMetrics.disabledOpacity : 1)
                 if !answered {
                     Text("Choose an option above to save.")
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .footnote, classic: StrandFont.footnote))
+                        .foregroundStyle(liftTertiary)
                 }
 
                 // A way OUT that records nothing. Until this existed, the only route off this screen
@@ -682,8 +695,8 @@ struct LiftSessionView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
-                .font(StrandFont.body)
-                .foregroundStyle(StrandPalette.statusCritical)
+                .modifier(LiftSessionTypography(enabled: redesignActive, style: .body, classic: StrandFont.body))
+                .foregroundStyle(liftCritical)
                 .padding(.top, 4)
                 .disabled(saving)
                 .confirmationDialog("Discard this session?",
@@ -703,7 +716,7 @@ struct LiftSessionView: View {
         #else
         .frame(width: 460, height: 420)
         #endif
-        .background(StrandPalette.surfaceBase)
+        .background(liftCanvas)
         .keyboardDoneToolbar($focused)
         .task { await loadSetCountChanges() }
     }
@@ -713,12 +726,12 @@ struct LiftSessionView: View {
     /// to zeros that every figure leaves out and Edit sets can still fill in. A set that was done is never
     /// asked about — it is complete (`LiftSessionController.setsToSave`).
     private func unfinishedCard(count: Int) -> some View {
-        NoopCard {
-            VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-                Text("Unfinished sets").strandOverline()
+        liftSessionSurface {
+            VStack(alignment: .leading, spacing: redesignActive ? NoopTheme.Layout.m : NoopMetrics.gap) {
+                Text("Unfinished sets").modifier(LiftSessionOverline(enabled: redesignActive))
                 Text("Sets not started: \(count)")
-                    .font(StrandFont.body)
-                    .foregroundStyle(StrandPalette.textPrimary)
+                    .modifier(LiftSessionTypography(enabled: redesignActive, style: .body, classic: StrandFont.body))
+                    .foregroundStyle(liftPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Picker("Unfinished sets", selection: $unfinishedChoice) {
                     Text("Complete them").tag(UnfinishedChoice?.some(.complete))
@@ -727,15 +740,15 @@ struct LiftSessionView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 Text("Completing saves them with the grey numbers shown. Discarding keeps them out of every figure; they stay under Edit sets as zeros you can fill in later.")
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
+                    .modifier(LiftSessionTypography(enabled: redesignActive, style: .footnote, classic: StrandFont.footnote))
+                    .foregroundStyle(liftTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 // Said before Save rather than after: `save` files nothing when no set counts.
                 if unfinishedChoice == .discard,
                    !LiftSessionController.anyPerformed(session.setsToSave(completingUnfinished: false)) {
                     Text("Every set would be a zero, so discarding saves no session and no workout.")
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.statusWarning)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .footnote, classic: StrandFont.footnote))
+                        .foregroundStyle(liftWarning)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -751,22 +764,22 @@ struct LiftSessionView: View {
     /// if asked to — one answer for all of them, listed so the lifter sees what "update" would write.
     private var programCard: some View {
         let added = addedExercises
-        return NoopCard {
-            VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-                Text("Program").strandOverline()
+        return liftSessionSurface {
+            VStack(alignment: .leading, spacing: redesignActive ? NoopTheme.Layout.m : NoopMetrics.gap) {
+                Text("Program").modifier(LiftSessionOverline(enabled: redesignActive))
                 Text(programQuestion(countsChanged: !setCountChanges.isEmpty, exercisesAdded: !added.isEmpty))
-                    .font(StrandFont.body)
-                    .foregroundStyle(StrandPalette.textPrimary)
+                    .modifier(LiftSessionTypography(enabled: redesignActive, style: .body, classic: StrandFont.body))
+                    .foregroundStyle(liftPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(setCountChanges, id: \.itemId) { change in
                     Text("\(change.exercise): \(change.from) → \(change.to) sets")
-                        .font(StrandFont.bodyNumber)
-                        .foregroundStyle(StrandPalette.textSecondary)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowNumber, classic: StrandFont.bodyNumber))
+                        .foregroundStyle(liftSecondary)
                 }
                 ForEach(Array(added.enumerated()), id: \.offset) { _, line in
                     Text("New: \(line.exercise) · sets: \(line.targetSets)")
-                        .font(StrandFont.bodyNumber)
-                        .foregroundStyle(StrandPalette.textSecondary)
+                        .modifier(LiftSessionTypography(enabled: redesignActive, style: .rowNumber, classic: StrandFont.bodyNumber))
+                        .foregroundStyle(liftSecondary)
                 }
                 Picker("Program", selection: $programChoice) {
                     Text("Update program").tag(ProgramChoice?.some(.update))
@@ -786,6 +799,100 @@ struct LiftSessionView: View {
         default:            return "You changed the number of sets. Keep the new counts in the program for next time?"
         }
     }
+
+    // MARK: - Presentation
+
+    @ViewBuilder private func liftSessionSurface<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        #if os(iOS)
+        if redesignActive { NoopGlassCard { content() } }
+        else { NoopCard { content() } }
+        #else
+        NoopCard { content() }
+        #endif
+    }
+
+    private var liftTickWidth: CGFloat { redesignActive ? NoopTheme.Layout.minTouchTarget : Self.tickColumnWidth }
+    private var liftSetWidth: CGFloat { redesignActive ? liftSetLabelWidth : Self.setColumnWidth }
+
+    @ViewBuilder private func liftFinishScaffold<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        #if os(iOS)
+        if redesignActive {
+            ScrollView {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
+                    Text("Finish session").noopFont(.largeTitle)
+                    Text("One number for the whole session, so a leg day can be compared with a run.")
+                        .noopFont(.body).fixedSize(horizontal: false, vertical: true)
+                    content()
+                }
+                .padding(NoopTheme.Layout.gutter)
+            }
+            .background(NoopTheme.canvas.ignoresSafeArea())
+        } else {
+            ScreenScaffold(title: "Finish session",
+                           subtitle: "One number for the whole session, so a leg day can be compared with a run.",
+                           content: content)
+        }
+        #else
+        ScreenScaffold(title: "Finish session",
+                       subtitle: "One number for the whole session, so a leg day can be compared with a run.",
+                       content: content)
+        #endif
+    }
+
+    @Environment(\.dynamicTypeSize) private var liftTextSize
+    @ScaledMetric(relativeTo: .title3) private var liftFieldWidth = NoopTheme.Layout.minTouchTarget * 2
+    @ScaledMetric(relativeTo: .caption) private var liftSetLabelWidth = NoopTheme.Layout.minTouchTarget
+
+    @ViewBuilder private func liftClockStrip<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if redesignActive && liftTextSize.isAccessibilitySize {
+            ScrollView(.horizontal) {
+                HStack(spacing: NoopTheme.Layout.l) { content() }
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        } else {
+            HStack(spacing: 14) { content() }
+        }
+    }
+
+    private var liftActionLayout: AnyLayout {
+        redesignActive && liftTextSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: NoopTheme.Layout.s))
+            : AnyLayout(HStackLayout(spacing: redesignActive ? NoopTheme.Layout.m : NoopMetrics.rowSpacing))
+    }
+
+
+    @ViewBuilder private func liftSessionSets(_ engine: LiftSessionEngine, index: Int, item: LiftPlanItem) -> some View {
+        if redesignActive && liftTextSize.isAccessibilitySize {
+            ScrollView(.horizontal) {
+                liftSessionSetRows(engine, index: index, item: item)
+                    .frame(minWidth: liftFieldWidth * 3 + liftSetWidth + liftTickWidth + NoopTheme.Layout.xl * 2)
+            }
+        } else {
+            liftSessionSetRows(engine, index: index, item: item)
+        }
+    }
+
+    private func liftSessionSetRows(_ engine: LiftSessionEngine, index: Int, item: LiftPlanItem) -> some View {
+        VStack(spacing: redesignActive ? NoopTheme.Layout.s : NoopMetrics.rowSpacing) {
+            columnHeadings
+            ForEach(engine.slots(forExercise: index), id: \.self) { slot in
+                setRow(engine, slot: slot)
+                if isRestingAfter(engine, slot: slot) { restBand(engine) }
+            }
+            setCountRow(engine, index: index, item: item)
+        }
+    }
+
+    private var liftPrimary: Color { redesignActive ? NoopTheme.textPrimary : StrandPalette.textPrimary }
+    private var liftSecondary: Color { redesignActive ? NoopTheme.textSecondary : StrandPalette.textSecondary }
+    private var liftTertiary: Color { redesignActive ? NoopTheme.textTertiary : StrandPalette.textTertiary }
+    private var liftCanvas: Color { redesignActive ? NoopTheme.canvas : StrandPalette.surfaceBase }
+    private var liftControl: Color { redesignActive ? NoopTheme.control : StrandPalette.surfaceRaised }
+    private var liftWorking: Color { redesignActive ? NoopTheme.recovery : StrandPalette.statusPositive }
+    private var liftAccent: Color { redesignActive ? NoopTheme.lift : StrandPalette.effortColor }
+    private var liftRest: Color { redesignActive ? NoopTheme.recoveryMid : StrandPalette.metricAmber }
+    private var liftWarning: Color { redesignActive ? NoopTheme.recoveryMid : StrandPalette.statusWarning }
+    private var liftCritical: Color { redesignActive ? NoopTheme.recoveryLow : StrandPalette.statusCritical }
 
     // MARK: - Loading and saving
 
@@ -914,4 +1021,42 @@ struct LiftSessionView: View {
     /// The sport every logged session is filed under — the same token the Hevy/Liftosaur importer
     /// uses, so a typed session and an imported one land in one bucket with one icon.
     static let sport = "Strength Training"
+}
+
+/// Presentation adapters keep the existing editor and its focus/draft behavior in one view tree.
+private struct LiftSessionTypography: ViewModifier {
+    let enabled: Bool
+    let style: NoopType
+    let classic: Font
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.noopFont(style, color: false) }
+        else { content.font(classic) }
+    }
+}
+
+private struct LiftSessionOverline: ViewModifier {
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.noopFont(.caption).textCase(nil) }
+        else {
+            content.font(StrandFont.overline)
+                .tracking(StrandFont.overlineTracking)
+                .textCase(.uppercase)
+                .foregroundStyle(StrandPalette.textSecondary)
+        }
+    }
+}
+
+private struct LiftSessionActionStyle: ViewModifier {
+    let enabled: Bool
+    let primary: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled {
+            if primary { content.buttonStyle(NoopPrimaryButton()) }
+            else { content.buttonStyle(NoopSecondaryButton()) }
+        } else {
+            if primary { content.buttonStyle(.noopPrimary) }
+            else { content.buttonStyle(NoopButtonStyle(.secondary)) }
+        }
+    }
 }

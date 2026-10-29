@@ -42,7 +42,29 @@ struct LiftHeartRate: View {
     let style: Style
     @EnvironmentObject private var model: AppModel
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            let tint = model.bpm == nil ? NoopTheme.textTertiary : NoopTheme.heart
+            HStack(spacing: NoopTheme.Layout.xs) {
+                if style == .compact { Image(systemName: "heart.fill") }
+                Text(model.bpm.map(String.init) ?? "—").monospacedDigit()
+            }
+            .noopFont(style == .compact ? .caption : .rowNumber, color: false)
+            .foregroundStyle(tint)
+            .accessibilityLabel(model.bpm.map { String(localized: "Heart rate \($0)") }
+                                ?? String(localized: "Heart rate"))
+        } else { classicReadout }
+        #else
+        classicReadout
+        #endif
+    }
+
+    @ViewBuilder private var classicReadout: some View {
         let tint = model.bpm == nil ? StrandPalette.textTertiary : StrandPalette.metricRose
         let value = Text(model.bpm.map(String.init) ?? "—").monospacedDigit()
         switch style {
