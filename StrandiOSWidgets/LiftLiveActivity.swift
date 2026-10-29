@@ -171,7 +171,7 @@ private enum LiftClock {
             .monospacedDigit()
             .hidden()
             .overlay(alignment: .trailing) {
-                clock(state)
+                liftClock(state)
                     .font(font)
                     .multilineTextAlignment(.trailing)
             }
@@ -193,7 +193,7 @@ private enum LiftClock {
     /// to a count-up. A rest with no length (the sheet is complete) has no range to count and shows
     /// the same 0:00. A working set counts up from its start; a zero-length range would render
     /// nothing, so that end is pushed a day out — well beyond any session.
-    static func clock(_ state: LiftActivityAttributes.ContentState) -> some View {
+    static func liftClock(_ state: LiftActivityAttributes.ContentState) -> some View {
         Group {
             if let ends = state.restEndsAt {
                 if ends > state.stageStartedAt {
