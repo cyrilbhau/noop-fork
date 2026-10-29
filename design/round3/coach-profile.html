@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP Coach and Profile</title>
+<link rel="stylesheet" href="../system/noop.css">
+<style>
+.ctx{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.ctx span{font-size:12px;font-weight:600;color:var(--t2);background:rgba(255,255,255,.06);padding:4px 8px;border-radius:8px}
+.inputbar{position:absolute;left:12px;right:12px;bottom:28px;z-index:5;display:flex;gap:8px;align-items:center}
+.inputbar .f{flex:1;height:50px;border-radius:25px;background:rgba(44,44,50,.9);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;padding:0 8px 0 18px;color:var(--t2);font-size:16px}
+.src-card{display:flex;gap:14px;align-items:flex-start;padding:16px 0;border-top:1px solid var(--line)}
+.src-card:first-child{border-top:0}
+.glabel{font-size:13px;color:var(--t2);padding:0 6px 8px;font-weight:500}
+.snap{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.snap:first-child{border-top:0}
+</style>
+</head>
+<body>
+<div class="controls"><button id="replay">Replay load</button><span>Batch 4 · Coach and Profile</span></div>
+<div class="board">
+
+<!-- ================= D1 COACH CHAT ================= -->
+<section><div class="board-title">D1 · Coach</div>
+<div class="screen" data-ambient='[["--coach",201,0,280,0.36],["--recovery",420,140,170,0.16]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="x" data-s="20"></div><div style="text-align:center"><div class="ttl">Coach</div><div class="cap" style="color:var(--t2)">ChatGPT · your plan</div></div><div class="ibtn" data-ic="sliders" data-s="20"></div></div>
+  <div class="wrap mt12" style="display:flex;justify-content:center"><span class="pill" style="background:rgba(200,168,255,.16);color:var(--coach)"><span data-ic="shield" data-s="14" style="display:inline-flex"></span>Using today's scores, sleep and workouts</span></div>
+  <div class="wrap col gap12 mt20">
+    <div class="msg me">Should I train hard today?</div>
+    <div class="msg ai">Yes, with a ceiling. Recovery is <b style="color:var(--recovery)">68%</b> and HRV is 7 ms above your baseline, so a hard session fits. Aim for Strain 12–15: your pull day plus 15 minutes of Zone 2 would land around 13.
+      <div class="ctx"><span>Recovery 68%</span><span>HRV 62 ms</span><span>Sleep 86%</span></div>
+    </div>
+    <div class="msg me">And legs tomorrow?</div>
+    <div class="msg ai typing" style="padding:16px 18px"><i></i><i></i><i></i></div>
+  </div>
+  <div class="suggest" style="left:0;right:0;bottom:92px;display:flex;gap:8px;padding:0 12px;overflow:hidden">
+    <span class="chip">Why is my HRV up?</span><span class="chip">Plan my week</span><span class="chip">Explain my sleep</span>
+  </div>
+  <div class="inputbar"><div class="f"><span class="grow1">Ask about your data</span><span data-ic="mic" data-s="22" style="color:var(--t1);padding:0 8px;display:inline-flex"></span></div><div style="width:50px;height:50px;border-radius:50%;background:#F5F5F7;color:#000;display:grid;place-items:center" data-ic="send" data-s="22"></div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= D2 COACH CONNECTION ================= -->
+<section><div class="board-title">D2 · Coach connection</div>
+<div class="screen" data-ambient='[["--coach",120,10,250,0.34],["--hrv",410,120,170,0.16]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl">Coach</div><div style="width:40px"></div></div>
+  <div class="wrap mt12"><div class="card row gap12">
+    <div class="icon" style="width:52px;height:52px;border-radius:16px;background:rgba(200,168,255,.2);color:var(--coach)" data-ic="spark" data-s="26"></div>
+    <div class="grow1"><div class="lbl" style="font-size:17px">ChatGPT</div><div class="row gap6 mt4"><span class="dot" style="background:var(--recovery)"></span><span class="fn">Signed in · verified 9:02 AM</span></div></div>
+  </div></div>
+  <div class="wrap mt12"><div class="card flush">
+    <div class="lrow"><span class="t grow1">Model</span><span class="val">From your account</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="t grow1">Conversation history</span><span class="val">On this iPhone</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="sec"><h3>What Coach can see</h3></div>
+  <div class="wrap"><div class="card flush">
+    <div class="lrow"><div class="grow1"><div class="t">Send health context</div><div class="d">Scores, sleep and vitals for the day you ask about. Nothing leaves until you send a message.</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><div class="grow1"><div class="t">Include workouts and lifts</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><div class="grow1"><div class="t">Include journal answers</div></div><span class="toggle"></span></div>
+  </div></div>
+  <div class="sec"><h3>Morning brief</h3></div>
+  <div class="wrap"><div class="card flush">
+    <div class="lrow"><div class="grow1"><div class="t">Write a brief after I wake</div><div class="d">Timing is up to iOS, so it can arrive late</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">Not before</span><span class="val">7:00 AM</span></div>
+  </div></div>
+  <div class="wrap mt16"><div class="card flush"><div class="lrow"><span class="t grow1" style="color:var(--rec-low)">Sign out of ChatGPT</span></div></div></div>
+  <div class="fn" style="padding:12px 20px 0">Your sign-in lives in this iPhone's Keychain. It is never in backups or widgets.</div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= D3 PROFILE ================= -->
+<section><div class="board-title">D3 · Profile (replaces More)</div>
+<div class="screen" data-ambient="today:86,68,11.4">
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="x" data-s="20"></div><div class="ttl"></div><div class="ibtn" data-ic="gear" data-s="20"></div></div>
+  <div class="wrap row gap16 mt8">
+    <div style="width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,var(--sleep),var(--recovery));display:grid;place-items:center;font-size:28px;font-weight:700">C</div>
+    <div><div class="h1" style="font-size:28px">Cyril</div><div class="fn">33 · tracking since Jan 2024</div></div>
+  </div>
+  <div class="wrap mt20"><div class="card row gap12" style="padding:14px 16px">
+    <div class="ring" data-size="46" data-sw="10" data-p="84" data-c="--recovery" data-icon="strap"></div>
+    <div class="grow1"><div class="lbl">WHOOP 4.0 · 84%</div><div class="fn">Connected · synced 2 min ago</div></div>
+    <span data-ic="chev-r" data-s="16" style="color:var(--t3)"></span>
+  </div></div>
+  <div class="sec" style="padding-top:22px"><h3>Your data</h3></div>
+  <div class="wrap"><div class="card flush">
+    <div class="lrow"><span class="icon sm" style="background:rgba(71,200,245,.15);color:var(--hrv)" data-ic="link" data-s="17"></span><span class="t grow1">Data sources</span><span class="val">4</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:transparent" data-ic="apple" data-s="28"></span><span class="t grow1">Apple Health</span><span class="val">Workouts</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:rgba(47,210,122,.15);color:var(--recovery)" data-ic="cloud" data-s="17"></span><span class="t grow1">Backup</span><span class="val">Today</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="sec"><h3>Tools</h3></div>
+  <div class="wrap"><div class="card flush">
+    <div class="lrow"><span class="icon sm" style="background:rgba(143,125,255,.15);color:var(--sleep)" data-ic="alarm" data-s="17"></span><span class="t grow1">Alarm</span><span class="val">6:45 AM</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:rgba(54,211,191,.15);color:var(--breath)" data-ic="wind" data-s="17"></span><span class="t grow1">Breathe</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:rgba(255,122,89,.15);color:var(--stress)" data-ic="bolt" data-s="17"></span><span class="t grow1">Stress</span><span class="val">Low</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:rgba(143,125,255,.15);color:var(--sleep)" data-ic="book" data-s="17"></span><span class="t grow1">Journal</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:rgba(58,155,255,.15);color:var(--strain)" data-ic="timer" data-s="17"></span><span class="t grow1">Intervals</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="sec"><h3>Insights</h3></div>
+  <div class="wrap"><div class="card flush">
+    <div class="lrow"><span class="icon sm" style="background:rgba(47,210,122,.15);color:var(--recovery)" data-ic="flask" data-s="17"></span><span class="t grow1">What moves you</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:rgba(71,200,245,.15);color:var(--hrv)" data-ic="trend" data-s="17"></span><span class="t grow1">Trends</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="icon sm" style="background:rgba(255,255,255,.08);color:var(--t1)" data-ic="chart" data-s="17"></span><span class="t grow1">All metrics</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= D4 DATA SOURCES ================= -->
+<section><div class="board-title">D4 · Data sources</div>
+<div class="screen" data-ambient='[["--hrv",100,10,240,0.3],["--lift",410,140,170,0.2]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl"></div><div style="width:40px"></div></div>
+  <div class="wrap"><div class="lt">Data sources</div><div class="sub">Where every number comes from</div></div>
+  <div class="wrap mt20"><div class="card" style="padding:4px 18px">
+    <div class="src-card"><div class="icon" style="background:rgba(47,210,122,.15);color:var(--recovery)" data-ic="strap" data-s="22"></div><div class="grow1"><div class="row sp"><span class="lbl">WHOOP 4.0 strap</span><span class="badge" style="background:rgba(47,210,122,.16);color:var(--recovery)">Live</span></div><div class="fn mt4">Heart rate, R-R, motion, skin temperature · synced 2 min ago</div></div></div>
+    <div class="src-card"><div class="icon" style="background:transparent" data-ic="apple" data-s="40"></div><div class="grow1"><div class="row sp"><span class="lbl">Apple Health</span><span class="badge" style="background:rgba(255,255,255,.08);color:var(--t2)">Read only</span></div><div class="fn mt4">Workout summaries only · 3 new today. NOOP never writes to Health.</div></div></div>
+    <div class="src-card"><div class="icon" style="background:rgba(255,138,61,.15);color:var(--lift)" data-ic="doc" data-s="22"></div><div class="grow1"><div class="row sp"><span class="lbl">Hevy export (CSV)</span><span class="badge" style="background:rgba(255,200,61,.16);color:var(--rec-mid)">8 days old</span></div><div class="fn mt4">142 sessions with full sets · last import 21 Oct</div><div class="btn secondary mt12" style="height:40px;font-size:15px">Import new export</div></div></div>
+    <div class="src-card"><div class="icon" style="background:rgba(255,255,255,.08);color:var(--t1)" data-ic="paste" data-s="22"></div><div class="grow1"><div class="lbl">Pasted workouts</div><div class="fn mt4">6 this month · full sets as written</div></div></div>
+    <div class="src-card"><div class="icon" style="background:rgba(143,125,255,.15);color:var(--sleep)" data-ic="folder" data-s="22"></div><div class="grow1"><div class="lbl">WHOOP history export</div><div class="fn mt4">Jan 2024 – Oct 2026 · shown with a WHOOP label, never mixed with NOOP scores</div></div></div>
+  </div></div>
+  <div class="wrap mt16"><div class="card row gap12" style="padding:14px 16px"><span data-ic="shield" data-s="22" style="color:var(--recovery)"></span><div class="fn grow1" style="color:var(--t1)">Everything is stored on this iPhone. There is no NOOP account or server.</div></div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= D5 SETTINGS ================= -->
+<section><div class="board-title">D5 · Settings</div>
+<div class="screen" data-ambient='[["--sleep",80,0,220,0.24],["--strain",420,60,180,0.2]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl"></div><div style="width:40px"></div></div>
+  <div class="wrap"><div class="lt">Settings</div></div>
+  <div class="wrap mt20"><div class="glabel">BODY</div><div class="card flush">
+    <div class="lrow"><span class="t grow1">Age</span><span class="val">33</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="t grow1">Max heart rate</span><span class="val">187 bpm · estimated</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="t grow1">Units</span><span class="val">Metric</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="wrap mt20"><div class="glabel">LOOK AND FEEL</div><div class="card flush">
+    <div class="lrow"><div class="grow1"><div class="t">Colour from your scores</div><div class="d">The background glow follows your day</div></div><span class="toggle on"></span></div>
+    <div style="padding:4px 0 14px"><div class="seg"><span>Subtle</span><span class="on">Balanced</span><span>Vivid</span></div></div>
+    <div class="lrow"><div class="grow1"><div class="t">Rings fill on every load</div><div class="d">Off when Reduce Motion is on</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">Haptics</span><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">App icon</span><span class="val">Dark</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="wrap mt20"><div class="glabel">NOTIFICATIONS</div><div class="card flush">
+    <div class="lrow"><span class="t grow1">Morning summary</span><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">Strap battery low</span><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">Illness heads-up</span><span class="toggle on"></span></div>
+  </div></div>
+  <div class="wrap mt20"><div class="glabel">ABOUT</div><div class="card flush">
+    <div class="lrow"><span class="t grow1">Version</span><span class="val">12.1.0 (438)</span></div>
+    <div class="lrow"><span class="t grow1">What NOOP can and can't measure</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="t grow1">Diagnostics</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= D6 BACKUP ================= -->
+<section><div class="board-title">D6 · Backup</div>
+<div class="screen" data-ambient='[["--recovery",201,120,280,0.34],["--hrv",30,20,180,0.2]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl">Backup</div><div style="width:40px"></div></div>
+  <div class="motion" style="position:relative;height:220px;display:grid;place-items:center;margin-top:6px">
+    <div class="ring" data-size="170" data-sw="6" data-p="100" data-c="--recovery" style="position:absolute"></div>
+    <div style="text-align:center;position:relative"><div style="color:var(--recovery);display:flex;justify-content:center" data-ic="check" data-s="34"></div><div class="lbl mt8" style="font-size:17px">Backed up</div><div class="fn">Today, 3:12 AM</div></div>
+  </div>
+  <div class="wrap grid3" style="text-align:center">
+    <div class="stat"><div class="k">Size</div><div class="v num" style="font-size:20px">214<small>MB</small></div></div>
+    <div class="stat"><div class="k">Nights</div><div class="v num" style="font-size:20px">1,012</div></div>
+    <div class="stat"><div class="k">Kept</div><div class="v num" style="font-size:20px">7</div></div>
+  </div>
+  <div class="wrap mt20"><div class="card flush">
+    <div class="lrow"><div class="grow1"><div class="t">Daily auto-backup</div><div class="d">Overnight while charging</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">Folder</span><span class="val">On My iPhone › NOOP</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="t grow1">Keep last</span><span class="val">7 snapshots</span><span data-ic="chev-r" data-s="16"></span></div>
+  </div></div>
+  <div class="sec"><h3>Snapshots</h3></div>
+  <div class="wrap"><div class="card flush">
+    <div class="snap"><span data-ic="doc" data-s="20" style="color:var(--t2)"></span><span class="t grow1" style="font-size:16px">Today, 3:12 AM</span><span class="val fn">214 MB</span></div>
+    <div class="snap"><span data-ic="doc" data-s="20" style="color:var(--t2)"></span><span class="t grow1" style="font-size:16px">Yesterday, 3:08 AM</span><span class="val fn">213 MB</span></div>
+  </div></div>
+  <div class="wrap mt16 col gap10">
+    <div class="btn primary">Back up now</div>
+    <div class="btn secondary">Restore from a backup…</div>
+  </div>
+  <div class="fn" style="padding:10px 20px 0;text-align:center">Restoring replaces everything on this iPhone. Your ChatGPT sign-in is not included.</div>
+  <div class="home"></div>
+</div></section>
+
+</div>
+<script src="../system/noop.js"></script>
+<script>boot()</script>
+</body>
+</html>

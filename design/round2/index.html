@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP Round Two</title>
+<style>
+:root{
+  --bg:#000000;
+  --card:rgba(26,26,30,.74);
+  --card-solid:#151518;
+  --card2:rgba(44,44,50,.72);
+  --track:rgba(255,255,255,.08);
+  --line:rgba(255,255,255,.07);
+  --t1:#F5F5F7; --t2:#9B9BA3; --t3:#5F5F67;
+
+  --recovery:#2FD27A; --rec-mid:#FFC83D; --rec-low:#FF5A4F;
+  --strain:#3A9BFF;
+  --sleep:#8F7DFF;
+  --heart:#FF4D6B;
+  --hrv:#47C8F5;
+  --breath:#36D3BF;
+  --temp:#FF9F45;
+  --lift:#FF8A3D;
+  --st-awake:#C9C9D1; --st-rem:#6FD3FF; --st-light:#8F7DFF; --st-deep:#4A3AD0;
+
+  --r-card:22px; --r-tile:20px; --gutter:16px; --gap:12px;
+  --spring:cubic-bezier(.34,1.45,.5,1);
+  --font:-apple-system,"SF Pro Text","SF Pro Display",system-ui,"Helvetica Neue",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0B0B0D;color:var(--t1);font-family:var(--font);-webkit-font-smoothing:antialiased;padding:40px 48px 80px}
+.controls{display:flex;gap:10px;align-items:center;margin-bottom:28px}
+.controls button{font:600 13px var(--font);color:#fff;background:#1F1F23;border:1px solid #2A2A30;border-radius:999px;padding:9px 16px;cursor:pointer}
+.controls span{font-size:13px;color:var(--t2)}
+.board{display:flex;gap:56px;align-items:flex-start;flex-wrap:wrap}
+.board-title{font-size:13px;color:var(--t2);margin-bottom:10px;letter-spacing:.02em}
+.screen{width:402px;min-height:874px;background:var(--bg);position:relative;overflow:hidden;padding-bottom:120px}
+.screen > :not(.ambient){position:relative;z-index:1}
+.screen > .tabbar{position:absolute;z-index:5}
+.screen > .home{position:absolute;z-index:6}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* ambient field */
+.ambient{position:absolute;left:0;right:0;top:0;height:600px;overflow:hidden;pointer-events:none;z-index:0}
+.ambient .blob{position:absolute;border-radius:50%}
+.ambient .fade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.25) 45%,rgba(0,0,0,.85) 80%,#000 100%)}
+.ambient svg{position:absolute;inset:0}
+
+.sb{height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 8px 44px;font-weight:600;font-size:17px}
+.sb svg{display:block}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:10px var(--gutter) 0}
+.lt{font-size:34px;font-weight:700;letter-spacing:-.6px;line-height:41px}
+.sub{font-size:15px;color:var(--t2);margin-top:2px}
+.ibtn{width:40px;height:40px;border-radius:50%;background:var(--card2);backdrop-filter:blur(20px);display:grid;place-items:center;flex:none}
+.row{display:flex;align-items:center}
+.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}
+.navbar{display:flex;align-items:center;justify-content:space-between;padding:6px var(--gutter) 0;height:52px}
+.navbar .ttl{font-size:17px;font-weight:600}
+
+.wrap{padding:0 var(--gutter)}
+.card{background:var(--card);backdrop-filter:blur(30px) saturate(140%);border-radius:var(--r-card);padding:18px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
+.sec{display:flex;justify-content:space-between;align-items:baseline;padding:26px 20px 10px}
+.sec h3{font-size:20px;font-weight:600;letter-spacing:-.3px}
+.sec a{font-size:15px;color:var(--t2);text-decoration:none}
+.cap{font-size:12px;color:var(--t3)}
+.fn{font-size:13px;color:var(--t2)}
+.lbl{font-size:15px;font-weight:600}
+.chev{color:var(--t3);font-weight:600;margin-left:4px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--card2);backdrop-filter:blur(20px);font-size:13px;font-weight:600;color:var(--t1)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+
+.mrow{display:grid;grid-template-columns:1fr auto 72px;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--line)}
+.mrow:first-child{border-top:0;padding-top:2px}
+.mrow:last-child{padding-bottom:2px}
+.mrow .k{font-size:15px;font-weight:600}
+.mrow .s{font-size:12px;color:var(--t2);margin-top:2px}
+.mrow .v{font-size:22px;font-weight:600;text-align:right}
+.mrow .v small{font-size:13px;color:var(--t2);font-weight:500;margin-left:2px}
+
+.tabbar{left:16px;right:16px;bottom:24px;display:flex;gap:10px;align-items:center}
+.tabs{flex:1;height:62px;border-radius:999px;background:rgba(30,30,34,.82);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;padding:4px}
+.tab{flex:1;height:54px;border-radius:999px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10px;font-weight:600;color:var(--t2)}
+.tab.on{background:rgba(255,255,255,.1);color:var(--t1)}
+.coachbtn{width:62px;height:62px;border-radius:50%;background:rgba(30,30,34,.82);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.08);display:grid;place-items:center;color:var(--t1)}
+.home{bottom:8px;left:50%;width:134px;height:5px;border-radius:3px;background:#fff;transform:translateX(-50%)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+.tile{background:var(--card);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.05);border-radius:var(--r-tile);padding:16px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.tile .t{font-size:15px;font-weight:600}
+.tile .big{font-size:40px;font-weight:600;letter-spacing:-1.2px;line-height:1}
+.tile .big small{font-size:15px;color:var(--t2);font-weight:500;letter-spacing:0;margin-left:3px}
+.vtile{min-height:176px;justify-content:flex-start;padding-bottom:0}
+.vtile .chart{position:absolute;left:0;right:0;bottom:0}
+.src{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--t2)}
+.src i{width:5px;height:5px;border-radius:50%;background:var(--t3);display:inline-block}
+.bar{height:6px;border-radius:3px;background:var(--track);position:relative;overflow:hidden}
+.bar>b{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+
+/* ---------- motion ---------- */
+.sk{background:linear-gradient(110deg,rgba(255,255,255,.035) 30%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.035) 70%) !important;background-size:250% 100% !important;animation:shimmer 1.25s linear infinite;border-color:transparent !important}
+.sk > *{opacity:0 !important}
+.sk::after{content:"";position:absolute;left:18px;top:20px;width:46%;height:12px;border-radius:6px;background:rgba(255,255,255,.07);box-shadow:0 24px 0 0 rgba(255,255,255,.05),0 48px 0 0 rgba(255,255,255,.04)}
+@keyframes shimmer{from{background-position:120% 0}to{background-position:-130% 0}}
+.enter{opacity:0;transform:translateY(16px) scale(.98)}
+.in{opacity:1;transform:none;transition:opacity .35s ease,transform .65s var(--spring)}
+.card,.tile,.ibtn,.pill,.tab,.coachbtn{transition:transform .45s var(--spring)}
+.card:active,.tile:active,.ibtn:active,.pill:active,.coachbtn:active{transform:scale(.965);transition-duration:.12s}
+.pop{animation:pop .55s var(--spring) both}
+@keyframes pop{0%{transform:scale(0)}100%{transform:scale(1)}}
+.beat{animation:beat .81s ease-in-out infinite;transform-origin:center}
+@keyframes beat{0%,100%{transform:scale(1)}15%{transform:scale(1.22)}30%{transform:scale(1)}}
+.drift{animation:drift 18s ease-in-out infinite alternate}
+@keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(18px,14px) scale(1.08)}}
+.static .drift,.static .beat{animation:none}
+@media (prefers-reduced-motion:reduce){.drift,.beat{animation:none}}
+
+/* spec board */
+.spec{width:560px;min-height:0;padding:36px 32px 40px;background:#0E0E11}
+.spec h2{font-size:26px;font-weight:700;letter-spacing:-.4px}
+.spec .lead{font-size:15px;color:var(--t2);line-height:21px;margin:8px 0 22px}
+.spec .it{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:13px 0;border-top:1px solid var(--line)}
+.spec .it b{font-size:14px;font-weight:600}
+.spec .it p{font-size:13px;color:var(--t2);line-height:19px}
+.spec .it code{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--t1);background:rgba(255,255,255,.06);padding:1px 6px;border-radius:5px}
+.states{width:402px;min-height:0;padding-bottom:0}
+.state{position:relative;overflow:hidden;height:330px;border-bottom:1px solid #1A1A1E}
+.state > :not(.ambient){position:relative;z-index:1}
+.state .tag{display:flex;justify-content:space-between;padding:22px var(--gutter) 14px;font-size:13px;color:var(--t2)}
+.state .tag b{color:var(--t1);font-weight:600}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-signal" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#fff"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="#fff"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#fff"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#fff"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 16 12"><path d="M8 11.5l2.2-2.6a3.2 3.2 0 0 0-4.4 0zM8 4.2a7 7 0 0 1 4.9 2l1.4-1.6A9.2 9.2 0 0 0 8 2a9.2 9.2 0 0 0-6.3 2.6l1.4 1.6A7 7 0 0 1 8 4.2z" fill="#fff"/></symbol>
+    <symbol id="i-batt" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="#fff" stroke-opacity=".4"/><rect x="2" y="2" width="18" height="9" rx="2" fill="#fff"/><path d="M25 4.5v4a2 2 0 0 0 0-4z" fill="#fff" fill-opacity=".4"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M12 11v6M12 7.5v.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 8h9M17 8h3M4 16h3M11 16h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M15 5.5v5M9 13.5v5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6" fill="none" stroke="#fff" stroke-width="1.9"/><path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-today" viewBox="0 0 24 24"><circle cx="7" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M3.5 9.5v5M7 7v10M17 7v10M20.5 9.5v5M7 12h10" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20C12 20 4.5 15.6 4.5 10C4.5 7.6 6.4 5.8 8.6 5.8C10.1 5.8 11.3 6.6 12 7.6C12.7 6.6 13.9 5.8 15.4 5.8C17.6 5.8 19.5 7.6 19.5 10C19.5 15.6 12 20 12 20Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-heart-f" viewBox="0 0 24 24"><path d="M12 20C12 20 4.5 15.6 4.5 10C4.5 7.6 6.4 5.8 8.6 5.8C10.1 5.8 11.3 6.6 12 7.6C12.7 6.6 13.9 5.8 15.4 5.8C17.6 5.8 19.5 7.6 19.5 10C19.5 15.6 12 20 12 20Z" fill="currentColor"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="currentColor"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><polyline points="7.5,12.3 10.5,15.3 16.5,9" fill="none" stroke="#000" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-run" viewBox="0 0 24 24"><circle cx="14.5" cy="4.8" r="2" fill="currentColor"/><path d="M8 21l3-6 3 2.5V22M6.5 11.5l3-3.5h4l2.5 4 3 1M11 8l-1.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M9 3.5h6v3H9zM8.5 11h7M8.5 15h5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="controls">
+  <button id="replay">Replay load</button>
+  <span>Every screen loads with skeletons, springs in, refills its rings and redraws its charts.</span>
+</div>
+
+<div class="board" id="board">
+
+<!-- ================================================================ 1. TODAY -->
+<section>
+<div class="board-title">01 · Today</div>
+<div class="screen" id="screen-today" data-ambient="today">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+  <div class="hdr">
+    <div><div class="lt">Today</div><div class="sub">Wed, 29 Oct</div></div>
+    <div class="row gap10">
+      <div class="pill"><span class="dot" style="background:var(--recovery)"></span><span class="num">84%</span></div>
+      <div class="ibtn"><svg width="22" height="22"><use href="#i-person"/></svg></div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:20px">
+    <div class="card" style="padding:22px 14px 18px">
+      <div class="rings" data-s="86" data-r="68" data-st="11.4"></div>
+      <div style="height:1px;background:var(--line);margin:18px 4px 16px"></div>
+      <div style="padding:0 4px">
+        <div style="font-size:20px;font-weight:600;letter-spacing:-.3px">Good day to push</div>
+        <div style="font-size:15px;color:var(--t2);line-height:21px;margin-top:4px">HRV is 7 ms above your baseline and you covered 86% of your sleep need. Aim for Strain 12–15.</div>
+        <div class="src" style="margin-top:12px"><i></i>Computed on iPhone · synced 6:12 AM</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Heart rate</h3><a>Live<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div class="row gap8" style="color:var(--heart)"><svg class="beat" width="16" height="16"><use href="#i-heart-f"/></svg><span style="font-size:13px;font-weight:600">Now</span></div>
+          <div class="num" style="font-size:44px;font-weight:600;letter-spacing:-1.5px;margin-top:4px"><span data-count="74">74</span><span style="font-size:15px;color:var(--t2);font-weight:500;letter-spacing:0;margin-left:4px">BPM</span></div>
+        </div>
+        <div style="text-align:right"><div class="fn">Today</div><div class="num" style="font-size:15px;font-weight:600">48–142</div></div>
+      </div>
+      <svg id="hrbars" width="334" height="64" style="display:block;margin-top:12px"></svg>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><span class="cap">12 AM</span><span class="cap">6 AM</span><span class="cap">12 PM</span><span class="cap">Now</span></div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Key metrics</h3><a>Edit</a></div>
+  <div class="wrap">
+    <div class="card" style="padding:14px 18px">
+      <div class="mrow"><div><div class="k" style="color:var(--hrv)">HRV</div><div class="s">7-day avg 55 ms</div></div><div class="v num"><span data-count="62">62</span><small>ms</small></div><svg class="line" data-c="--hrv" data-v="50,54,51,58,55,57,62" width="72" height="34"></svg></div>
+      <div class="mrow"><div><div class="k" style="color:var(--heart)">Resting heart rate</div><div class="s">Typical</div></div><div class="v num"><span data-count="52">52</span><small>bpm</small></div><svg class="line" data-c="--heart" data-v="55,54,53,54,52,53,52" width="72" height="34"></svg></div>
+      <div class="mrow"><div><div class="k" style="color:var(--breath)">Respiratory rate</div><div class="s">Typical</div></div><div class="v num"><span data-count="14.8" data-dec="1">14.8</span><small>rpm</small></div><svg class="line" data-c="--breath" data-v="15,14.7,14.9,15.1,14.8,14.9,14.8" width="72" height="34"></svg></div>
+      <div class="mrow"><div><div class="k" style="color:var(--lift)">Steps</div><div class="s">Estimated from strap</div></div><div class="v num">~<span data-count="6240" data-sep="1">6,240</span></div><svg class="line" data-c="--lift" data-v="8,6,9,4,7,10,6" data-bars="1" width="72" height="34"></svg></div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Activity</h3><a>Training<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card row gap12" style="padding:14px 16px">
+      <div style="width:44px;height:44px;border-radius:14px;background:rgba(255,138,61,.14);color:var(--lift);display:grid;place-items:center"><svg width="24" height="24"><use href="#i-dumbbell"/></svg></div>
+      <div style="flex:1"><div class="lbl">Push day</div><div class="fn">6:40 PM · 52 min · 21 sets</div></div>
+      <div style="text-align:right"><div class="num" style="font-size:20px;font-weight:600;color:var(--strain)">9.8</div><div class="cap">Strain</div></div>
+    </div>
+  </div>
+
+  <div class="tabbar" data-on="0"></div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 1b. TODAY LOADING (built by script) -->
+<section id="loading-slot">
+<div class="board-title">01b · Today, loading</div>
+</section>
+
+<!-- ================================================================ 2. RECOVERY -->
+<section>
+<div class="board-title">02 · Recovery</div>
+<div class="screen" id="screen-recovery" data-ambient="recovery">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+  <div class="navbar">
+    <div class="ibtn"><svg width="22" height="22"><use href="#i-chev-l"/></svg></div>
+    <div class="ttl">Wed, 29 Oct</div>
+    <div class="ibtn"><svg width="22" height="22"><use href="#i-info"/></svg></div>
+  </div>
+
+  <div style="position:relative;height:250px;margin-top:14px">
+    <svg id="arc" width="402" height="250" viewBox="0 0 402 250" style="position:absolute;inset:0"></svg>
+    <div style="position:absolute;left:0;right:0;top:92px;text-align:center">
+      <div class="num" style="font-size:84px;font-weight:700;letter-spacing:-4px;line-height:1;color:var(--recovery)"><span data-count="68">68</span><span style="font-size:30px;letter-spacing:0">%</span></div>
+      <div style="font-size:13px;font-weight:600;color:var(--t2);margin-top:6px">Recovery</div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:4px">
+    <div style="font-size:30px;font-weight:700;letter-spacing:-.6px">Recovered</div>
+    <div style="font-size:17px;color:var(--t2);line-height:24px;margin-top:6px">Your nervous system bounced back well overnight. HRV is above baseline and resting heart rate is steady. You can take on a harder session today.</div>
+    <div class="src" style="margin-top:12px"><i></i>NOOP score · computed on iPhone</div>
+  </div>
+
+  <div class="sec" style="padding-top:30px"><h3>What shaped it</h3></div>
+  <div class="wrap">
+    <div class="card" style="padding:6px 18px">
+      <div style="padding:14px 0;border-bottom:1px solid var(--line)">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--recovery)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--hrv)">Heart rate variability</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">62 <span class="fn">ms</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">Above your usual range</div>
+        <div class="range" data-lo="46" data-hi="60" data-min="35" data-max="75" data-v="62" data-c="--hrv" style="margin-left:24px"></div>
+      </div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--line)">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--recovery)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--heart)">Resting heart rate</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">52 <span class="fn">bpm</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">Typical</div>
+        <div class="range" data-lo="50" data-hi="56" data-min="44" data-max="64" data-v="52" data-c="--heart" style="margin-left:24px"></div>
+      </div>
+      <div style="padding:14px 0;border-bottom:1px solid var(--line)">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--recovery)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--sleep)">Sleep performance</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">86<span class="fn">%</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">7h 42m of 8h 58m needed</div>
+        <div class="bar" style="margin-left:24px"><b class="grow" style="width:86%;background:var(--sleep)"></b></div>
+      </div>
+      <div style="padding:14px 0">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--t3)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--breath)">Respiratory rate</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">14.8 <span class="fn">rpm</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">Typical · not part of the score</div>
+        <div class="range" data-lo="14.2" data-hi="15.4" data-min="12" data-max="18" data-v="14.8" data-c="--breath" style="margin-left:24px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Last 30 days</h3><a>Trends<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div><span class="num" id="recavg" style="font-size:28px;font-weight:600"></span> <span class="fn">avg</span></div>
+        <div class="row gap10 cap"><span class="row gap8"><span class="dot" style="background:var(--recovery)"></span><span id="rc-g"></span> green</span><span class="row gap8"><span class="dot" style="background:var(--rec-mid)"></span><span id="rc-y"></span> yellow</span><span class="row gap8"><span class="dot" style="background:var(--rec-low)"></span><span id="rc-r"></span> red</span></div>
+      </div>
+      <svg id="recbars" width="334" height="96" style="display:block;margin-top:14px"></svg>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><span class="cap">30 Sep</span><span class="cap">15 Oct</span><span class="cap">Today</span></div>
+    </div>
+  </div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 3. SLEEP -->
+<section>
+<div class="board-title">03 · Sleep</div>
+<div class="screen" id="screen-sleep" data-ambient="sleep">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+  <div class="hdr">
+    <div><div class="lt">Sleep</div><div class="sub">Tue night → Wed, 29 Oct</div></div>
+    <div class="ibtn"><svg width="20" height="20"><use href="#i-plus"/></svg></div>
+  </div>
+
+  <div class="wrap" style="margin-top:18px">
+    <div id="weekstrip" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px"></div>
+  </div>
+
+  <div class="wrap" style="margin-top:14px">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--sleep)">Asleep</div>
+          <div class="num" style="font-size:52px;font-weight:600;letter-spacing:-2px;line-height:1.05;margin-top:2px">7<span style="font-size:22px;color:var(--t2);letter-spacing:0;font-weight:500">h </span>42<span style="font-size:22px;color:var(--t2);letter-spacing:0;font-weight:500">m</span></div>
+          <div class="fn" style="margin-top:4px">11:48 PM – 7:42 AM · 7h 54m in bed</div>
+        </div>
+        <div class="ring" data-size="76" data-p="86" data-c="--sleep" data-sw="9" data-label="86" data-fs="25"></div>
+      </div>
+      <div style="margin-top:18px">
+        <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="fn">Sleep need</span><span class="fn num">7h 42m / 8h 58m</span></div>
+        <div class="bar" style="height:8px;border-radius:4px"><b class="grow" style="width:86%;background:var(--sleep);border-radius:4px"></b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Stages</h3><a>Details<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <svg id="hypno" width="334" height="150" style="display:block"></svg>
+      <div class="row" style="justify-content:space-between;margin:6px 0 0 50px"><span class="cap">12 AM</span><span class="cap">2 AM</span><span class="cap">4 AM</span><span class="cap">6 AM</span></div>
+      <div style="height:1px;background:var(--line);margin:16px 0 4px"></div>
+      <div id="stagerows"></div>
+      <div class="cap" style="margin-top:10px">Dotted mark is your 30-night typical.</div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Quality</h3></div>
+  <div class="wrap grid2">
+    <div class="card" style="padding:16px"><div class="fn">Efficiency</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px"><span data-count="94">94</span><span class="fn">%</span></div><div class="cap" style="margin-top:2px;color:var(--recovery)">Above typical</div></div>
+    <div class="card" style="padding:16px"><div class="fn">Consistency</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px"><span data-count="81">81</span><span class="fn">%</span></div><div class="cap" style="margin-top:2px">±24 min bedtime</div></div>
+    <div class="card" style="padding:16px"><div class="fn">Sleep debt</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px"><span data-count="28">28</span><span class="fn">m</span></div><div class="cap" style="margin-top:2px">Last 7 nights</div></div>
+    <div class="card" style="padding:16px"><div class="fn">Disturbances</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px"><span data-count="9">9</span></div><div class="cap" style="margin-top:2px">Typical</div></div>
+  </div>
+
+  <div class="tabbar" data-on="1"></div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 4. TRAINING -->
+<section>
+<div class="board-title">04 · Training</div>
+<div class="screen" id="screen-training" data-ambient="training">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+  <div class="hdr">
+    <div><div class="lt">Training</div><div class="sub">This week · 27 Oct – 2 Nov</div></div>
+    <div class="row gap10">
+      <div class="ibtn"><svg width="20" height="20"><use href="#i-sliders"/></svg></div>
+      <div class="ibtn"><svg width="20" height="20"><use href="#i-plus"/></svg></div>
+    </div>
+  </div>
+
+  <div class="wrap grid2" style="margin-top:18px">
+    <div class="tile">
+      <div class="ring" data-size="64" data-p="60" data-c="--strain" data-sw="8" data-label="3" data-fs="26"></div>
+      <div><div class="t">Sessions</div><div class="fn">Goal 5 this week</div></div>
+    </div>
+    <div class="tile">
+      <div class="big num" style="color:var(--strain)"><span data-count="48.6" data-dec="1">48.6</span></div>
+      <div><div class="t">Week Strain</div><div class="fn">+12% vs last week</div></div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:12px">
+    <div class="card" style="padding:18px 18px 16px">
+      <div id="dotcal"></div>
+      <div class="row" style="justify-content:space-between;margin-top:16px;align-items:flex-end">
+        <div><div class="lbl">Consistency</div><div class="fn">Aug – Oct · 3.4 sessions a week</div></div>
+        <div class="row gap10 cap"><span class="row gap8"><span class="dot" style="background:var(--lift)"></span>Lift</span><span class="row gap8"><span class="dot" style="background:var(--strain)"></span>Cardio</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:12px">
+    <div class="card row" style="padding:16px 18px;justify-content:space-between">
+      <div><div class="lbl">Volume lifted</div><div class="fn">Last 7 days · from logged sets</div></div>
+      <div class="num" style="font-size:30px;font-weight:600;letter-spacing:-1px"><span data-count="12450" data-sep="1">12,450</span><span class="fn" style="margin-left:3px">kg</span></div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Recent</h3><a>All<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card" style="padding:4px 16px">
+      <div class="row gap12" style="padding:12px 0;border-bottom:1px solid var(--line)">
+        <div style="width:42px;height:42px;border-radius:13px;background:rgba(255,138,61,.14);color:var(--lift);display:grid;place-items:center"><svg width="22" height="22"><use href="#i-dumbbell"/></svg></div>
+        <div style="flex:1;min-width:0"><div class="lbl">Push day</div><div class="fn">Today · 6 exercises · 21 sets</div><div class="src" style="margin-top:3px"><i style="background:var(--lift)"></i>Pasted from Hevy · full sets</div></div>
+        <div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600;color:var(--strain)">9.8</div><div class="cap">52 min</div></div>
+      </div>
+      <div class="row gap12" style="padding:12px 0;border-bottom:1px solid var(--line)">
+        <div style="width:42px;height:42px;border-radius:13px;background:rgba(58,155,255,.14);color:var(--strain);display:grid;place-items:center"><svg width="22" height="22"><use href="#i-run"/></svg></div>
+        <div style="flex:1;min-width:0"><div class="lbl">Outdoor run</div><div class="fn">Mon · 5.2 km · 5:58 /km</div><div class="src" style="margin-top:3px"><i></i>Apple Health · summary only</div></div>
+        <div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600;color:var(--strain)">11.2</div><div class="cap">31 min</div></div>
+      </div>
+      <div class="row gap12" style="padding:12px 0">
+        <div style="width:42px;height:42px;border-radius:13px;background:rgba(255,138,61,.14);color:var(--lift);display:grid;place-items:center"><svg width="22" height="22"><use href="#i-dumbbell"/></svg></div>
+        <div style="flex:1;min-width:0"><div class="lbl">Pull + legs</div><div class="fn">Sun · 7 exercises · 24 sets</div><div class="src" style="margin-top:3px"><i style="background:var(--lift)"></i>Hevy CSV · full sets</div></div>
+        <div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600;color:var(--strain)">10.4</div><div class="cap">64 min</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:12px">
+    <div class="card row gap12" style="padding:14px 16px">
+      <div style="width:42px;height:42px;border-radius:13px;background:var(--card2);display:grid;place-items:center;color:var(--t1)"><svg width="22" height="22"><use href="#i-paste"/></svg></div>
+      <div style="flex:1"><div class="lbl">Paste a workout</div><div class="fn">Preview before it saves</div></div>
+      <svg width="16" height="16" style="color:var(--t3)"><use href="#i-chev-r"/></svg>
+    </div>
+  </div>
+
+  <div class="tabbar" data-on="2"></div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 5. HEALTH -->
+<section>
+<div class="board-title">05 · Health</div>
+<div class="screen" id="screen-health" data-ambient="health">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+
+  <div style="display:flex;gap:10px;padding:8px var(--gutter) 0;overflow:hidden">
+    <div class="pill" style="height:auto;border-radius:18px;padding:10px 14px 10px 10px;gap:10px;flex:none;background:rgba(60,60,68,.7)">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(47,210,122,.18);display:grid;place-items:center"><span class="dot" style="background:var(--recovery);width:10px;height:10px"></span></div>
+      <div><div class="cap" style="color:var(--t2);font-weight:500">Vitals</div><div style="font-size:15px;font-weight:600">Typical</div></div>
+    </div>
+    <div class="pill" style="height:auto;border-radius:18px;padding:10px 14px 10px 10px;gap:10px;flex:none">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,77,107,.16);display:grid;place-items:center;color:var(--heart)"><svg width="18" height="18"><use href="#i-heart-f"/></svg></div>
+      <div><div class="cap" style="color:var(--t2);font-weight:500">Resting</div><div style="font-size:15px;font-weight:600">52 BPM</div></div>
+    </div>
+    <div class="pill" style="height:auto;border-radius:18px;padding:10px 14px 10px 10px;gap:10px;flex:none">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(71,200,245,.16);display:grid;place-items:center;color:var(--hrv);font-size:12px;font-weight:700">FA</div>
+      <div><div class="cap" style="color:var(--t2);font-weight:500">Fitness Age</div><div style="font-size:15px;font-weight:600">31 yrs</div></div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:22px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="row gap8" style="color:var(--recovery);font-size:15px;font-weight:600"><svg width="16" height="16"><use href="#i-check"/></svg>Overnight vitals</div>
+        <div style="font-size:30px;font-weight:700;letter-spacing:-.6px;margin-top:4px">All typical</div>
+      </div>
+      <div class="ibtn"><svg width="22" height="22"><use href="#i-info"/></svg></div>
+    </div>
+    <div style="font-size:17px;color:var(--t2);line-height:24px;margin-top:6px">Every signal stayed inside your own 30-night range. Nothing to watch today.</div>
+  </div>
+
+  <div class="wrap" style="margin-top:16px">
+    <div class="card" id="vitlanes" style="padding:10px 18px"></div>
+  </div>
+
+  <div class="sec"><h3>Vitals</h3><a>14 nights</a></div>
+  <div class="wrap grid2">
+    <div class="tile vtile" style="background:linear-gradient(165deg,rgba(71,200,245,.16) 0%,rgba(26,26,30,.74) 60%)">
+      <div class="t" style="color:var(--hrv)">HRV</div>
+      <div class="big num" style="margin-top:8px"><span data-count="62">62</span><small>ms</small></div>
+      <svg class="line chart" data-c="--hrv" data-v="48,52,50,55,53,49,54,51,58,55,57,60,58,62" data-band="46,60" width="179" height="76"></svg>
+    </div>
+    <div class="tile vtile" style="background:linear-gradient(165deg,rgba(255,77,107,.16) 0%,rgba(26,26,30,.74) 60%)">
+      <div class="t" style="color:var(--heart)">Resting HR</div>
+      <div class="big num" style="margin-top:8px"><span data-count="52">52</span><small>bpm</small></div>
+      <svg class="line chart" data-c="--heart" data-v="56,55,55,54,56,54,53,54,53,52,53,54,52,52" data-band="50,56" width="179" height="76"></svg>
+    </div>
+    <div class="tile vtile" style="background:linear-gradient(165deg,rgba(54,211,191,.16) 0%,rgba(26,26,30,.74) 60%)">
+      <div class="t" style="color:var(--breath)">Respiratory</div>
+      <div class="big num" style="margin-top:8px"><span data-count="14.8" data-dec="1">14.8</span><small>rpm</small></div>
+      <svg class="line chart" data-c="--breath" data-v="15,14.9,15.1,14.8,14.7,15,14.9,15.1,14.8,14.9,15,14.8,14.9,14.8" data-band="14.2,15.4" width="179" height="76"></svg>
+    </div>
+    <div class="tile vtile" style="background:linear-gradient(165deg,rgba(255,159,69,.16) 0%,rgba(26,26,30,.74) 60%)">
+      <div class="t" style="color:var(--temp)">Skin temp</div>
+      <div class="big num" style="margin-top:8px">+<span data-count="0.2" data-dec="1">0.2</span><small>°C</small></div>
+      <svg class="line chart" data-c="--temp" data-v="0,-.1,.1,0,.2,.1,-.1,0,.1,.2,0,.1,.1,.2" data-band="-.3,.3" width="179" height="76"></svg>
+    </div>
+  </div>
+  <div class="cap" style="padding:8px 20px 0">Skin temperature is relative to your baseline, not an absolute reading.</div>
+  <div class="wrap" style="margin-top:12px">
+    <div class="card row gap12" style="padding:14px 16px;border:1px dashed rgba(255,255,255,.14);background:transparent;backdrop-filter:none">
+      <div style="flex:1"><div class="lbl" style="color:var(--t2)">Blood oxygen</div><div class="fn" style="color:var(--t3)">Not measured offline by WHOOP 4.0</div></div>
+      <span class="num" style="font-size:22px;font-weight:600;color:var(--t3)">—</span>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Fitness Age</h3><a>Weekly<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <div class="grid2" style="gap:0">
+        <div><div class="fn">Fitness Age</div><div class="num" style="font-size:28px;font-weight:600;color:var(--hrv)"><span data-count="31">31</span> <span class="fn">yrs</span></div></div>
+        <div><div class="fn">Actual age</div><div class="num" style="font-size:28px;font-weight:600">33 <span class="fn">yrs</span></div></div>
+      </div>
+      <div class="fn" style="margin-top:10px;line-height:19px">Estimated from resting HR, HRV and training volume. VO₂max is not measured directly.</div>
+    </div>
+  </div>
+
+  <div class="tabbar" data-on="3"></div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 6. AMBIENT STATES -->
+<section>
+<div class="board-title">06 · How the background reacts</div>
+<div class="screen states" id="screen-states"></div>
+</section>
+
+<!-- ================================================================ 7. MOTION SPEC -->
+<section>
+<div class="board-title">07 · Motion spec</div>
+<div class="screen spec" id="screen-spec">
+  <h2>Motion &amp; loading</h2>
+  <div class="lead">Springs everywhere, nothing linear. Every fresh load replays the fill so the screen feels alive. Missing data never animates: it stays an empty dashed ring with a dash.</div>
+  <div class="it"><b>Skeleton shimmer</b><p>Card-shaped placeholders with faint text bars and a 110° light sweep, <code>1.25 s</code> loop. Shown only while data is resolving; kept at least <code>300 ms</code> so it never flickers.</p></div>
+  <div class="it"><b>Card entrance</b><p>Top to bottom, <code>40 ms</code> stagger. Rise 16 pt, scale 0.98 → 1. Spring <code>response 0.45 · damping 0.78</code>.</p></div>
+  <div class="it"><b>Ring fill</b><p>Every appearance and refresh: 0 → value, spring <code>response 0.9 · damping 0.72</code>, overshoot capped at 4%. Number counts up in step. Soft haptic on settle.</p></div>
+  <div class="it"><b>Arc knob</b><p>Rides the Recovery arc and settles with a small bounce. Colour crossfades through the band it passes (red → yellow → green).</p></div>
+  <div class="it"><b>Charts</b><p>Line draws left to right <code>700 ms</code> ease-out. Gradient fill fades in <code>200 ms</code> later. Latest-point dot pops 0 → 1.15 → 1.</p></div>
+  <div class="it"><b>Ambient field</b><p>Background blobs are coloured and sized by the day's numbers. They crossfade <code>800 ms</code> on date change or new scores, and drift slowly while idle.</p></div>
+  <div class="it"><b>Pull to refresh</b><p>Rings drain to zero as you pull, then refill on release. The strap battery pill pulses while syncing.</p></div>
+  <div class="it"><b>Press</b><p>Cards and buttons scale to 0.965 on touch-down (<code>120 ms</code>), spring back on release. Chevrons nudge 2 pt toward their destination.</p></div>
+  <div class="it"><b>Day swipe</b><p>Interactive horizontal spring. The incoming day's rings refill and the ambient field crossfades to that day's colours.</p></div>
+  <div class="it"><b>Live heart rate</b><p>Heart icon pulses at the measured BPM. Each new reading grows the newest bar from zero.</p></div>
+  <div class="it"><b>Tab switch</b><p>Native iOS 26 tab bar; symbol bounce on select, <code>200 ms</code> content crossfade, no remount of the tab's state.</p></div>
+  <div class="it"><b>Reduce Motion</b><p>Everything becomes a <code>150 ms</code> fade. No drift, no overshoot, no pulsing heart.</p></div>
+</div>
+</section>
+
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+const STATIC=/static/.test(location.search);
+if(STATIC)document.documentElement.classList.add('static');
+const root=getComputedStyle(document.documentElement);
+const C=v=>root.getPropertyValue(v).trim();
+const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e};
+let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+let gid=0;
+const hexA=(hex,a)=>{const h=hex.replace('#','');const n=parseInt(h,16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`};
+const band=r=>r>=67?'--recovery':r>=34?'--rec-mid':'--rec-low';
+const springEase=t=>t>=1?1:1-Math.exp(-7*t)*Math.cos(7*t);
+const outCubic=t=>1-Math.pow(1-t,3);
+function tween(ms,ease,fn,done){const t0=performance.now();const f=now=>{const t=Math.max(0,Math.min(1,(now-t0)/ms));fn(ease(t));if(t<1)requestAnimationFrame(f);else done&&done()};requestAnimationFrame(f)}
+
+/* ---------- builders ---------- */
+function ring(host){const d=host.dataset,s=+d.size,sw=+(d.sw||7),c=C(d.c),p=+d.p,r=50-sw/2-1;
+  const svg=el('svg',{width:s,height:s,viewBox:'0 0 100 100'});
+  el('circle',{cx:50,cy:50,r,fill:'none',stroke:'rgba(255,255,255,0.08)','stroke-width':sw},svg);
+  el('circle',{class:'prog',cx:50,cy:50,r,fill:'none',stroke:c,'stroke-width':sw,'stroke-linecap':'round',pathLength:100,'stroke-dasharray':`${p} 100`,transform:'rotate(-90 50 50)','data-p':p},svg);
+  const t=el('text',{x:50,y:50+(+d.fs||24)*.36,'text-anchor':'middle',fill:'#F5F5F7','font-size':d.fs||24,'font-weight':600,'font-family':'-apple-system,system-ui'},svg);
+  t.textContent=d.label;if(d.unit){const u=el('tspan',{'font-size':13,fill:'#9B9BA3'},t);u.textContent=d.unit}
+  host.replaceWith(svg);return svg}
+
+function ringsRow(host){const s=+host.dataset.s,r=+host.dataset.r,st=+host.dataset.st;
+  const recWord=r>=67?'Recovered':r>=34?'Adequate':'Low';
+  host.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);text-align:center';
+  host.innerHTML=`<div><div class="ring" data-size="96" data-p="${s}" data-c="--sleep" data-label="${s}" data-unit="%"></div><div class="lbl" style="margin-top:8px">Sleep</div><div class="cap" style="margin-top:2px;color:var(--t2)">${s>=85?'7h 42m':s>=70?'6h 50m':'5h 31m'}</div></div>
+  <div><div class="ring" data-size="96" data-p="${r}" data-c="${band(r)}" data-label="${r}" data-unit="%"></div><div class="lbl" style="margin-top:8px">Recovery</div><div class="cap" style="margin-top:2px;color:var(${band(r)})">${recWord}</div></div>
+  <div><div class="ring" data-size="96" data-p="${Math.round(st/21*100)}" data-c="--strain" data-label="${st}"></div><div class="lbl" style="margin-top:8px">Strain</div><div class="cap" style="margin-top:2px;color:var(--t2)">of 21</div></div>`;
+  host.querySelectorAll('.ring').forEach(ring)}
+
+function smooth(pts){let d=`M${pts[0][0]},${pts[0][1]}`;for(let i=0;i<pts.length-1;i++){const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;
+  d+=` C${(p1[0]+(p2[0]-p0[0])/6).toFixed(2)},${(p1[1]+(p2[1]-p0[1])/6).toFixed(2)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(2)},${(p2[1]-(p3[1]-p1[1])/6).toFixed(2)} ${p2[0]},${p2[1]}`}return d}
+
+function lineChart(svg){const d=svg.dataset,v=d.v.split(',').map(Number),c=C(d.c),w=+svg.getAttribute('width'),h=+svg.getAttribute('height');
+  if(d.bars){const mx=Math.max(...v),bw=6,g=(w-8-bw*v.length)/(v.length-1);
+    const id='gb'+(gid++);const df=el('defs',{},svg);const lg=el('linearGradient',{id,x1:0,y1:0,x2:0,y2:1},df);el('stop',{offset:0,'stop-color':c},lg);el('stop',{offset:1,'stop-color':c,'stop-opacity':.25},lg);
+    v.forEach((x,i)=>{const bh=Math.max(4,x/mx*(h-6));el('rect',{class:'barg',x:4+i*(bw+g),y:h-bh,width:bw,height:bh,rx:3,fill:`url(#${id})`,opacity:i===v.length-1?1:.45},svg)});return}
+  const bandV=d.band?d.band.split(',').map(Number):null;
+  let mn=Math.min(...v,...(bandV||[])),mx=Math.max(...v,...(bandV||[]));const padT=h>50?10:6,padB=h>50?4:5;const span=(mx-mn)||1;mn-=span*.08;mx+=span*.08;
+  const X=i=>4+i*(w-12)/(v.length-1),Y=x=>padT+(1-(x-mn)/(mx-mn))*(h-padT-padB);
+  const pts=v.map((x,i)=>[+X(i).toFixed(2),+Y(x).toFixed(2)]);
+  const id=gid++;const df=el('defs',{},svg);
+  const ga=el('linearGradient',{id:'ga'+id,x1:0,y1:0,x2:0,y2:1},df);el('stop',{offset:0,'stop-color':c,'stop-opacity':.42},ga);el('stop',{offset:1,'stop-color':c,'stop-opacity':0},ga);
+  const gs=el('linearGradient',{id:'gs'+id,x1:0,y1:0,x2:1,y2:0},df);el('stop',{offset:0,'stop-color':c,'stop-opacity':.3},gs);el('stop',{offset:1,'stop-color':c,'stop-opacity':1},gs);
+  // The typical range only sets the vertical scale; it is not drawn, so the chart has no hard horizontal edges.
+  const line=smooth(pts);
+  el('path',{class:'area',d:`${line} L${pts[pts.length-1][0]},${h} L${pts[0][0]},${h} Z`,fill:`url(#ga${id})`},svg);
+  el('path',{class:'stroke',d:line,fill:'none',stroke:`url(#gs${id})`,'stroke-width':h>50?2.5:2,'stroke-linecap':'round','stroke-linejoin':'round'},svg);
+  const [lx,ly]=pts[pts.length-1];
+  el('circle',{class:'halo',cx:lx,cy:ly,r:h>50?8:6,fill:c,opacity:.22},svg);
+  el('circle',{class:'pt',cx:lx,cy:ly,r:h>50?4:3,fill:c,stroke:'#0B0B0D','stroke-width':1.5},svg)}
+
+function tabbar(host){const on=+host.dataset.on;const items=[['i-today','Today'],['i-moon','Sleep'],['i-dumbbell','Training'],['i-heart','Health']];
+  host.innerHTML=`<div class="tabs">${items.map(([i,l],k)=>`<div class="tab${k===on?' on':''}"><svg width="24" height="24"><use href="#${i}"/></svg>${l}</div>`).join('')}</div><div class="coachbtn"><svg width="26" height="26"><use href="#i-spark"/></svg></div>`}
+
+/* ---------- ambient field: colours and sizes come from the data ---------- */
+function ambient(screen,blobs,opts={}){const a=document.createElement('div');a.className='ambient';if(opts.h)a.style.height=opts.h+'px';
+  blobs.forEach(([c,x,y,r,alpha],i)=>{const b=document.createElement('div');b.className='blob'+(i%2?' drift':'');
+    b.style.cssText=`left:${x-r}px;top:${y-r}px;width:${2*r}px;height:${2*r}px;background:radial-gradient(circle at 50% 50%,${hexA(C(c),alpha)} 0%,${hexA(C(c),alpha*.45)} 38%,${hexA(C(c),0)} 70%)`;a.appendChild(b)});
+  const svg=el('svg',{width:402,height:opts.h||600,viewBox:`0 0 402 ${opts.h||600}`});const cx=opts.cx??330,cy=opts.cy??40;
+  for(let r=48;r<640;r+=34)el('circle',{cx,cy,r,fill:'none',stroke:'rgba(255,255,255,0.035)','stroke-width':1},svg);
+  a.appendChild(svg);const f=document.createElement('div');f.className='fade';a.appendChild(f);
+  screen.insertBefore(a,screen.firstChild)}
+// Today: each score paints its own blob; size and strength follow the score, Recovery takes its band colour.
+const todayBlobs=(s,r,st)=>{const sf=s/100,rf=r/100,tf=st/21;return[['--sleep',40,10,150+170*sf,.16+.38*sf],['--strain',380,40,150+170*tf,.16+.38*tf],[band(r),210,-30,170+190*rf,.18+.42*rf]]};
+const AMB={
+  today:()=>todayBlobs(86,68,11.4),
+  recovery:()=>[[band(68),201,150,260,.42],['--hrv',380,20,190,.32]],
+  sleep:()=>[['--sleep',120,20,290,.48],['--st-rem',380,120,180,.28],['--st-deep',10,220,180,.35]],
+  training:()=>[['--lift',90,10,260,.44],['--strain',380,90,200,.26]],
+  health:()=>[['--recovery',200,-10,260,.28],['--hrv',400,140,170,.22],['--heart',0,150,150,.2]],
+};
+
+/* ---------- static content ---------- */
+function buildAll(){
+  document.querySelectorAll('.rings').forEach(ringsRow);
+  document.querySelectorAll('.ring').forEach(ring);
+  document.querySelectorAll('svg.line').forEach(lineChart);
+  document.querySelectorAll('.tabbar').forEach(tabbar);
+  document.querySelectorAll('.screen[data-ambient]').forEach(s=>ambient(s,AMB[s.dataset.ambient]()));
+
+  // HR bars
+  (()=>{const s=document.getElementById('hrbars');const n=56,w=334,h=64;seed=7;
+   const id='hb'+(gid++);const df=el('defs',{},s);const lg=el('linearGradient',{id,x1:0,y1:0,x2:0,y2:1},df);el('stop',{offset:0,'stop-color':C('--heart')},lg);el('stop',{offset:1,'stop-color':C('--heart'),'stop-opacity':.35},lg);
+   for(let i=0;i<n;i++){const t=i/n;let base=t<.3?52+rnd()*8:(t<.75?70+rnd()*22:72+rnd()*14);if(i>40&&i<45)base=110+rnd()*30;
+    const lo=base-6-rnd()*8,hi=base+4+rnd()*10;const y=v=>h-((v-40)/110)*h;
+    el('rect',{class:'hrb',x:i*(w/n),y:y(hi),width:3,height:Math.max(4,y(lo)-y(hi)),rx:1.5,fill:`url(#${id})`,opacity:i===n-1?1:.6},s)}
+   el('circle',{class:'pt',cx:(n-1)*(w/n)+1.5,cy:64-((74-40)/110)*64,r:4.5,fill:'#000',stroke:C('--heart'),'stroke-width':2.5},s)})();
+
+  // Recovery arc
+  (()=>{const s=document.getElementById('arc');const r=112,cx=201,cy=150,c=C(band(68));
+   el('circle',{cx,cy,r,fill:'none',stroke:'rgba(255,255,255,0.08)','stroke-width':22,'stroke-linecap':'round',pathLength:100,'stroke-dasharray':'66.67 100',transform:`rotate(150 ${cx} ${cy})`,'data-p':66.67},s);
+   const id='arcg'+(gid++);const df=el('defs',{},s);const lg=el('linearGradient',{id,x1:0,y1:1,x2:1,y2:0},df);el('stop',{offset:0,'stop-color':c,'stop-opacity':.55},lg);el('stop',{offset:1,'stop-color':c},lg);
+   el('circle',{class:'prog arcprog',cx,cy,r,fill:'none',stroke:`url(#${id})`,'stroke-width':22,'stroke-linecap':'round',pathLength:100,'stroke-dasharray':`${66.67*.68} 100`,transform:`rotate(150 ${cx} ${cy})`,'data-p':66.67*.68},s);
+   const a=(150+240*.68)*Math.PI/180;el('circle',{id:'knob',cx:cx+r*Math.cos(a),cy:cy+r*Math.sin(a),r:7,fill:'#fff'},s)})();
+
+  document.querySelectorAll('.range').forEach(r=>{const d=r.dataset,mn=+d.min,mx=+d.max,p=x=>((x-mn)/(mx-mn))*100;
+   r.innerHTML=`<div style="position:relative;height:14px"><div style="position:absolute;left:0;right:0;top:5px;height:4px;border-radius:2px;background:rgba(255,255,255,.08)"></div><div style="position:absolute;left:${p(d.lo)}%;width:${p(d.hi)-p(d.lo)}%;top:5px;height:4px;border-radius:2px;background:rgba(255,255,255,.22)"></div><div class="knob" style="position:absolute;left:calc(${p(d.v)}% - 7px);top:0;width:14px;height:14px;border-radius:50%;background:${C(d.c)};border:3px solid #1A1A1E"></div></div>`});
+
+  (()=>{const s=document.getElementById('recbars');const v=[55,62,71,48,33,58,66,72,80,64,59,41,52,67,74,69,61,28,45,63,70,77,58,66,49,38,62,71,55,68];
+   const w=334,h=96,bw=7,g=(w-bw*30)/29;
+   [33,66].forEach(t=>el('line',{x1:0,x2:w,y1:h-t/100*h,y2:h-t/100*h,stroke:'rgba(255,255,255,0.07)','stroke-dasharray':'2 4'},s));
+   v.forEach((x,i)=>el('rect',{class:'rb',x:i*(bw+g),y:h-x/100*h,width:bw,height:x/100*h,rx:3.5,fill:C(band(x)),opacity:i===29?1:.75},s));
+   document.getElementById('recavg').textContent=Math.round(v.reduce((a,b)=>a+b)/v.length)+'%';
+   document.getElementById('rc-g').textContent=v.filter(x=>x>=67).length;document.getElementById('rc-y').textContent=v.filter(x=>x>=34&&x<67).length;document.getElementById('rc-r').textContent=v.filter(x=>x<34).length})();
+
+  (()=>{const s=document.getElementById('weekstrip');const days=['Thu','Fri','Sat','Sun','Mon','Tue','Wed'],v=[78,64,91,88,72,80,86];
+   days.forEach((d,i)=>{const on=i===6;const cell=document.createElement('div');cell.style.cssText=`text-align:center;padding:8px 0 10px;border-radius:14px;${on?'background:rgba(60,60,68,.6)':''}`;
+    cell.innerHTML=`<div class="cap" style="color:${on?'var(--t1)':'var(--t2)'};font-weight:600">${d}</div><div style="margin-top:6px;display:flex;justify-content:center"><div class="ring" data-size="30" data-sw="14" data-p="${v[i]}" data-c="--sleep" data-label=""></div></div>`;
+    s.appendChild(cell);ring(cell.querySelector('.ring'))})})();
+
+  (()=>{const s=document.getElementById('hypno');const lanes=[['Awake','--st-awake'],['REM','--st-rem'],['Light','--st-light'],['Deep','--st-deep']];
+   const x0=50,w=284,lh=30,gap=8;
+   lanes.forEach(([n,c],i)=>{const t=el('text',{x:0,y:i*(lh+gap)+lh/2+4,fill:C('--t2'),'font-size':12,'font-weight':600,'font-family':'-apple-system,system-ui'},s);t.textContent=n;
+    el('rect',{x:x0,y:i*(lh+gap),width:w,height:lh,rx:8,fill:'rgba(255,255,255,0.035)'},s)});
+   const seg=[[0,0,.02],[2,.02,.09],[3,.09,.2],[2,.2,.27],[1,.27,.33],[2,.33,.38],[3,.38,.47],[2,.47,.55],[0,.55,.565],[2,.565,.62],[1,.62,.7],[2,.7,.76],[3,.76,.8],[2,.8,.86],[1,.86,.95],[0,.95,.96],[2,.96,1]];
+   seg.forEach(([l,a,b])=>el('rect',{class:'seg',x:x0+a*w+1,y:l*(lh+gap)+3,width:Math.max(3,(b-a)*w-2),height:lh-6,rx:5,fill:C(lanes[l][1])},s))})();
+
+  (()=>{const r=document.getElementById('stagerows');const rows=[['Awake','--st-awake','12m',2,4],['REM','--st-rem','1h 52m',24,22],['Light','--st-light','4h 02m',51,53],['Deep','--st-deep','1h 48m',23,21]];
+   rows.forEach(([n,c,d,p,t])=>r.insertAdjacentHTML('beforeend',`<div style="display:grid;grid-template-columns:62px 1fr 64px 38px;align-items:center;gap:10px;padding:9px 0"><span style="font-size:15px;font-weight:600;color:var(${c})">${n}</span><div style="position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.08)"><b class="grow" style="position:absolute;left:0;top:0;bottom:0;width:${p*1.6}%;border-radius:3px;background:var(${c})"></b><i style="position:absolute;left:${t*1.6}%;top:-4px;height:14px;border-left:2px dotted rgba(255,255,255,.5)"></i></div><span class="num" style="font-size:15px;font-weight:600;text-align:right">${d}</span><span class="num fn" style="text-align:right">${p}%</span></div>`))})();
+
+  (()=>{const r=document.getElementById('dotcal');seed=11;const months=['Aug','Sep','Oct'];let html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">';
+   months.forEach((m,mi)=>{html+=`<div><div class="cap" style="color:var(--t2);font-weight:600;margin-bottom:10px">${m}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:7px">`;
+    for(let d=0;d<(mi===2?29:31);d++){const x=rnd();const lift=x<.32,cardio=!lift&&x<.48;const today=mi===2&&d===28;
+     html+=`<span class="cd" style="width:8px;height:8px;border-radius:50%;background:${lift?'var(--lift)':cardio?'var(--strain)':'rgba(255,255,255,.12)'};${today?'box-shadow:0 0 0 2px #000,0 0 0 3.5px #fff':''}"></span>`}
+    html+='</div></div>'});r.innerHTML=html+'</div>'})();
+
+  // Overnight vitals: line per signal inside its typical band
+  (()=>{const r=document.getElementById('vitlanes');const L=[['Heart rate','52 bpm','--heart','56,55,55,54,56,54,53,54,53,52,53,54,52,52','50,56'],['HRV','62 ms','--hrv','48,52,50,55,53,49,54,51,58,55,57,60,58,62','46,60'],['Respiratory','14.8 rpm','--breath','15,14.9,15.1,14.8,14.7,15,14.9,15.1,14.8,14.9,15,14.8,14.9,14.8','14.2,15.4'],['Skin temp','+0.2 °C','--temp','0,-.1,.1,0,.2,.1,-.1,0,.1,.2,0,.1,.1,.2','-.3,.3']];
+   L.forEach(([n,v,c,data,b],i)=>{r.insertAdjacentHTML('beforeend',`<div style="display:grid;grid-template-columns:96px 1fr;align-items:center;gap:12px;padding:8px 0;${i?'border-top:1px solid var(--line)':''}"><div><div style="font-size:13px;font-weight:600;color:var(${c})">${n}</div><div class="num" style="font-size:15px;font-weight:600">${v}</div></div><svg class="line" data-c="${c}" data-v="${data}" data-band="${b}" width="226" height="40"></svg></div>`);
+    lineChart(r.lastElementChild.querySelector('svg'))})})();
+
+  // Ambient states board
+  (()=>{const host=document.getElementById('screen-states');const S=[['Peak day','Sleep 92 · Recovery 91 · Strain 6.2',92,91,6.2],['Rough night','Sleep 58 · Recovery 24 · Strain 4.1',58,24,4.1],['Big training day','Sleep 81 · Recovery 55 · Strain 18.4',81,55,18.4]];
+   S.forEach(([t,sub,s,rv,st])=>{const st_=document.createElement('div');st_.className='state';
+    st_.innerHTML=`<div class="tag"><b>${t}</b><span>${sub}</span></div><div class="wrap"><div class="card" style="padding:22px 14px 18px"><div class="rings" data-s="${s}" data-r="${rv}" data-st="${st}"></div></div></div>`;
+    host.appendChild(st_);ringsRow(st_.querySelector('.rings'));ambient(st_,todayBlobs(s,rv,st),{h:330})});
+   host.insertAdjacentHTML('beforeend',`<div style="padding:18px var(--gutter) 22px" class="fn">Each score paints its own glow. Size and strength follow the number; Recovery takes its band colour. The page reads the day before you read the rings.</div>`)})();
+
+  // Loading frame: a clone of Today with every card as a skeleton
+  (()=>{const t=document.getElementById('screen-today').cloneNode(true);t.id='screen-today-loading';
+   t.querySelectorAll('.card,.tile').forEach(c=>c.classList.add('sk'));
+   t.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+   document.getElementById('loading-slot').appendChild(t)})();
+}
+
+/* ---------- motion ---------- */
+function countUp(span,ms){const tgt=+span.dataset.count,dec=+(span.dataset.dec||0),sep=span.dataset.sep;
+  const fmt=x=>{const s=x.toFixed(dec);return sep?Number(s).toLocaleString('en-US'):s};
+  tween(ms,outCubic,k=>span.textContent=fmt(tgt*k),()=>span.textContent=fmt(tgt))}
+function fillRing(c,ms){const p=+c.dataset.p;tween(ms,springEase,k=>c.setAttribute('stroke-dasharray',`${Math.min(99.9,p*k)} 100`))}
+function drawLine(svg){const s=svg.querySelector('.stroke');if(s){const L=s.getTotalLength();s.style.strokeDasharray=L;s.style.strokeDashoffset=L;s.getBoundingClientRect();s.style.transition='stroke-dashoffset .7s cubic-bezier(.2,.8,.2,1)';s.style.strokeDashoffset=0}
+  const a=svg.querySelector('.area');if(a){a.style.opacity=0;a.style.transition='opacity .5s ease .2s';requestAnimationFrame(()=>a.style.opacity=1)}
+  svg.querySelectorAll('.pt,.halo').forEach(p=>{p.style.transformBox='fill-box';p.style.transformOrigin='center';p.classList.remove('pop');p.getBoundingClientRect();p.style.animationDelay='.6s';p.classList.add('pop')})}
+function growBars(svg,sel,ms,stag){svg.querySelectorAll(sel).forEach((b,i)=>{b.style.transformBox='fill-box';b.style.transformOrigin='bottom';b.style.transform='scaleY(0)';b.getBoundingClientRect();b.style.transition=`transform ${ms}ms var(--spring) ${i*stag}ms`;b.style.transform='scaleY(1)'})}
+function revealCard(c){
+  c.querySelectorAll('circle.prog').forEach(p=>fillRing(p,1100));
+  c.querySelectorAll('[data-count]').forEach(s=>countUp(s,900));
+  c.querySelectorAll('svg.line').forEach(drawLine);
+  c.querySelectorAll('svg').forEach(s=>{growBars(s,'.hrb',500,8);growBars(s,'.rb',600,18);growBars(s,'.barg',500,40)});
+  c.querySelectorAll('.grow').forEach(b=>{const w=b.style.width;b.style.width='0%';b.getBoundingClientRect();b.style.transition='width .9s var(--spring)';b.style.width=w});
+  c.querySelectorAll('.seg').forEach((s,i)=>{s.style.opacity=0;s.getBoundingClientRect();s.style.transition=`opacity .3s ease ${i*30}ms`;s.style.opacity=1});
+  c.querySelectorAll('.cd').forEach((d,i)=>{d.style.transform='scale(0)';d.getBoundingClientRect();d.style.transition=`transform .45s var(--spring) ${i*6}ms`;d.style.transform='scale(1)'});
+}
+function play(){
+  document.querySelectorAll('.screen').forEach(screen=>{if(screen.id==='screen-today-loading'||screen.id==='screen-spec')return;
+    // the arc lives outside a card; treat its block as a card
+    const units=[...screen.querySelectorAll('.card,.tile,.sec,.lt,#arc')].filter(u=>!u.closest('.card .card'));
+    units.forEach(u=>{u.classList.remove('in');u.classList.add('enter');if(u.matches('.card,.tile'))u.classList.add('sk')});
+    screen.querySelectorAll('circle.prog').forEach(p=>p.setAttribute('stroke-dasharray','0 100'));
+    screen.querySelectorAll('[data-count]').forEach(s=>s.textContent=s.dataset.dec?(0).toFixed(+s.dataset.dec):'0');
+    const amb=screen.querySelectorAll('.ambient');amb.forEach(a=>{a.style.opacity=0;a.style.transition='none'});
+    units.forEach((u,i)=>setTimeout(()=>{u.classList.add('in');u.classList.remove('enter')},60+i*40));
+    setTimeout(()=>amb.forEach(a=>{a.style.transition='opacity .8s ease';a.style.opacity=1}),150);
+    units.forEach((u,i)=>setTimeout(()=>{u.classList.remove('sk');revealCard(u)},750+i*60));
+  })}
+
+buildAll();
+if(!STATIC){play();document.getElementById('replay').onclick=play}
+</script>
+</body>
+</html>

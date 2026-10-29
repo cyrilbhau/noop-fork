@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP States and Widgets</title>
+<link rel="stylesheet" href="../system/noop.css">
+<style>
+.wg{border-radius:24px;background:rgba(22,22,26,.78);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.06);padding:14px;position:relative;overflow:hidden}
+.wg.s{width:162px;height:162px}
+.wg.m{width:344px;height:162px}
+.wlabel{font-size:12px;color:rgba(255,255,255,.75);text-align:center;margin-top:6px;font-weight:500}
+.lock{border-radius:999px;background:rgba(255,255,255,.14);backdrop-filter:blur(20px)}
+.found{display:flex;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
+.found:first-child{border-top:0}
+.calib i{flex:1;height:8px;border-radius:4px;background:rgba(255,255,255,.1)}
+.calib i.on{background:var(--recovery)}
+</style>
+</head>
+<body>
+<div class="controls"><button id="replay">Replay load</button><span>Batch 5 · States, onboarding and widgets</span></div>
+<div class="board">
+
+<!-- ================= E1 TODAY, MISSING DATA ================= -->
+<section><div class="board-title">E1 · Today, strap away and no sleep yet</div>
+<div class="screen" data-ambient='[["--t3",201,0,280,0.3],["--strain",400,60,160,0.18]]'>
+  <div class="sb"></div>
+  <div class="hdr"><div><div class="lt">Today</div><div class="sub">Wed, 29 Oct</div></div>
+    <div class="row gap10"><div class="pill" style="color:var(--rec-mid)"><span class="dot" style="background:var(--rec-mid)"></span>3h ago</div><div class="ibtn" data-ic="person" data-s="22"></div></div></div>
+  <div class="wrap mt20"><div class="card row gap12" style="background:rgba(255,200,61,.10);border-color:rgba(255,200,61,.22);padding:14px 16px">
+    <span data-ic="bt" data-s="22" style="color:var(--rec-mid)"></span>
+    <div class="grow1"><div class="lbl">Strap not connected</div><div class="fn">Last data 6:40 AM. History on the strap syncs when it's back.</div></div>
+    <span class="chip" style="background:rgba(255,200,61,.2);color:var(--rec-mid)">Reconnect</span>
+  </div></div>
+  <div class="wrap mt12"><div class="card" style="padding:22px 14px 18px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);text-align:center">
+      <div><div class="ring" data-size="96" data-empty data-label="—" data-fs="26" style="display:block;margin:0 auto"></div><div class="lbl" style="margin-top:8px">Sleep</div><div class="cap" style="margin-top:2px">Not detected</div></div>
+      <div><div class="ring" data-size="96" data-empty data-label="—" data-fs="26" style="display:block;margin:0 auto"></div><div class="lbl" style="margin-top:8px">Recovery</div><div class="cap" style="margin-top:2px">Needs sleep</div></div>
+      <div><div class="ring" data-size="96" data-p="20" data-c="--strain" data-label="4.2" style="display:block;margin:0 auto"></div><div class="lbl" style="margin-top:8px">Strain</div><div class="cap" style="margin-top:2px;color:var(--rec-mid)">Paused 6:40 AM</div></div>
+    </div>
+    <div style="height:1px;background:var(--line);margin:18px 4px 16px"></div>
+    <div style="padding:0 4px"><div class="h2">No sleep recorded last night</div>
+      <div class="body mt8" style="font-size:15px;line-height:21px">Recovery needs a night with the strap on. If you slept without it, you can add the night by hand.</div>
+      <div class="btn secondary mt16" style="height:42px;font-size:15px">Add last night</div></div>
+  </div></div>
+  <div class="sec"><h3>Key metrics</h3></div>
+  <div class="wrap"><div class="card" style="padding:14px 18px">
+    <div class="mrow"><div><div class="k" style="color:var(--hrv)">HRV</div><div class="s">Last: 58 ms · Tue night</div></div><div class="v num" style="color:var(--t3)">—</div><span></span></div>
+    <div class="mrow"><div><div class="k" style="color:var(--heart)">Resting heart rate</div><div class="s">Last: 53 bpm · Tue night</div></div><div class="v num" style="color:var(--t3)">—</div><span></span></div>
+    <div class="mrow"><div><div class="k" style="color:var(--lift)">Steps</div><div class="s">Until 6:40 AM · estimated</div></div><div class="v num">~410</div><span></span></div>
+  </div></div>
+  <div class="tabbar" data-on="0"></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= E2 CALIBRATING ================= -->
+<section><div class="board-title">E2 · First week, calibrating</div>
+<div class="screen" data-ambient='[["--sleep",40,10,250,0.4],["--strain",380,40,200,0.28],["--t2",210,-30,240,0.18]]'>
+  <div class="sb"></div>
+  <div class="hdr"><div><div class="lt">Today</div><div class="sub">Night 4 of 7</div></div>
+    <div class="row gap10"><div class="pill"><span class="dot" style="background:var(--recovery)"></span>92%</div><div class="ibtn" data-ic="person" data-s="22"></div></div></div>
+  <div class="wrap mt20"><div class="card" style="padding:22px 14px 18px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);text-align:center">
+      <div><div class="ring" data-size="96" data-p="81" data-c="--sleep" data-label="81" data-unit="%" style="display:block;margin:0 auto"></div><div class="lbl" style="margin-top:8px">Sleep</div><div class="cap" style="margin-top:2px;color:var(--t2)">6h 58m</div></div>
+      <div><div class="ring" data-size="96" data-empty data-label="4/7" data-fs="22" style="display:block;margin:0 auto"></div><div class="lbl" style="margin-top:8px">Recovery</div><div class="cap" style="margin-top:2px">Learning you</div></div>
+      <div><div class="ring" data-size="96" data-p="43" data-c="--strain" data-label="9.1" style="display:block;margin:0 auto"></div><div class="lbl" style="margin-top:8px">Strain</div><div class="cap" style="margin-top:2px;color:var(--t2)">of 21</div></div>
+    </div>
+    <div style="height:1px;background:var(--line);margin:18px 4px 16px"></div>
+    <div style="padding:0 4px"><div class="h2">Learning your baseline</div>
+      <div class="body mt8" style="font-size:15px;line-height:21px">Recovery compares each night with your own normal, so it needs a week of nights first. Three to go.</div>
+      <div class="row gap6 mt16 calib"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="row sp mt8"><span class="cap">Started Sun</span><span class="cap">Ready Sat</span></div>
+    </div>
+  </div></div>
+  <div class="sec"><h3>Measured so far</h3></div>
+  <div class="wrap grid2">
+    <div class="tile" style="min-height:120px"><div class="t" style="color:var(--hrv)">HRV</div><div><div class="big num">59<small>ms</small></div><div class="cap mt8">4-night average</div></div></div>
+    <div class="tile" style="min-height:120px"><div class="t" style="color:var(--heart)">Resting HR</div><div><div class="big num">54<small>bpm</small></div><div class="cap mt8">4-night average</div></div></div>
+  </div>
+  <div class="tabbar" data-on="0"></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= E3 PAIR STRAP ================= -->
+<section><div class="board-title">E3 · Pair your strap</div>
+<div class="screen" data-ambient='[["--breath",201,300,320,0.36],["--hrv",40,40,200,0.24]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl">Step 2 of 3</div><div style="width:40px"></div></div>
+  <div class="motion" style="position:relative;height:320px;display:grid;place-items:center;margin-top:10px">
+    <div class="pulse" style="position:absolute;width:150px;height:150px;border-radius:50%;border:2px solid var(--breath)"></div>
+    <div class="pulse" style="position:absolute;width:150px;height:150px;border-radius:50%;border:2px solid var(--breath);animation-delay:.8s"></div>
+    <div class="pulse" style="position:absolute;width:150px;height:150px;border-radius:50%;border:2px solid var(--breath);animation-delay:1.6s"></div>
+    <div style="position:relative;width:118px;height:118px;border-radius:50%;background:rgba(54,211,191,.16);border:1px solid rgba(54,211,191,.4);display:grid;place-items:center;color:var(--breath)" data-ic="strap" data-s="48"></div>
+  </div>
+  <div class="wrap" style="text-align:center"><div class="h1">Looking for your strap</div><div class="body mt8">Double-tap the strap to wake it, and keep it close to your iPhone.</div></div>
+  <div class="wrap mt24"><div class="card flush">
+    <div class="found"><div class="icon" style="background:rgba(54,211,191,.16);color:var(--breath)" data-ic="strap" data-s="22"></div><div class="grow1"><div class="lbl">WHOOP 4.0</div><div class="fn">Strong signal · nearby</div></div><span class="chip" style="background:#F5F5F7;color:#000">Connect</span></div>
+    <div class="found" style="opacity:.5"><div class="icon" style="background:rgba(255,255,255,.06);color:var(--t2)" data-ic="bt" data-s="22"></div><div class="grow1"><div class="lbl">Searching…</div><div class="fn">WHOOP 5.0 and MG also work</div></div></div>
+  </div></div>
+  <div class="fn" style="padding:14px 20px 0;text-align:center">NOOP only reads from your strap. It never changes firmware.</div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= E4 WIDGETS ================= -->
+<section><div class="board-title">E4 · Widgets (Home and Lock Screen)</div>
+<div class="screen" data-nomotion style="background:linear-gradient(170deg,#1B1630 0%,#0E1A22 45%,#05070A 100%)">
+  <div class="sb"></div>
+  <div class="wrap mt12" style="display:grid;grid-template-columns:162px 162px;gap:20px 20px;justify-content:center">
+    <div>
+      <div class="wg s" style="background:linear-gradient(160deg,rgba(47,210,122,.22),rgba(22,22,26,.85) 65%)">
+        <div class="row sp"><span style="font-size:13px;font-weight:600;color:var(--recovery)">Recovery</span><span class="cap" style="color:var(--t2)">6:12</span></div>
+        <div style="display:grid;place-items:center;margin-top:4px"><div class="ring" data-size="100" data-sw="10" data-p="68" data-c="--recovery" data-label="68" data-unit="%" data-fs="26"></div></div>
+      </div><div class="wlabel">NOOP</div>
+    </div>
+    <div>
+      <div class="wg s">
+        <div class="row sp"><span style="font-size:13px;font-weight:600;color:var(--lift)">Steps</span><span class="cap" style="color:var(--t2)">est.</span></div>
+        <div class="num mt8" style="font-size:34px;font-weight:600;letter-spacing:-1px">~6,240</div>
+        <div class="fn">of 8,000 goal</div>
+        <div class="bar" style="margin-top:14px;height:8px"><b style="width:78%;background:var(--lift)"></b></div>
+        <div class="cap mt8" style="color:var(--t2)">From strap motion</div>
+      </div><div class="wlabel">NOOP</div>
+    </div>
+    <div style="grid-column:span 2">
+      <div class="wg m">
+        <div class="row sp"><span style="font-size:13px;font-weight:600">Today</span><span class="cap" style="color:var(--t2)">Updated 9:38 AM</span></div>
+        <div class="rings mt8" data-s="86" data-r="68" data-st="11.4" data-size="64"></div>
+      </div><div class="wlabel">NOOP</div>
+    </div>
+    <div>
+      <div class="wg s" style="background:linear-gradient(160deg,rgba(143,125,255,.24),rgba(22,22,26,.85) 65%)">
+        <div class="row sp"><span style="font-size:13px;font-weight:600;color:var(--sleep)">Sleep</span><span class="cap" style="color:var(--t2)">Last night</span></div>
+        <div class="num mt8" style="font-size:30px;font-weight:600;letter-spacing:-1px">7h 42m</div>
+        <svg class="line" data-c="--sleep" data-v="7.1,6.8,7.4,7.6,6.9,7.2,7.7" width="134" height="50" style="margin-top:6px"></svg>
+      </div><div class="wlabel">NOOP</div>
+    </div>
+    <div>
+      <div class="wg s">
+        <div class="row sp"><span style="font-size:13px;font-weight:600;color:var(--strain)">Strain</span><span class="cap" style="color:var(--t2)">Live</span></div>
+        <div class="num mt8" style="font-size:40px;font-weight:600;letter-spacing:-1px;color:var(--strain)">11.4</div>
+        <div class="fn">Target 12–15</div>
+        <div class="bar" style="margin-top:12px;height:8px"><b style="width:54%;background:var(--strain)"></b></div>
+      </div><div class="wlabel">NOOP</div>
+    </div>
+  </div>
+  <div class="wrap mt24"><div class="fn" style="color:rgba(255,255,255,.7);padding:0 4px 10px;font-weight:600">LOCK SCREEN</div>
+    <div class="row gap12" style="justify-content:center">
+      <div class="lock" style="width:64px;height:64px;display:grid;place-items:center"><div class="ring" data-size="56" data-sw="10" data-p="68" data-c="#FFFFFF" data-label="68" data-fs="28"></div></div>
+      <div class="lock" style="width:64px;height:64px;display:grid;place-items:center"><div class="ring" data-size="56" data-sw="10" data-p="54" data-c="#FFFFFF" data-label="11.4" data-fs="24"></div></div>
+      <div class="lock" style="border-radius:20px;height:64px;padding:10px 14px;flex:1"><div style="font-size:13px;font-weight:600">Recovery 68%</div><div style="font-size:13px;color:rgba(255,255,255,.7)">HRV 62 · Sleep 7h 42m</div></div>
+    </div>
+  </div>
+</div></section>
+
+</div>
+<script src="../system/noop.js"></script>
+<script>boot()</script>
+</body>
+</html>

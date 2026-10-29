@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP Sleep and Health</title>
+<link rel="stylesheet" href="../system/noop.css">
+<style>
+.day{flex:1;text-align:center;padding:10px 0;border-radius:14px;background:rgba(255,255,255,.04)}
+.day b{display:block;font-size:12px;color:var(--t2);font-weight:600}
+.day span{display:block;font-size:13px;font-weight:600;margin-top:4px}
+.day.ov{background:rgba(143,125,255,.18)}
+.day.ov b{color:var(--sleep)}
+.mini{background:var(--card);border:1px solid rgba(255,255,255,.05);border-radius:20px;padding:14px 14px 0;position:relative;overflow:hidden;min-height:132px}
+.mini .chart{position:absolute;left:0;right:0;bottom:0}
+.jt{border-radius:18px;padding:14px;background:var(--card);border:1px solid rgba(255,255,255,.05);min-height:104px;display:flex;flex-direction:column;justify-content:space-between}
+.jt.on{background:rgba(143,125,255,.16);border-color:rgba(143,125,255,.4)}
+.eff{display:grid;grid-template-columns:136px 1fr 48px;gap:10px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.eff:first-child{border-top:0}
+.div{position:relative;height:10px}
+.div{background:linear-gradient(90deg,transparent calc(50% - .5px),rgba(255,255,255,.22) calc(50% - .5px),rgba(255,255,255,.22) calc(50% + .5px),transparent calc(50% + .5px))}
+.div i{position:absolute;top:0;bottom:0;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="controls"><button id="replay">Replay load</button><span>Batch 3 · Sleep and Health</span></div>
+<div class="board">
+
+<!-- ================= C1 ALARMS ================= -->
+<section><div class="board-title">C1 · Alarm</div>
+<div class="screen" data-ambient='[["--sleep",90,20,260,0.42],["--temp",390,110,200,0.26]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl"></div><div style="width:40px"></div></div>
+  <div class="wrap"><div class="lt">Alarm</div><div class="sub">A silent buzz from your strap</div></div>
+  <div class="wrap mt20"><div class="card" style="text-align:center;padding:24px 18px">
+    <div class="fn">Tomorrow, Thu</div>
+    <div class="num" style="font-size:80px;font-weight:300;letter-spacing:-3px;line-height:1.05">6:45<span style="font-size:24px;font-weight:500;letter-spacing:0;margin-left:6px">AM</span></div>
+    <div class="row gap6 mt8" style="justify-content:center"><span style="color:var(--recovery);display:inline-flex" data-ic="check" data-s="16"></span><span class="fn">Armed on strap · checked 9:12 PM</span></div>
+  </div></div>
+  <div class="wrap mt12"><div class="card" style="padding:2px 18px">
+    <div class="lrow"><div class="grow1"><div class="t">Wake me with a strap buzz</div><div class="d">Vibration only, no sound</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">Your usual wake time</span><span class="val">6:45 AM</span><span data-ic="chev-r" data-s="16"></span></div>
+    <div class="lrow"><span class="t grow1">Different wake time per day</span><span class="toggle on"></span></div>
+  </div></div>
+  <div class="sec"><h3>This week</h3><a>Tap a day to change it</a></div>
+  <div class="wrap row gap6">
+    <div class="day"><b>M</b><span>6:45</span></div><div class="day"><b>T</b><span>6:45</span></div><div class="day"><b>W</b><span>6:45</span></div><div class="day" style="background:rgba(255,255,255,.12)"><b style="color:var(--t1)">T</b><span>6:45</span></div><div class="day"><b>F</b><span>6:45</span></div><div class="day ov"><b>S</b><span>8:30</span></div><div class="day ov"><b>S</b><span>8:30</span></div>
+  </div>
+  <div class="sec"><h3>Evening</h3></div>
+  <div class="wrap"><div class="card" style="padding:2px 18px">
+    <div class="lrow"><div class="grow1"><div class="t">Remind me to wind down</div><div class="d">A nudge 45 min before your sleep need starts</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><span class="t grow1">Tonight's nudge</span><span class="val">10:35 PM</span></div>
+  </div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= C2 TRENDS ================= -->
+<section><div class="board-title">C2 · Trends</div>
+<div class="screen" data-ambient="today:86,68,11.4">
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl"></div><div class="ibtn" data-ic="upload" data-s="20"></div></div>
+  <div class="wrap"><div class="lt">Trends</div></div>
+  <div class="wrap mt12"><div class="seg"><span>W</span><span class="on">M</span><span>6M</span><span>Y</span></div></div>
+  <div class="wrap mt16"><div class="card" style="padding:18px 8px 12px">
+    <div class="row sp" style="padding:0 10px;align-items:baseline"><div><div class="fn" style="color:var(--recovery);font-weight:600">Recovery</div><div class="num" style="font-size:34px;font-weight:600;letter-spacing:-1px">59<span class="unit">% avg</span></div></div><span class="fn" style="color:var(--recovery)">+4 vs Sep</span></div>
+    <svg class="line mt8" data-c="--recovery" data-v="54,56,55,58,57,55,53,55,57,60,59,58,60,61,59,58,57,59,61,62,61,63,62,60,61,63,64,63,66,68" width="354" height="120"></svg>
+    <div class="row sp" style="padding:4px 6px 0"><span class="cap">30 Sep</span><span class="cap">15 Oct</span><span class="cap">Today</span></div>
+  </div></div>
+  <div class="wrap grid2 mt12">
+    <div class="mini"><div class="fn" style="color:var(--hrv);font-weight:600">HRV</div><div class="num" style="font-size:24px;font-weight:600">56<span class="unit">ms</span></div><svg class="line chart" data-c="--hrv" data-v="51,50,52,53,51,49,52,54,53,55,56,55,57,58,60,62" width="179" height="62"></svg></div>
+    <div class="mini"><div class="fn" style="color:var(--heart);font-weight:600">Resting HR</div><div class="num" style="font-size:24px;font-weight:600">53<span class="unit">bpm</span></div><svg class="line chart" data-c="--heart" data-v="56,55,55,54,56,54,53,54,53,52,53,54,52,52,53,52" width="179" height="62"></svg></div>
+    <div class="mini"><div class="fn" style="color:var(--strain);font-weight:600">Strain</div><div class="num" style="font-size:24px;font-weight:600">10.2<span class="unit">avg</span></div><svg class="line chart" data-c="--strain" data-v="8,12,6,14,9,11,7,13,10,8,15,6,9,12,17,11" width="179" height="62"></svg></div>
+    <div class="mini"><div class="fn" style="color:var(--sleep);font-weight:600">Sleep</div><div class="num" style="font-size:24px;font-weight:600">7h 21m<span class="unit">avg</span></div><svg class="line chart" data-c="--sleep" data-v="7.1,6.8,7.4,7.6,6.9,7.2,7.5,7.8,7.0,7.3,7.4,7.1,7.6,7.7,7.5,7.7" width="179" height="62"></svg></div>
+  </div>
+  <div class="sec"><h3>Week in review</h3><a>20–26 Oct<span class="chev">›</span></a></div>
+  <div class="wrap"><div class="card">
+    <div class="rings" data-s="84" data-r="63" data-st="10.8" data-size="72"></div>
+    <div class="body mt16" style="font-size:15px;line-height:21px">Your most consistent week of sleep since August. Strain was steady; Recovery held in the green on four days.</div>
+  </div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= C3 STRESS ================= -->
+<section><div class="board-title">C3 · Stress</div>
+<div class="screen" data-ambient='[["--stress",120,20,240,0.32],["--breath",400,140,190,0.22]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl"></div><div class="ibtn" data-ic="info" data-s="22"></div></div>
+  <div class="wrap"><div class="lt">Stress</div><div class="sub">Load on your nervous system while awake</div></div>
+  <div class="wrap mt20"><div class="card">
+    <div class="row sp" style="align-items:flex-end"><div><div class="fn">Right now</div><div class="num" style="font-size:52px;font-weight:600;letter-spacing:-2px;line-height:1.05"><span data-count="0.8" data-dec="1">0.8</span><span class="unit" style="font-size:18px">of 3</span></div></div><span class="h2" style="color:var(--recovery)">Low</span></div>
+    <div style="position:relative;margin-top:16px;height:10px;border-radius:5px;background:linear-gradient(90deg,var(--recovery),var(--rec-mid) 55%,var(--rec-low))">
+      <div style="position:absolute;left:calc(27% - 9px);top:-4px;width:18px;height:18px;border-radius:50%;background:#fff;border:4px solid #1A1A1E"></div>
+    </div>
+    <div class="row sp mt8"><span class="cap">Calm</span><span class="cap">Elevated</span><span class="cap">High</span></div>
+  </div></div>
+  <div class="sec"><h3>Today</h3><a>Avg 1.1</a></div>
+  <div class="wrap"><div class="card" style="padding:16px 8px 12px">
+    <svg class="line" data-c="--stress" data-min="0" data-max="3" data-v="0.6,0.7,1.1,1.4,1.2,1.0,1.3,1.8,2.1,1.9,1.4,1.1,0.9,1.2,1.0,0.8" width="354" height="120"></svg>
+    <div class="row sp" style="padding:4px 6px 0"><span class="cap">7 AM</span><span class="cap">11 AM</span><span class="cap">3 PM</span><span class="cap">Now</span></div>
+    <div class="row gap10" style="padding:14px 10px 2px;border-top:1px solid var(--line);margin-top:12px"><span class="dot" style="background:var(--stress)"></span><span class="fn grow1">Highest at 2:40 PM · 2.1</span><span class="fn">Add a note</span></div>
+  </div></div>
+  <div class="wrap mt12"><div class="card row gap12" style="background:linear-gradient(150deg,rgba(54,211,191,.2),rgba(26,26,30,.74) 70%)">
+    <div class="icon" style="background:rgba(54,211,191,.2);color:var(--breath)" data-ic="wind" data-s="22"></div>
+    <div class="grow1"><div class="lbl">Take three minutes</div><div class="fn">Slow breathing brings stress down fastest</div></div>
+    <span data-ic="chev-r" data-s="16" style="color:var(--t3)"></span>
+  </div></div>
+  <div class="sec"><h3>Last 14 days</h3></div>
+  <div class="wrap"><div class="card"><svg class="cbars" data-c="--stress" data-max="3" data-v="1.2,1.4,0.9,1.6,1.8,1.1,0.8,1.0,1.3,1.5,1.2,0.9,1.4,1.1" width="334" height="70" data-bw="14"></svg></div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= C4 BREATHE ================= -->
+<section><div class="board-title">C4 · Breathe</div>
+<div class="screen" data-ambient='[["--breath",201,300,320,0.42],["--hrv",60,40,200,0.22]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="x" data-s="20"></div><div class="ttl">Breathe</div><div class="ibtn" data-ic="sliders" data-s="20"></div></div>
+  <div class="motion" style="position:relative;height:360px;display:grid;place-items:center;margin-top:10px">
+    <div class="breathe" style="position:absolute;width:270px;height:270px;border-radius:50%;background:radial-gradient(circle,rgba(54,211,191,.42),rgba(54,211,191,.08) 70%);border:1px solid rgba(54,211,191,.45)"></div>
+    <div class="breathe" style="position:absolute;width:190px;height:190px;border-radius:50%;background:radial-gradient(circle,rgba(71,200,245,.45),rgba(71,200,245,.1) 70%);animation-delay:.25s"></div>
+    <div style="position:relative;text-align:center"><div class="h1">Breathe in</div><div class="fn mt8">4 seconds</div></div>
+  </div>
+  <div class="wrap" style="text-align:center"><div class="num" style="font-size:20px;font-weight:600">6 breaths a minute</div><div class="fn mt8">Your locked pace · found 12 Oct</div></div>
+  <div class="wrap row gap8 mt20" style="justify-content:center;flex-wrap:wrap">
+    <span class="chip" style="background:#F5F5F7;color:#000">Calm me · 3 min</span><span class="chip">Quick sweep · 7 min</span><span class="chip">Full sweep · 13 min</span>
+  </div>
+  <div class="wrap mt20"><div class="card" style="padding:2px 18px">
+    <div class="lrow"><div class="grow1"><div class="t">Audio cues</div><div class="d">Soft tone on each phase · respects silent mode</div></div><span class="toggle on"></span></div>
+    <div class="lrow"><div class="grow1"><div class="t">Strap buzz on each phase</div></div><span class="toggle"></span></div>
+  </div></div>
+  <div class="dock"><div class="btn primary"><span data-ic="play" data-s="18"></span>Start</div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= C5 JOURNAL ================= -->
+<section><div class="board-title">C5 · Journal</div>
+<div class="screen" data-ambient='[["--sleep",120,0,240,0.34],["--coach",400,100,180,0.2]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl"></div><span style="font-size:17px;font-weight:600;padding-right:4px">Done</span></div>
+  <div class="wrap"><div class="lt">Journal</div><div class="sub">Tonight, Wed 29 Oct · 4 of 8 answered</div></div>
+  <div class="wrap mt16"><div class="bar" style="height:6px"><b class="grow" style="width:50%;background:var(--sleep)"></b></div></div>
+  <div class="wrap grid2 mt20">
+    <div class="jt on"><span data-ic="cup" data-s="24" style="color:var(--sleep)"></span><div><div class="lbl">Caffeine after 2 PM</div><div class="fn" style="color:var(--sleep);font-weight:600">Yes</div></div></div>
+    <div class="jt"><span data-ic="wine" data-s="24" style="color:var(--t2)"></span><div><div class="lbl">Alcohol</div><div class="fn">No</div></div></div>
+    <div class="jt"><span data-ic="fork" data-s="24" style="color:var(--t2)"></span><div><div class="lbl">Late meal</div><div class="fn">No</div></div></div>
+    <div class="jt on"><span data-ic="phone" data-s="24" style="color:var(--sleep)"></span><div><div class="lbl">Screen in bed</div><div class="fn" style="color:var(--sleep);font-weight:600">Yes</div></div></div>
+    <div class="jt"><span data-ic="wind" data-s="24" style="color:var(--t3)"></span><div><div class="lbl">Stretching</div><div class="fn" style="color:var(--t3)">Not answered</div></div></div>
+    <div class="jt"><span data-ic="sun" data-s="24" style="color:var(--t3)"></span><div><div class="lbl">Morning light</div><div class="fn" style="color:var(--t3)">Not answered</div></div></div>
+  </div>
+  <div class="wrap mt12"><div class="card row sp">
+    <div class="row gap12"><span data-ic="drop" data-s="24" style="color:var(--hrv)"></span><div><div class="lbl">Water</div><div class="fn">Glasses today</div></div></div>
+    <div class="row gap12"><div class="ibtn" style="width:34px;height:34px">−</div><span class="num" style="font-size:24px;font-weight:600">6</span><div class="ibtn" style="width:34px;height:34px" data-ic="plus" data-s="16"></div></div>
+  </div></div>
+  <div class="wrap mt12"><div class="card">
+    <div class="lbl">How stressed did you feel?</div>
+    <div class="row gap8 mt12"><span class="chip grow1" style="justify-content:center">1</span><span class="chip grow1" style="justify-content:center;background:rgba(143,125,255,.3)">2</span><span class="chip grow1" style="justify-content:center">3</span><span class="chip grow1" style="justify-content:center">4</span><span class="chip grow1" style="justify-content:center">5</span></div>
+  </div></div>
+  <div class="fn" style="padding:14px 20px 0">Answers feed What moves you. They stay on this iPhone.</div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= C6 WHAT MOVES YOU ================= -->
+<section><div class="board-title">C6 · What moves you</div>
+<div class="screen" data-ambient='[["--recovery",120,10,250,0.34],["--rec-low",400,150,170,0.2]]'>
+  <div class="sb"></div>
+  <div class="navbar"><div class="ibtn" data-ic="chev-l" data-s="22"></div><div class="ttl"></div><div class="ibtn" data-ic="info" data-s="22"></div></div>
+  <div class="wrap"><div class="lt" style="font-size:30px;line-height:36px">What moves your Recovery</div><div class="sub mt8">From 94 nights of your own data</div></div>
+  <div class="wrap mt16"><div class="seg"><span class="on">Recovery</span><span>Sleep</span><span>HRV</span></div></div>
+  <div class="wrap mt16"><div class="card" style="padding:6px 18px">
+    <div class="eff"><div><div class="lbl">8+ hours asleep</div><div class="cap">Strong · 31 nights</div></div><div class="div"><i class="grow" style="left:50%;width:30%;background:var(--recovery)"></i></div><span class="num lbl" style="text-align:right;color:var(--recovery)">+11%</span></div>
+    <div class="eff"><div><div class="lbl">Stretching</div><div class="cap">Early · 9 nights</div></div><div class="div"><i class="grow" style="left:50%;width:8%;background:var(--recovery);opacity:.6"></i></div><span class="num lbl" style="text-align:right;color:var(--recovery)">+3%</span></div>
+    <div class="eff"><div><div class="lbl">Caffeine after 2 PM</div><div class="cap">Likely · 22 nights</div></div><div class="div"><i class="grow" style="left:39%;width:11%;background:var(--rec-mid)"></i></div><span class="num lbl" style="text-align:right;color:var(--rec-mid)">−4%</span></div>
+    <div class="eff"><div><div class="lbl">Late meal</div><div class="cap">Likely · 17 nights</div></div><div class="div"><i class="grow" style="left:34%;width:16%;background:var(--rec-mid)"></i></div><span class="num lbl" style="text-align:right;color:var(--rec-mid)">−6%</span></div>
+    <div class="eff"><div><div class="lbl">Alcohol</div><div class="cap">Strong · 12 nights</div></div><div class="div"><i class="grow" style="left:12%;width:38%;background:var(--rec-low)"></i></div><span class="num lbl" style="text-align:right;color:var(--rec-low)">−14%</span></div>
+  </div></div>
+  <div class="fn" style="padding:12px 20px 0">Average next-morning change versus nights without it. A pattern in your data, not proof of cause.</div>
+  <div class="sec"><h3>Try an experiment</h3></div>
+  <div class="wrap"><div class="card" style="background:linear-gradient(150deg,rgba(200,168,255,.2),rgba(26,26,30,.74) 70%)">
+    <div class="lbl" style="font-size:17px">No caffeine after 2 PM for 14 days</div>
+    <div class="fn mt8">NOOP compares your Recovery before and after, using only your own nights.</div>
+    <div class="btn secondary mt16" style="height:44px;font-size:15px">Start experiment</div>
+  </div></div>
+  <div class="home"></div>
+</div></section>
+
+</div>
+<script src="../system/noop.js"></script>
+<script>boot()</script>
+</body>
+</html>

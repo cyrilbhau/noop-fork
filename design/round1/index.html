@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP Round One</title>
+<style>
+/* ---------- Foundations (proposed tokens) ---------- */
+:root{
+  --bg:#000000;
+  --card:#131315;
+  --card2:#1C1C1F;
+  --track:rgba(255,255,255,.08);
+  --line:rgba(255,255,255,.07);
+  --t1:#F5F5F7; --t2:#98989F; --t3:#5D5D64;
+
+  --recovery:#2FD27A; --rec-mid:#FFC83D; --rec-low:#FF5A4F;
+  --strain:#3A9BFF;
+  --sleep:#8F7DFF;
+  --heart:#FF4D6B;
+  --hrv:#47C8F5;
+  --breath:#36D3BF;
+  --temp:#FF9F45;
+  --lift:#FF8A3D;
+
+  --st-awake:#C9C9D1; --st-rem:#6FD3FF; --st-light:#8F7DFF; --st-deep:#4A3AD0;
+
+  --r-card:22px; --r-tile:18px; --gutter:16px; --gap:12px;
+  --font:-apple-system,"SF Pro Text","SF Pro Display",system-ui,"Helvetica Neue",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0B0B0D;color:var(--t1);font-family:var(--font);-webkit-font-smoothing:antialiased;padding:48px}
+.board{display:flex;gap:56px;align-items:flex-start;flex-wrap:wrap}
+.board-title{font-size:13px;color:var(--t2);margin-bottom:10px;letter-spacing:.02em}
+.screen{width:402px;min-height:874px;background:var(--bg);border-radius:0;position:relative;overflow:hidden;padding-bottom:120px}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* status bar */
+.sb{height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 8px 44px;font-weight:600;font-size:17px}
+.sb svg{display:block}
+
+/* headers */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:10px var(--gutter) 0}
+.lt{font-size:34px;font-weight:700;letter-spacing:-.6px;line-height:41px}
+.sub{font-size:15px;color:var(--t2);margin-top:2px}
+.ibtn{width:40px;height:40px;border-radius:50%;background:var(--card2);display:grid;place-items:center;flex:none}
+.row{display:flex;align-items:center}
+.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}
+.navbar{display:flex;align-items:center;justify-content:space-between;padding:6px var(--gutter) 0;height:52px}
+.navbar .ttl{font-size:17px;font-weight:600}
+
+/* cards */
+.wrap{padding:0 var(--gutter)}
+.card{background:var(--card);border-radius:var(--r-card);padding:18px}
+.stack>*+*{margin-top:var(--gap)}
+.sec{display:flex;justify-content:space-between;align-items:baseline;padding:26px 20px 10px}
+.sec h3{font-size:20px;font-weight:600;letter-spacing:-.3px}
+.sec a{font-size:15px;color:var(--t2);text-decoration:none}
+.cap{font-size:12px;color:var(--t3)}
+.fn{font-size:13px;color:var(--t2)}
+.lbl{font-size:15px;font-weight:600}
+.chev{color:var(--t3);font-weight:600;margin-left:4px}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--card2);font-size:13px;font-weight:600;color:var(--t1)}
+.dot{width:7px;height:7px;border-radius:50%}
+
+/* metric rows */
+.mrow{display:grid;grid-template-columns:1fr auto 64px;align-items:center;gap:12px;padding:13px 0;border-top:1px solid var(--line)}
+.mrow:first-child{border-top:0;padding-top:2px}
+.mrow:last-child{padding-bottom:2px}
+.mrow .k{font-size:15px;font-weight:600}
+.mrow .s{font-size:12px;color:var(--t2);margin-top:2px}
+.mrow .v{font-size:22px;font-weight:600;text-align:right}
+.mrow .v small{font-size:13px;color:var(--t2);font-weight:500;margin-left:2px}
+
+/* tab bar */
+.tabbar{position:absolute;left:16px;right:16px;bottom:24px;display:flex;gap:10px;align-items:center}
+.tabs{flex:1;height:62px;border-radius:999px;background:rgba(28,28,31,.86);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;padding:4px}
+.tab{flex:1;height:54px;border-radius:999px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10px;font-weight:600;color:var(--t2)}
+.tab.on{background:rgba(255,255,255,.1);color:var(--t1)}
+.coachbtn{width:62px;height:62px;border-radius:50%;background:rgba(28,28,31,.86);border:1px solid rgba(255,255,255,.08);display:grid;place-items:center}
+.home{position:absolute;bottom:8px;left:50%;width:134px;height:5px;border-radius:3px;background:#fff;transform:translateX(-50%)}
+
+/* tiles */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+.tile{background:var(--card);border-radius:var(--r-tile);padding:16px;min-height:150px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.tile .t{font-size:15px;font-weight:600}
+.tile .big{font-size:40px;font-weight:600;letter-spacing:-1.2px;line-height:1}
+.tile .big small{font-size:15px;color:var(--t2);font-weight:500;letter-spacing:0;margin-left:3px}
+.tint{position:absolute;inset:0;pointer-events:none;opacity:.9}
+
+.src{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--t2)}
+.src i{width:5px;height:5px;border-radius:50%;background:var(--t3);display:inline-block}
+.bar{height:6px;border-radius:3px;background:var(--track);position:relative;overflow:hidden}
+.bar>b{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- Shared SVG symbols -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-signal" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="#fff"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="#fff"/><rect x="10" y="3" width="3" height="9" rx="1" fill="#fff"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#fff"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 16 12"><path d="M8 11.5l2.2-2.6a3.2 3.2 0 0 0-4.4 0zM8 4.2a7 7 0 0 1 4.9 2l1.4-1.6A9.2 9.2 0 0 0 8 2a9.2 9.2 0 0 0-6.3 2.6l1.4 1.6A7 7 0 0 1 8 4.2z" fill="#fff"/></symbol>
+    <symbol id="i-batt" viewBox="0 0 27 13"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="#fff" stroke-opacity=".4"/><rect x="2" y="2" width="18" height="9" rx="2" fill="#fff"/><path d="M25 4.5v4a2 2 0 0 0 0-4z" fill="#fff" fill-opacity=".4"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M12 11v6M12 7.5v.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 8h9M17 8h3M4 16h3M11 16h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M15 5.5v5M9 13.5v5" stroke="#fff" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6" fill="none" stroke="#fff" stroke-width="1.9"/><path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-today" viewBox="0 0 24 24"><circle cx="7" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-dumbbell" viewBox="0 0 24 24"><path d="M3.5 9.5v5M7 7v10M17 7v10M20.5 9.5v5M7 12h10" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20C12 20 4.5 15.6 4.5 10C4.5 7.6 6.4 5.8 8.6 5.8C10.1 5.8 11.3 6.6 12 7.6C12.7 6.6 13.9 5.8 15.4 5.8C17.6 5.8 19.5 7.6 19.5 10C19.5 15.6 12 20 12 20Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-heart-f" viewBox="0 0 24 24"><path d="M12 20C12 20 4.5 15.6 4.5 10C4.5 7.6 6.4 5.8 8.6 5.8C10.1 5.8 11.3 6.6 12 7.6C12.7 6.6 13.9 5.8 15.4 5.8C17.6 5.8 19.5 7.6 19.5 10C19.5 15.6 12 20 12 20Z" fill="currentColor"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="currentColor"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><polyline points="7.5,12.3 10.5,15.3 16.5,9" fill="none" stroke="#000" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-run" viewBox="0 0 24 24"><circle cx="14.5" cy="4.8" r="2" fill="currentColor"/><path d="M8 21l3-6 3 2.5V22M6.5 11.5l3-3.5h4l2.5 4 3 1M11 8l-1.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bike" viewBox="0 0 24 24"><circle cx="6" cy="16" r="3.6" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="18" cy="16" r="3.6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M6 16l4-7h5l3 7M10 9l2.5 7H6M14 6h2.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M9 3.5h6v3H9zM8.5 11h7M8.5 15h5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-strap" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M10 9h4M10 12h4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="board" id="board">
+
+<!-- ================================================================ 1. TODAY -->
+<section>
+<div class="board-title">01 · Today</div>
+<div class="screen" id="screen-today">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+
+  <div class="hdr">
+    <div>
+      <div class="lt">Today</div>
+      <div class="sub row gap8"><span>Wed, 29 Oct</span></div>
+    </div>
+    <div class="row gap10">
+      <div class="pill"><span class="dot" style="background:var(--recovery)"></span><span class="num">84%</span></div>
+      <div class="ibtn"><svg width="22" height="22"><use href="#i-person"/></svg></div>
+    </div>
+  </div>
+
+  <!-- three rings -->
+  <div class="wrap" style="margin-top:20px">
+    <div class="card" style="padding:22px 14px 18px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);text-align:center">
+        <div>
+          <svg width="96" height="96" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="50" cy="50" r="44" fill="none" stroke="var(--sleep)" stroke-width="7" stroke-linecap="round" pathLength="100" stroke-dasharray="86 100" transform="rotate(-90 50 50)"/><text x="50" y="57" text-anchor="middle" fill="#F5F5F7" font-size="24" font-weight="600" font-family="-apple-system,system-ui">86<tspan font-size="13" fill="#98989F">%</tspan></text></svg>
+          <div class="lbl" style="margin-top:8px">Sleep</div>
+          <div class="cap" style="margin-top:2px;color:var(--t2)">7h 42m</div>
+        </div>
+        <div>
+          <svg width="96" height="96" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="50" cy="50" r="44" fill="none" stroke="var(--recovery)" stroke-width="7" stroke-linecap="round" pathLength="100" stroke-dasharray="68 100" transform="rotate(-90 50 50)"/><text x="50" y="57" text-anchor="middle" fill="#F5F5F7" font-size="24" font-weight="600" font-family="-apple-system,system-ui">68<tspan font-size="13" fill="#98989F">%</tspan></text></svg>
+          <div class="lbl" style="margin-top:8px">Recovery</div>
+          <div class="cap" style="margin-top:2px;color:var(--recovery)">Recovered</div>
+        </div>
+        <div>
+          <svg width="96" height="96" viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="50" cy="50" r="44" fill="none" stroke="var(--strain)" stroke-width="7" stroke-linecap="round" pathLength="100" stroke-dasharray="54 100" transform="rotate(-90 50 50)"/><text x="50" y="57" text-anchor="middle" fill="#F5F5F7" font-size="24" font-weight="600" font-family="-apple-system,system-ui">11.4</text></svg>
+          <div class="lbl" style="margin-top:8px">Strain</div>
+          <div class="cap" style="margin-top:2px;color:var(--t2)">of 21</div>
+        </div>
+      </div>
+      <div style="height:1px;background:var(--line);margin:18px 4px 16px"></div>
+      <div style="padding:0 4px">
+        <div style="font-size:20px;font-weight:600;letter-spacing:-.3px">Good day to push</div>
+        <div style="font-size:15px;color:var(--t2);line-height:21px;margin-top:4px">HRV is 7 ms above your baseline and you covered 86% of your sleep need. Aim for Strain 12–15.</div>
+        <div class="src" style="margin-top:12px"><i></i>Computed on iPhone · synced 6:12 AM</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- live HR -->
+  <div class="sec"><h3>Heart rate</h3><a>Live<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div class="row gap8" style="color:var(--heart)"><svg width="16" height="16"><use href="#i-heart-f"/></svg><span style="font-size:13px;font-weight:600">Now</span></div>
+          <div class="num" style="font-size:44px;font-weight:600;letter-spacing:-1.5px;margin-top:4px">74<span style="font-size:15px;color:var(--t2);font-weight:500;letter-spacing:0;margin-left:4px">BPM</span></div>
+        </div>
+        <div style="text-align:right">
+          <div class="fn">Today</div>
+          <div class="num" style="font-size:15px;font-weight:600">48–142</div>
+        </div>
+      </div>
+      <svg id="hrbars" width="334" height="64" style="display:block;margin-top:12px"></svg>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><span class="cap">12 AM</span><span class="cap">6 AM</span><span class="cap">12 PM</span><span class="cap">Now</span></div>
+    </div>
+  </div>
+
+  <!-- key metrics -->
+  <div class="sec"><h3>Key metrics</h3><a>Edit</a></div>
+  <div class="wrap">
+    <div class="card" style="padding:14px 18px">
+      <div class="mrow"><div><div class="k" style="color:var(--hrv)">HRV</div><div class="s">7-day avg 55 ms</div></div><div class="v num">62<small>ms</small></div><svg class="spark" data-c="var(--hrv)" data-v="50,54,51,58,55,57,62" width="64" height="28"></svg></div>
+      <div class="mrow"><div><div class="k" style="color:var(--heart)">Resting heart rate</div><div class="s">Typical</div></div><div class="v num">52<small>bpm</small></div><svg class="spark" data-c="var(--heart)" data-v="55,54,53,54,52,53,52" width="64" height="28"></svg></div>
+      <div class="mrow"><div><div class="k" style="color:var(--breath)">Respiratory rate</div><div class="s">Typical</div></div><div class="v num">14.8<small>rpm</small></div><svg class="spark" data-c="var(--breath)" data-v="15,14.7,14.9,15.1,14.8,14.9,14.8" width="64" height="28"></svg></div>
+      <div class="mrow"><div><div class="k" style="color:var(--lift)">Steps</div><div class="s">Estimated from strap</div></div><div class="v num">~6,240</div><svg class="spark" data-c="var(--lift)" data-v="8,6,9,4,7,10,6" data-bars="1" width="64" height="28"></svg></div>
+    </div>
+  </div>
+
+  <!-- today's training -->
+  <div class="sec"><h3>Activity</h3><a>Training<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card row gap12" style="padding:14px 16px">
+      <div style="width:44px;height:44px;border-radius:14px;background:rgba(255,138,61,.14);color:var(--lift);display:grid;place-items:center"><svg width="24" height="24"><use href="#i-dumbbell"/></svg></div>
+      <div style="flex:1">
+        <div class="lbl">Push day</div>
+        <div class="fn">6:40 PM · 52 min · 21 sets</div>
+      </div>
+      <div style="text-align:right"><div class="num" style="font-size:20px;font-weight:600;color:var(--strain)">9.8</div><div class="cap">Strain</div></div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tabs">
+      <div class="tab on"><svg width="24" height="24"><use href="#i-today"/></svg>Today</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-moon"/></svg>Sleep</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-dumbbell"/></svg>Training</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-heart"/></svg>Health</div>
+    </div>
+    <div class="coachbtn" style="color:var(--t1)"><svg width="26" height="26"><use href="#i-spark"/></svg></div>
+  </div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 2. RECOVERY DETAIL -->
+<section>
+<div class="board-title">02 · Recovery</div>
+<div class="screen" id="screen-recovery">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+  <div class="navbar">
+    <div class="ibtn"><svg width="22" height="22"><use href="#i-chev-l"/></svg></div>
+    <div class="ttl">Wed, 29 Oct</div>
+    <div class="ibtn"><svg width="22" height="22"><use href="#i-info"/></svg></div>
+  </div>
+
+  <!-- arc gauge -->
+  <div style="position:relative;height:250px;margin-top:14px">
+    <svg width="402" height="250" viewBox="0 0 402 250" style="position:absolute;inset:0">
+      <defs><radialGradient id="glowRec" cx="50%" cy="55%" r="50%"><stop offset="0" stop-color="#2FD27A" stop-opacity=".16"/><stop offset="1" stop-color="#2FD27A" stop-opacity="0"/></radialGradient></defs>
+      <ellipse cx="201" cy="150" rx="190" ry="130" fill="url(#glowRec)"/>
+      <circle cx="201" cy="150" r="112" fill="none" stroke="var(--track)" stroke-width="22" stroke-linecap="round" pathLength="100" stroke-dasharray="66 100" transform="rotate(150 201 150)"/>
+      <circle cx="201" cy="150" r="112" fill="none" stroke="var(--recovery)" stroke-width="22" stroke-linecap="round" pathLength="100" stroke-dasharray="44.9 100" transform="rotate(150 201 150)"/>
+      <!-- knob at 68% of 240deg sweep -->
+      <circle id="knob" r="7" fill="#fff"/>
+    </svg>
+    <div style="position:absolute;left:0;right:0;top:92px;text-align:center">
+      <div class="num" style="font-size:84px;font-weight:700;letter-spacing:-4px;line-height:1;color:var(--recovery)">68<span style="font-size:30px;letter-spacing:0">%</span></div>
+      <div style="font-size:13px;font-weight:600;color:var(--t2);margin-top:6px;letter-spacing:.06em">RECOVERY</div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:4px">
+    <div style="font-size:30px;font-weight:700;letter-spacing:-.6px">Recovered</div>
+    <div style="font-size:17px;color:var(--t2);line-height:24px;margin-top:6px">Your nervous system bounced back well overnight. HRV is above baseline and resting heart rate is steady. You can take on a harder session today.</div>
+    <div class="src" style="margin-top:12px"><i></i>NOOP score · computed on iPhone</div>
+  </div>
+
+  <div class="sec" style="padding-top:30px"><h3>What shaped it</h3></div>
+  <div class="wrap">
+    <div class="card" style="padding:6px 18px">
+      <div class="contrib" style="padding:14px 0;border-bottom:1px solid var(--line)">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--recovery)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--hrv)">Heart rate variability</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">62 <span class="fn">ms</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">Above your usual range</div>
+        <div class="range" data-lo="46" data-hi="60" data-min="35" data-max="75" data-v="62" data-c="var(--hrv)" style="margin-left:24px"></div>
+      </div>
+      <div class="contrib" style="padding:14px 0;border-bottom:1px solid var(--line)">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--recovery)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--heart)">Resting heart rate</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">52 <span class="fn">bpm</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">Typical</div>
+        <div class="range" data-lo="50" data-hi="56" data-min="44" data-max="64" data-v="52" data-c="var(--heart)" style="margin-left:24px"></div>
+      </div>
+      <div class="contrib" style="padding:14px 0;border-bottom:1px solid var(--line)">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--recovery)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--sleep)">Sleep performance</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">86<span class="fn">%</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">7h 42m of 8h 58m needed</div>
+        <div class="bar" style="margin-left:24px"><b style="width:86%;background:var(--sleep)"></b></div>
+      </div>
+      <div class="contrib" style="padding:14px 0">
+        <div class="row" style="justify-content:space-between">
+          <div class="row gap8"><svg width="16" height="16" style="color:var(--t3)"><use href="#i-check"/></svg><span style="font-size:15px;font-weight:600;color:var(--breath)">Respiratory rate</span><span class="chev">›</span></div>
+          <span class="num" style="font-size:17px;font-weight:600">14.8 <span class="fn">rpm</span></span>
+        </div>
+        <div class="fn" style="margin:4px 0 10px 24px">Typical · not part of the score</div>
+        <div class="range" data-lo="14.2" data-hi="15.4" data-min="12" data-max="18" data-v="14.8" data-c="var(--breath)" style="margin-left:24px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Last 30 days</h3><a>Trends<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div><span class="num" id="recavg" style="font-size:28px;font-weight:600">–</span> <span class="fn">avg</span></div>
+        <div class="row gap10 cap"><span class="row gap8"><span class="dot" style="background:var(--recovery)"></span><span id="rc-g"></span> green</span><span class="row gap8"><span class="dot" style="background:var(--rec-mid)"></span><span id="rc-y"></span> yellow</span><span class="row gap8"><span class="dot" style="background:var(--rec-low)"></span><span id="rc-r"></span> red</span></div>
+      </div>
+      <svg id="recbars" width="334" height="96" style="display:block;margin-top:14px"></svg>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><span class="cap">30 Sep</span><span class="cap">15 Oct</span><span class="cap">Today</span></div>
+    </div>
+  </div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 3. SLEEP -->
+<section>
+<div class="board-title">03 · Sleep</div>
+<div class="screen" id="screen-sleep">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+  <div class="hdr">
+    <div>
+      <div class="lt">Sleep</div>
+      <div class="sub">Tue night → Wed, 29 Oct</div>
+    </div>
+    <div class="row gap10">
+      <div class="ibtn"><svg width="20" height="20"><use href="#i-plus"/></svg></div>
+    </div>
+  </div>
+
+  <!-- week strip -->
+  <div class="wrap" style="margin-top:18px">
+    <div id="weekstrip" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px"></div>
+  </div>
+
+  <!-- hero -->
+  <div class="wrap" style="margin-top:14px">
+    <div class="card" style="position:relative;overflow:hidden">
+      <div class="tint" style="background:radial-gradient(120% 90% at 100% 0%,rgba(143,125,255,.22),rgba(143,125,255,0) 60%)"></div>
+      <div class="row" style="justify-content:space-between;align-items:flex-start;position:relative">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--sleep)">Asleep</div>
+          <div class="num" style="font-size:52px;font-weight:600;letter-spacing:-2px;line-height:1.05;margin-top:2px">7<span style="font-size:22px;color:var(--t2);letter-spacing:0;font-weight:500">h </span>42<span style="font-size:22px;color:var(--t2);letter-spacing:0;font-weight:500">m</span></div>
+          <div class="fn" style="margin-top:4px">11:48 PM – 7:42 AM · 7h 54m in bed</div>
+        </div>
+        <svg width="76" height="76" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="var(--track)" stroke-width="9"/><circle cx="50" cy="50" r="42" fill="none" stroke="var(--sleep)" stroke-width="9" stroke-linecap="round" pathLength="100" stroke-dasharray="86 100" transform="rotate(-90 50 50)"/><text x="50" y="58" text-anchor="middle" fill="#F5F5F7" font-size="25" font-weight="600" font-family="-apple-system,system-ui">86</text></svg>
+      </div>
+      <div style="margin-top:18px;position:relative">
+        <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="fn">Sleep need</span><span class="fn num">7h 42m / 8h 58m</span></div>
+        <div class="bar" style="height:8px;border-radius:4px"><b style="width:86%;background:var(--sleep);border-radius:4px"></b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- hypnogram -->
+  <div class="sec"><h3>Stages</h3><a>Details<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <svg id="hypno" width="334" height="150" style="display:block"></svg>
+      <div class="row" style="justify-content:space-between;margin:6px 0 0 50px"><span class="cap">12 AM</span><span class="cap">2 AM</span><span class="cap">4 AM</span><span class="cap">6 AM</span></div>
+      <div style="height:1px;background:var(--line);margin:16px 0 4px"></div>
+      <div id="stagerows"></div>
+      <div class="cap" style="margin-top:10px">Dotted mark is your 30-night typical.</div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Quality</h3></div>
+  <div class="wrap grid2">
+    <div class="card" style="padding:16px"><div class="fn">Efficiency</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px">94<span class="fn">%</span></div><div class="cap" style="margin-top:2px;color:var(--recovery)">Above typical</div></div>
+    <div class="card" style="padding:16px"><div class="fn">Consistency</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px">81<span class="fn">%</span></div><div class="cap" style="margin-top:2px">±24 min bedtime</div></div>
+    <div class="card" style="padding:16px"><div class="fn">Sleep debt</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px">28<span class="fn">m</span></div><div class="cap" style="margin-top:2px">Last 7 nights</div></div>
+    <div class="card" style="padding:16px"><div class="fn">Disturbances</div><div class="num" style="font-size:28px;font-weight:600;margin-top:6px">9</div><div class="cap" style="margin-top:2px">Typical</div></div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tabs">
+      <div class="tab"><svg width="24" height="24"><use href="#i-today"/></svg>Today</div>
+      <div class="tab on"><svg width="24" height="24"><use href="#i-moon"/></svg>Sleep</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-dumbbell"/></svg>Training</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-heart"/></svg>Health</div>
+    </div>
+    <div class="coachbtn" style="color:var(--t1)"><svg width="26" height="26"><use href="#i-spark"/></svg></div>
+  </div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 4. TRAINING -->
+<section>
+<div class="board-title">04 · Training</div>
+<div class="screen" id="screen-training">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+  <div class="hdr">
+    <div><div class="lt">Training</div><div class="sub">This week · 27 Oct – 2 Nov</div></div>
+    <div class="row gap10">
+      <div class="ibtn"><svg width="20" height="20"><use href="#i-sliders"/></svg></div>
+      <div class="ibtn"><svg width="20" height="20"><use href="#i-plus"/></svg></div>
+    </div>
+  </div>
+
+  <div class="wrap grid2" style="margin-top:18px">
+    <div class="tile">
+      <svg width="64" height="64" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="var(--track)" stroke-width="8"/><circle cx="50" cy="50" r="42" fill="none" stroke="var(--strain)" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="62 100" transform="rotate(-90 50 50)"/><text x="50" y="59" text-anchor="middle" fill="#F5F5F7" font-size="26" font-weight="600" font-family="-apple-system,system-ui">3</text></svg>
+      <div><div class="t">Sessions</div><div class="fn">Goal 5 this week</div></div>
+    </div>
+    <div class="tile">
+      <div class="big num" style="color:var(--strain)">48.6</div>
+      <div><div class="t">Week Strain</div><div class="fn">+12% vs last week</div></div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:12px">
+    <div class="card" style="padding:18px 18px 16px">
+      <div id="dotcal"></div>
+      <div class="row" style="justify-content:space-between;margin-top:16px;align-items:flex-end">
+        <div><div class="lbl">Consistency</div><div class="fn">Aug – Oct · 3.4 sessions a week</div></div>
+        <div class="row gap10 cap"><span class="row gap8"><span class="dot" style="background:var(--lift)"></span>Lift</span><span class="row gap8"><span class="dot" style="background:var(--strain)"></span>Cardio</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:12px">
+    <div class="card row" style="padding:16px 18px;justify-content:space-between">
+      <div><div class="lbl">Volume lifted</div><div class="fn">Last 7 days · from logged sets</div></div>
+      <div class="num" style="font-size:30px;font-weight:600;letter-spacing:-1px">12,450<span class="fn" style="margin-left:3px">kg</span></div>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Recent</h3><a>All<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card" style="padding:4px 16px">
+      <div class="row gap12" style="padding:12px 0;border-bottom:1px solid var(--line)">
+        <div style="width:42px;height:42px;border-radius:13px;background:rgba(255,138,61,.14);color:var(--lift);display:grid;place-items:center"><svg width="22" height="22"><use href="#i-dumbbell"/></svg></div>
+        <div style="flex:1;min-width:0"><div class="lbl">Push day</div><div class="fn">Today · 6 exercises · 21 sets</div><div class="src" style="margin-top:3px"><i style="background:var(--lift)"></i>Pasted from Hevy · full sets</div></div>
+        <div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600;color:var(--strain)">9.8</div><div class="cap">52 min</div></div>
+      </div>
+      <div class="row gap12" style="padding:12px 0;border-bottom:1px solid var(--line)">
+        <div style="width:42px;height:42px;border-radius:13px;background:rgba(58,155,255,.14);color:var(--strain);display:grid;place-items:center"><svg width="22" height="22"><use href="#i-run"/></svg></div>
+        <div style="flex:1;min-width:0"><div class="lbl">Outdoor run</div><div class="fn">Mon · 5.2 km · 5:58 /km</div><div class="src" style="margin-top:3px"><i></i>Apple Health · summary only</div></div>
+        <div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600;color:var(--strain)">11.2</div><div class="cap">31 min</div></div>
+      </div>
+      <div class="row gap12" style="padding:12px 0">
+        <div style="width:42px;height:42px;border-radius:13px;background:rgba(255,138,61,.14);color:var(--lift);display:grid;place-items:center"><svg width="22" height="22"><use href="#i-dumbbell"/></svg></div>
+        <div style="flex:1;min-width:0"><div class="lbl">Pull + legs</div><div class="fn">Sun · 7 exercises · 24 sets</div><div class="src" style="margin-top:3px"><i style="background:var(--lift)"></i>Hevy CSV · full sets</div></div>
+        <div style="text-align:right"><div class="num" style="font-size:18px;font-weight:600;color:var(--strain)">10.4</div><div class="cap">64 min</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:12px">
+    <div class="card row gap12" style="padding:14px 16px">
+      <div style="width:42px;height:42px;border-radius:13px;background:var(--card2);display:grid;place-items:center;color:var(--t1)"><svg width="22" height="22"><use href="#i-paste"/></svg></div>
+      <div style="flex:1"><div class="lbl">Paste a workout</div><div class="fn">Preview before it saves</div></div>
+      <svg width="16" height="16" style="color:var(--t3)"><use href="#i-chev-r"/></svg>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tabs">
+      <div class="tab"><svg width="24" height="24"><use href="#i-today"/></svg>Today</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-moon"/></svg>Sleep</div>
+      <div class="tab on"><svg width="24" height="24"><use href="#i-dumbbell"/></svg>Training</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-heart"/></svg>Health</div>
+    </div>
+    <div class="coachbtn" style="color:var(--t1)"><svg width="26" height="26"><use href="#i-spark"/></svg></div>
+  </div>
+  <div class="home"></div>
+</div>
+</section>
+
+<!-- ================================================================ 5. HEALTH -->
+<section>
+<div class="board-title">05 · Health</div>
+<div class="screen" id="screen-health">
+  <div class="sb"><span>9:41</span><span class="row gap8"><svg width="18" height="12"><use href="#i-signal"/></svg><svg width="16" height="12"><use href="#i-wifi"/></svg><svg width="27" height="13"><use href="#i-batt"/></svg></span></div>
+
+  <!-- chip carousel -->
+  <div style="display:flex;gap:10px;padding:8px var(--gutter) 0;overflow:hidden">
+    <div class="row gap10" style="background:var(--card2);border-radius:18px;padding:10px 14px 10px 10px;flex:none">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(47,210,122,.16);display:grid;place-items:center"><span class="dot" style="background:var(--recovery);width:10px;height:10px"></span></div>
+      <div><div class="cap" style="color:var(--t2)">Vitals</div><div style="font-size:15px;font-weight:600">Typical</div></div>
+    </div>
+    <div class="row gap10" style="background:var(--card);border-radius:18px;padding:10px 14px 10px 10px;flex:none">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,77,107,.16);display:grid;place-items:center;color:var(--heart)"><svg width="18" height="18"><use href="#i-heart-f"/></svg></div>
+      <div><div class="cap" style="color:var(--t2)">Resting</div><div style="font-size:15px;font-weight:600">52 BPM</div></div>
+    </div>
+    <div class="row gap10" style="background:var(--card);border-radius:18px;padding:10px 14px 10px 10px;flex:none">
+      <div style="width:34px;height:34px;border-radius:50%;background:rgba(71,200,245,.16);display:grid;place-items:center;color:var(--hrv);font-size:12px;font-weight:700">FA</div>
+      <div><div class="cap" style="color:var(--t2)">Fitness Age</div><div style="font-size:15px;font-weight:600">31 yrs</div></div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:22px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="row gap8" style="color:var(--recovery);font-size:15px;font-weight:600"><svg width="16" height="16"><use href="#i-check"/></svg>Overnight vitals</div>
+        <div style="font-size:30px;font-weight:700;letter-spacing:-.6px;margin-top:4px">All typical</div>
+      </div>
+      <div class="ibtn"><svg width="22" height="22"><use href="#i-info"/></svg></div>
+    </div>
+    <div style="font-size:17px;color:var(--t2);line-height:24px;margin-top:6px">Every signal stayed inside your own 30-night range. Nothing to watch today.</div>
+  </div>
+
+  <!-- vitals lanes -->
+  <div class="wrap" style="margin-top:16px">
+    <div class="card" id="vitlanes" style="padding:16px 18px"></div>
+  </div>
+
+  <div class="sec"><h3>Vitals</h3><a>Last night</a></div>
+  <div class="wrap grid2">
+    <div class="tile" style="background:linear-gradient(160deg,#0F2A36 0%,#131315 70%)">
+      <div class="t" style="color:var(--hrv)">HRV</div>
+      <svg class="dots" data-c="#47C8F5" data-v="50,54,51,58,55,57,62" width="140" height="34"></svg>
+      <div class="big num">62<small>ms</small></div>
+    </div>
+    <div class="tile" style="background:linear-gradient(160deg,#36121B 0%,#131315 70%)">
+      <div class="t" style="color:var(--heart)">Resting HR</div>
+      <svg class="dots" data-c="#FF4D6B" data-v="55,54,53,54,52,53,52" width="140" height="34"></svg>
+      <div class="big num">52<small>bpm</small></div>
+    </div>
+    <div class="tile" style="background:linear-gradient(160deg,#0D2E2A 0%,#131315 70%)">
+      <div class="t" style="color:var(--breath)">Respiratory</div>
+      <svg class="dots" data-c="#36D3BF" data-v="15,14.7,14.9,15.1,14.8,14.9,14.8" width="140" height="34"></svg>
+      <div class="big num">14.8<small>rpm</small></div>
+    </div>
+    <div class="tile" style="background:linear-gradient(160deg,#35210E 0%,#131315 70%)">
+      <div class="t" style="color:var(--temp)">Skin temp</div>
+      <svg class="dots" data-c="#FF9F45" data-v="0,-.1,.1,.2,0,.1,.2" width="140" height="34"></svg>
+      <div><div class="big num">+0.2<small>°C</small></div><div class="cap" style="margin-top:4px">vs your baseline</div></div>
+    </div>
+  </div>
+  <div class="wrap" style="margin-top:12px">
+    <div class="card row gap12" style="padding:14px 16px;border:1px dashed rgba(255,255,255,.12);background:transparent">
+      <div style="flex:1"><div class="lbl" style="color:var(--t2)">Blood oxygen</div><div class="fn" style="color:var(--t3)">Not measured offline by WHOOP 4.0</div></div>
+      <span class="num" style="font-size:22px;font-weight:600;color:var(--t3)">—</span>
+    </div>
+  </div>
+
+  <div class="sec"><h3>Fitness Age</h3><a>Weekly<span class="chev">›</span></a></div>
+  <div class="wrap">
+    <div class="card">
+      <div class="grid2" style="gap:0">
+        <div><div class="fn">Fitness Age</div><div class="num" style="font-size:28px;font-weight:600;color:var(--hrv)">31 <span class="fn">yrs</span></div></div>
+        <div><div class="fn">Actual age</div><div class="num" style="font-size:28px;font-weight:600">33 <span class="fn">yrs</span></div></div>
+      </div>
+      <div class="fn" style="margin-top:10px;line-height:19px">Estimated from resting HR, HRV and training volume. VO₂max is not measured directly.</div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tabs">
+      <div class="tab"><svg width="24" height="24"><use href="#i-today"/></svg>Today</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-moon"/></svg>Sleep</div>
+      <div class="tab"><svg width="24" height="24"><use href="#i-dumbbell"/></svg>Training</div>
+      <div class="tab on"><svg width="24" height="24"><use href="#i-heart"/></svg>Health</div>
+    </div>
+    <div class="coachbtn" style="color:var(--t1)"><svg width="26" height="26"><use href="#i-spark"/></svg></div>
+  </div>
+  <div class="home"></div>
+</div>
+</section>
+
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v.replace(/var\((.*)\)/,'$1')).trim()||v;
+const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e};
+
+// seeded random for stable mockups
+let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+
+// Today HR bars
+(()=>{const s=document.getElementById('hrbars');const n=56,w=334,h=64,bw=3;
+ for(let i=0;i<n;i++){const t=i/n;let base=t<.3?52+rnd()*8:(t<.75?70+rnd()*22:72+rnd()*14);if(i>40&&i<45)base=110+rnd()*30;
+  const lo=base-6-rnd()*8,hi=base+4+rnd()*10;const y=v=>h-((v-40)/110)*h;
+  el('rect',{x:i*(w/n),y:y(hi),width:bw,height:Math.max(4,y(lo)-y(hi)),rx:1.5,fill:css('var(--heart)'),opacity:i===n-1?1:.55},s)}
+ el('circle',{cx:(n-1)*(w/n)+1.5,cy:64-((74-40)/110)*64,r:4.5,fill:'#000',stroke:css('var(--heart)'),'stroke-width':2.5},s)})();
+
+// sparklines
+document.querySelectorAll('svg.spark').forEach(s=>{const v=s.dataset.v.split(',').map(Number),c=css(s.dataset.c),w=64,h=28;
+ const mn=Math.min(...v),mx=Math.max(...v),sc=x=>h-4-((x-mn)/((mx-mn)||1))*(h-8);
+ if(s.dataset.bars){v.forEach((x,i)=>el('rect',{x:i*9+2,y:sc(x),width:5,height:h-sc(x),rx:2,fill:c,opacity:i===v.length-1?1:.4},s));return}
+ el('polyline',{points:v.map((x,i)=>`${4+i*(w-8)/(v.length-1)},${sc(x)}`).join(' '),fill:'none',stroke:c,'stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round',opacity:.9},s);
+ el('circle',{cx:w-4,cy:sc(v[v.length-1]),r:3,fill:c},s)});
+
+// dot trails (health tiles)
+document.querySelectorAll('svg.dots').forEach(s=>{const v=s.dataset.v.split(',').map(Number),c=s.dataset.c,w=140,h=34;
+ const mn=Math.min(...v),mx=Math.max(...v),sc=x=>h-6-((x-mn)/((mx-mn)||1))*(h-12);
+ el('line',{x1:0,x2:w,y1:h/2,y2:h/2,stroke:'rgba(255,255,255,.08)','stroke-dasharray':'2 4'},s);
+ v.forEach((x,i)=>el('circle',{cx:6+i*(w-12)/(v.length-1),cy:sc(x),r:i===v.length-1?4.5:3,fill:c,opacity:i===v.length-1?1:.45},s))});
+
+// Recovery knob
+(()=>{const k=document.getElementById('knob');const a=(150+240*.68)*Math.PI/180;k.setAttribute('cx',201+112*Math.cos(a));k.setAttribute('cy',150+112*Math.sin(a))})();
+
+// range bars
+document.querySelectorAll('.range').forEach(r=>{const d=r.dataset,mn=+d.min,mx=+d.max,p=x=>((x-mn)/(mx-mn))*100;
+ r.innerHTML=`<div style="position:relative;height:14px"><div style="position:absolute;left:0;right:0;top:5px;height:4px;border-radius:2px;background:var(--track)"></div><div style="position:absolute;left:${p(d.lo)}%;width:${p(d.hi)-p(d.lo)}%;top:5px;height:4px;border-radius:2px;background:rgba(255,255,255,.22)"></div><div style="position:absolute;left:calc(${p(d.v)}% - 7px);top:0;width:14px;height:14px;border-radius:50%;background:${d.c};border:3px solid var(--card)"></div></div>`});
+
+// Recovery 30-day bars
+(()=>{const s=document.getElementById('recbars');const v=[55,62,71,48,33,58,66,72,80,64,59,41,52,67,74,69,61,28,45,63,70,77,58,66,49,38,62,71,55,68];
+ const w=334,h=96,bw=7,g=(w-bw*30)/29;
+ [33,66].forEach(t=>el('line',{x1:0,x2:w,y1:h-t/100*h,y2:h-t/100*h,stroke:'rgba(255,255,255,.07)','stroke-dasharray':'2 4'},s));
+ v.forEach((x,i)=>{const c=x>=67?'--recovery':x>=34?'--rec-mid':'--rec-low';
+  el('rect',{x:i*(bw+g),y:h-x/100*h,width:bw,height:x/100*h,rx:3.5,fill:css(`var(${c})`),opacity:i===29?1:.75},s)});
+ document.getElementById('recavg').textContent=Math.round(v.reduce((a,b)=>a+b)/v.length)+'%';
+ document.getElementById('rc-g').textContent=v.filter(x=>x>=67).length;document.getElementById('rc-y').textContent=v.filter(x=>x>=34&&x<67).length;document.getElementById('rc-r').textContent=v.filter(x=>x<34).length})();
+
+// Sleep week strip
+(()=>{const s=document.getElementById('weekstrip');const days=['Thu','Fri','Sat','Sun','Mon','Tue','Wed'],v=[78,64,91,88,72,80,86];
+ days.forEach((d,i)=>{const on=i===6;s.insertAdjacentHTML('beforeend',`<div style="text-align:center;padding:8px 0 10px;border-radius:14px;${on?'background:var(--card2)':''}"><div class="cap" style="color:${on?'var(--t1)':'var(--t2)'};font-weight:600">${d}</div><svg width="30" height="30" viewBox="0 0 100 100" style="margin-top:6px"><circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/><circle cx="50" cy="50" r="40" fill="none" stroke="${css('var(--sleep)')}" stroke-width="14" stroke-linecap="round" pathLength="100" stroke-dasharray="${v[i]} 100" transform="rotate(-90 50 50)" opacity="${on?1:.6}"/></svg></div>`)})})();
+
+// Hypnogram
+(()=>{const s=document.getElementById('hypno');const lanes=[['Awake','--st-awake'],['REM','--st-rem'],['Light','--st-light'],['Deep','--st-deep']];
+ const x0=50,w=284,lh=30,gap=8;
+ lanes.forEach(([n,c],i)=>{el('text',{x:0,y:i*(lh+gap)+lh/2+4,fill:css('var(--t2)'),'font-size':12,'font-weight':600,'font-family':'-apple-system,system-ui'},s).textContent=n;
+  el('rect',{x:x0,y:i*(lh+gap),width:w,height:lh,rx:8,fill:'rgba(255,255,255,.035)'},s)});
+ // segments: [lane, start(0..1), end]
+ const seg=[[0,0,.02],[2,.02,.09],[3,.09,.2],[2,.2,.27],[1,.27,.33],[2,.33,.38],[3,.38,.47],[2,.47,.55],[0,.55,.565],[2,.565,.62],[1,.62,.7],[2,.7,.76],[3,.76,.8],[2,.8,.86],[1,.86,.95],[0,.95,.96],[2,.96,1]];
+ seg.forEach(([l,a,b])=>el('rect',{x:x0+a*w+1,y:l*(lh+gap)+3,width:Math.max(3,(b-a)*w-2),height:lh-6,rx:5,fill:css(`var(${lanes[l][1]})`)},s))})();
+
+// Stage rows
+(()=>{const r=document.getElementById('stagerows');const rows=[['Awake','--st-awake','12m',2,4],['REM','--st-rem','1h 52m',24,22],['Light','--st-light','4h 02m',51,53],['Deep','--st-deep','1h 48m',23,21]];
+ rows.forEach(([n,c,d,p,t],i)=>r.insertAdjacentHTML('beforeend',`<div style="display:grid;grid-template-columns:62px 1fr 64px 38px;align-items:center;gap:10px;padding:9px 0"><span style="font-size:15px;font-weight:600;color:var(${c})">${n}</span><div style="position:relative;height:6px;border-radius:3px;background:var(--track)"><b style="position:absolute;left:0;top:0;bottom:0;width:${p*1.6}%;border-radius:3px;background:var(${c})"></b><i style="position:absolute;left:${t*1.6}%;top:-4px;height:14px;border-left:2px dotted rgba(255,255,255,.5)"></i></div><span class="num" style="font-size:15px;font-weight:600;text-align:right">${d}</span><span class="num fn" style="text-align:right">${p}%</span></div>`))})();
+
+// Training dot calendar (13 weeks x 7 days, 3 month blocks)
+(()=>{const r=document.getElementById('dotcal');const months=['Aug','Sep','Oct'];let html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">';
+ months.forEach((m,mi)=>{html+=`<div><div class="cap" style="color:var(--t2);font-weight:600;margin-bottom:10px">${m}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:7px">`;
+  for(let d=0;d<(mi===2?29:31);d++){const x=rnd();const lift=x<.32,cardio=!lift&&x<.48;const today=mi===2&&d===28;
+   html+=`<span style="width:8px;height:8px;border-radius:50%;background:${lift?'var(--lift)':cardio?'var(--strain)':'rgba(255,255,255,.12)'};${today?'box-shadow:0 0 0 2px #000,0 0 0 3.5px #fff':''}"></span>`}
+  html+='</div></div>'});r.innerHTML=html+'</div>'})();
+
+// Vitals lanes (Apple overnight vitals style)
+(()=>{const r=document.getElementById('vitlanes');const L=[['Heart rate','52 bpm','--heart',.55],['HRV','62 ms','--hrv',.72],['Respiratory','14.8 rpm','--breath',.48],['Skin temp','+0.2 °C','--temp',.6]];
+ L.forEach(([n,v,c,p],i)=>{let dots='';const nights=[.5,.42,.58,.47,.62,.53,p];
+  nights.forEach((q,j)=>dots+=`<span style="position:absolute;left:calc(${8+j*14}% - 5px);top:${(1-q)*22+3}px;width:10px;height:10px;border-radius:50%;${j===6?`background:var(${c})`:`border:2px solid var(${c});opacity:.45`}"></span>`);
+  r.insertAdjacentHTML('beforeend',`<div style="display:grid;grid-template-columns:96px 1fr;align-items:center;gap:12px;padding:8px 0;${i?'border-top:1px solid var(--line)':''}"><div><div style="font-size:13px;font-weight:600;color:var(${c})">${n}</div><div class="num" style="font-size:15px;font-weight:600">${v}</div></div><div style="position:relative;height:38px;border-radius:10px;background:rgba(255,255,255,.035)"><div style="position:absolute;left:0;right:0;top:9px;height:20px;border-radius:8px;background:rgba(255,255,255,.05)"></div>${dots}</div></div>`)})})();
+</script>
+</body>
+</html>
