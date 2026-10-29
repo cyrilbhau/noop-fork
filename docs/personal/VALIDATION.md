@@ -1,5 +1,10 @@
 # Validation record — 21 October 2026
 
+> Historical validation record. Later signed device/simulator builds, 133 focused app tests and
+> owner acceptance are recorded in [current context](CONTEXT.md), the
+> [Coach implementation checkpoint](../superpowers/plans/2026-10-28-iphone-chatgpt-coach.md#implementation-checkpoint--2026-10-28)
+> and [Hevy/Health notes](HEVY-HYBRID.md). The former provisioning blocker is resolved.
+
 Audited baseline: `8e4b0c16e7640607600fa6bde5424095eba6034e`. Linux x86_64, Swift 6.0.3,
 snapshot-enabled SQLite 3.53.4. The initial cloud checks below had no Apple SDK, signing access,
 iPhone or WHOOP device. Subsequent Mac results are recorded separately; see `MAC-STATUS.md`.

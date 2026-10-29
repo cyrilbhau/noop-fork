@@ -1,5 +1,9 @@
 # Resume the iPhone installation on the Mac
 
+> Historical continuation, superseded for current work. Signed installation and the combined
+> Coach/Hevy/Health update are complete; the owner confirmed the accepted workflows. Do not repeat
+> the provisioning or source-reconciliation steps below. Start with [current context](CONTEXT.md).
+
 Latest scope: **iPhone app and iPhone widgets only**. The owner has no Apple Watch. Read
 [MAC-STATUS.md](MAC-STATUS.md) before doing setup or retrying a build. The immutable baseline,
 personal Simulator build, 94 relevant Mac tests and final unsigned iPhone-only build have passed

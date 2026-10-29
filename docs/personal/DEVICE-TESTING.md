@@ -1,7 +1,7 @@
 # WHOOP 4.0 device validation
 
-No WHOOP collection or accuracy results are available yet. The Mac builds passed, but physical
-installation waits for Apple to enable the phone; see [MAC-STATUS.md](MAC-STATUS.md).
+Recorded multi-night WHOOP collection and accuracy qualification remains pending. Signed physical
+installation and the accepted Coach/workout-import workflows are complete; see [current context](CONTEXT.md).
 Use the personal app identity from [INSTALL.md](INSTALL.md).
 Keep the unchanged engine as the reference until collection passes. The target is a dependable
 replacement by **12 November 2026**, before the stated membership end on **19 November 2026**;
@@ -73,7 +73,10 @@ A plausible score is not proof of accuracy. Report unavailable or rejected input
    observe whether it reconnects, then open it if needed. Record automatic versus foreground-assisted
    success separately. Verify backfilled timestamps, not just an open connection. Repeat once with
    a normally locked phone and once after an ordinary app relaunch; do not use a band reset.
-6. **Apple Health.** Initial collection testing keeps all write types off. Existing writeback
+6. **Apple Health.** The current personal build reads workout summaries only and blocks Health
+   writes. Verify imported workout source/time and repeat-sync deduplication under that mode. The
+   following broader writeback procedure is a future scope change, not an instruction to enable it:
+   initial collection testing keeps all write types off. Existing writeback
    reconciles this app's own samples through deletion and replacement; obtain the owner's explicit
    approval for that behavior before enabling one intended write type at a time. No cleanup is
    authorized by this test plan. After offload/scoring finishes, open

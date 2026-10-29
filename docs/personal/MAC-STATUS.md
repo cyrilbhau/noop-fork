@@ -1,5 +1,9 @@
 # Mac build status — 21 October 2026, IST
 
+> Historical record. By 28 October the signed iPhone app/widget build and installation succeeded;
+> the owner confirmed the final app opens, Coach replies and saved sign-in work, and workout imports
+> work. The Processing blocker below is resolved. Start with [current context](CONTEXT.md).
+
 The owner's Mac completed the baseline and personal build work. **The app is not installed or
 launched on the physical iPhone.** The owner confirmed that Apple Developer lists the phone as
 **Processing**, which excludes it from development provisioning until Apple enables it.

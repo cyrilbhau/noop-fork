@@ -1,5 +1,9 @@
 # Personal iPhone build and installation
 
+> Current owner status, 29 October 2026: signed installation is complete and the app is working.
+> The Processing/resume instructions below describe the earlier setup stage. Reuse the existing
+> personal identity and configuration for updates; start with [current context](CONTEXT.md).
+
 This is a source build for a personally owned WHOOP 4.0 and a paid Apple Developer account.
 The pinned upstream baseline is `8e4b0c16e7640607600fa6bde5424095eba6034e`.
 No iOS build, signing, installation, or Bluetooth test has been performed in the Linux cloud machine.
