@@ -37,6 +37,26 @@ struct WorkoutsView: View {
     /// pattern (HealthView.swift:17-22, 44-46), so a tick re-renders only that small leaf.
     @EnvironmentObject var profile: ProfileStore
     @EnvironmentObject var intelligence: IntelligenceEngine
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var workoutsRedesign = true
+    @Environment(\.dynamicTypeSize) private var workoutsTypeSize
+    #endif
+
+    private var workoutsRedesignEnabled: Bool {
+        #if os(iOS)
+        workoutsRedesign
+        #else
+        false
+        #endif
+    }
+    private var workoutsPresentation: WorkoutsPresentation { .init(redesign: workoutsRedesignEnabled) }
+    private var workoutsAccessibilityLayout: Bool {
+        #if os(iOS)
+        workoutsRedesignEnabled && workoutsTypeSize.isAccessibilitySize
+        #else
+        false
+        #endif
+    }
 
     // Exercise-distance preference (#1913). Unset follows the original combined preference.
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
@@ -177,21 +197,23 @@ struct WorkoutsView: View {
         let resolved = effectiveRange
         let unscopedRows = sessions(for: resolved)
         let trendRows = recoveryTrendRows(from: unscopedRows)
-        return ScreenScaffold(title: "Workouts", subtitle: "Every session, threaded together.",
-                       onRefresh: { await repo.refresh() },
-                       // PERF: the column ends in the full "All Sessions" log (the breakdown grid, the
-                       // zones card, and a row-per-session table). On a large imported history the eager
-                       // VStack built every section + the whole table up-front; the LazyVStack path (which
-                       // is byte-identical layout) builds the off-screen sections/rows on demand instead.
-                       lazy: true,
-                       // The day-of-sky liquid backdrop, matching Today / Health / Sleep / Trends: a fixed,
-                       // full-bleed time-of-day sky behind the scroll content (it does not scroll).
-                       topBackground: liquidScaffoldSky()) {
+        return workoutsScaffold {
             if allRows.isEmpty {
-                VStack(alignment: .leading, spacing: NoopMetrics.space4) {
-                    ComingSoon(what: loaded
-                        ? "No workouts yet. They come from your WHOOP and Apple Health history. Import in Data Sources to bring them in, or add one you tracked elsewhere."
-                        : "Loading your sessions…")
+                VStack(alignment: .leading, spacing: workoutsPresentation.space4) {
+                    if workoutsRedesignEnabled {
+                        NoopGlassCard {
+                            Text(loaded
+                                 ? "No workouts yet. They come from your WHOOP and Apple Health history. Import in Data Sources to bring them in, or add one you tracked elsewhere."
+                                 : "Loading your sessions…")
+                                .noopFont(.bodySmall)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .noopSkeleton(!loaded)
+                    } else {
+                        ComingSoon(what: loaded
+                            ? "No workouts yet. They come from your WHOOP and Apple Health history. Import in Data Sources to bring them in, or add one you tracked elsewhere."
+                            : "Loading your sessions…")
+                    }
                     if loaded {
                         workoutActionRow
                     }
@@ -304,6 +326,88 @@ struct WorkoutsView: View {
         }
     }
 
+    /// Only the visual shell changes; the tasks, sheet bindings and mutations attach once above.
+    @ViewBuilder
+    private func workoutsScaffold<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        #if os(iOS)
+        if workoutsRedesignEnabled {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
+                    Text("Workouts")
+                        .noopFont(.largeTitle)
+                        .accessibilityAddTraits(.isHeader)
+                    content()
+                }
+                .padding(NoopTheme.Layout.gutter)
+                .padding(.bottom, NoopTheme.Layout.xl)
+            }
+            .background(NoopTheme.canvas)
+            .refreshable { await repo.refresh() }
+            .navigationBarTitleDisplayMode(.inline)
+        } else {
+            classicWorkoutsScaffold(content: content)
+        }
+        #else
+        classicWorkoutsScaffold(content: content)
+        #endif
+    }
+
+    private func classicWorkoutsScaffold<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        ScreenScaffold(title: "Workouts", subtitle: "Every session, threaded together.",
+                       onRefresh: { await repo.refresh() }, lazy: true,
+                       topBackground: liquidScaffoldSky(), content: content)
+    }
+
+    @ViewBuilder
+    private func workoutsCard<Content: View>(padding: CGFloat = NoopMetrics.cardPadding, tint: Color? = nil,
+                                            @ViewBuilder content: @escaping () -> Content) -> some View {
+        if workoutsRedesignEnabled {
+            content()
+                .padding(padding == 0 ? 0 : NoopTheme.Layout.cardPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .noopGlassBackground()
+        } else {
+            NoopCard(padding: padding, tint: tint, content: content)
+        }
+    }
+
+    @ViewBuilder
+    private func workoutsSectionHeader(_ title: LocalizedStringKey, overline: LocalizedStringKey? = nil,
+                                       trailing: String? = nil) -> some View {
+        if workoutsRedesignEnabled {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                    Text(title).noopFont(.sectionTitle).accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 0)
+                    if let trailing { Text(verbatim: trailing).noopFont(.caption) }
+                }
+                if let overline { Text(overline).noopFont(.caption) }
+            }
+            .padding(.top, NoopTheme.Layout.m)
+        } else {
+            SectionHeader(title, overline: overline, trailing: trailing)
+        }
+    }
+
+    @ViewBuilder
+    private func workoutsStatTile(label: LocalizedStringKey, value: String, caption: String? = nil,
+                                  accent: Color) -> some View {
+        if workoutsRedesignEnabled {
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                    Text(label).noopFont(.footnote)
+                    Text(verbatim: value)
+                        .noopFont(.rowNumber, color: false)
+                        .foregroundStyle(accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let caption { Text(verbatim: caption).noopFont(.caption) }
+                }
+            }
+        } else {
+            StatTile(label: label, value: value, caption: caption, accent: accent)
+        }
+    }
+
     /// Present the read-only detail for a tapped row. The primary affordance; the ••• menu stays the
     /// secondary path for edit/relabel/delete.
     private func openDetail(_ row: WorkoutRow) { detail = WorkoutDetailTarget(row: row) }
@@ -356,24 +460,27 @@ struct WorkoutsView: View {
 
     @ViewBuilder private var recoveryTrendSection: some View {
         if !recoveryTrend.isEmpty {
-            VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-                SectionHeader("Recovery Trend", overline: "Heart-rate recovery · \(recoveryTrendCaption)",
+            VStack(alignment: .leading, spacing: workoutsPresentation.gap) {
+                workoutsSectionHeader("Recovery Trend", overline: "Heart-rate recovery · \(recoveryTrendCaption)",
                               trailing: recoveryTrend.count == 1
                                 ? String(localized: "1 workout")
                                 : String(localized: "\(recoveryTrend.count) workouts"))
-                NoopCard(tint: StrandPalette.metricRose) {
+                workoutsCard(tint: workoutsPresentation.metricRose) {
                     VStack(alignment: .leading, spacing: 12) {
                         WorkoutRecoveryTrendChart(points: recoveryTrend)
-                            .frame(height: NoopMetrics.chartHeight)
-                        HStack(spacing: 16) {
-                            recoveryLegend("1 min", color: StrandPalette.metricRose)
-                            recoveryLegend("2 min", color: StrandPalette.metricCyan)
-                            recoveryLegend("5 min", color: StrandPalette.metricPurple)
+                            .frame(height: workoutsPresentation.chartHeight)
+                        let legendLayout = workoutsAccessibilityLayout
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+                            : AnyLayout(HStackLayout(spacing: 16))
+                        legendLayout {
+                            recoveryLegend("1 min", color: workoutsPresentation.metricRose)
+                            recoveryLegend("2 min", color: workoutsPresentation.metricCyan)
+                            recoveryLegend("5 min", color: workoutsPresentation.metricPurple)
                         }
-                        Divider().overlay(StrandPalette.hairline)
+                        Divider().overlay(workoutsPresentation.hairline)
                         Text("Each line shows how many beats per minute your heart rate changed after exercise. Only high-intensity workouts with recorded post-workout heart rate are included.")
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textTertiary)
+                            .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                            .foregroundStyle(workoutsPresentation.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -384,7 +491,7 @@ struct WorkoutsView: View {
     private func recoveryLegend(_ label: LocalizedStringKey, color: Color) -> some View {
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 8, height: 8)
-            Text(label).font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
+            Text(label).modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled)).foregroundStyle(workoutsPresentation.textSecondary)
         }
     }
 
@@ -425,20 +532,20 @@ struct WorkoutsView: View {
     private func postLogBanner(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(StrandPalette.effortColor)
+                .modifier(WorkoutsType(legacy: .system(size: 14, weight: .semibold), redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.effortColor)
                 .accessibilityHidden(true)
             Text(text)
-                .font(StrandFont.footnote)
-                .foregroundStyle(StrandPalette.textSecondary)
+                .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .padding(NoopMetrics.space3)
-        .background(StrandPalette.effortColor.opacity(0.10),
-                    in: RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous)
-            .strokeBorder(StrandPalette.effortColor.opacity(0.22), lineWidth: 1))
+        .padding(workoutsPresentation.space3)
+        .background(workoutsPresentation.effortColor.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: workoutsPresentation.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: workoutsPresentation.cardRadius, style: .continuous)
+            .strokeBorder(workoutsPresentation.effortColor.opacity(0.22), lineWidth: 1))
         .transition(.opacity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(text)
@@ -483,28 +590,43 @@ struct WorkoutsView: View {
     /// Always shown, including when everything still fits in Current. A segment that appeared only once a
     /// wearer crossed ten sessions would shift the whole screen down the first time it did, and an empty
     /// Archived tab answers "where did my older workouts go" plainly: nothing is hidden yet.
-    private var scopeBar: some View {
-        Picker("Scope", selection: $scope) {
-            ForEach(Scope.allCases) { s in Text(s.label).tag(s) }
+    @ViewBuilder private var scopeBar: some View {
+        if workoutsRedesignEnabled {
+            SegmentedPills(Scope.allCases, selection: $scope) { Text($0.label) }
+                .accessibilityLabel("Scope")
+        } else {
+            Picker("Scope", selection: $scope) {
+                ForEach(Scope.allCases) { s in Text(s.label).tag(s) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 2)
         }
-        .pickerStyle(.segmented)
-        .padding(.horizontal, 2)
     }
 
     private func rangeBar(rows: [WorkoutRow], effectiveRange: Range) -> some View {
         let fellBack = effectiveRange != range
         let caption = rangeCaption(rows: rows, effectiveRange: effectiveRange, fellBack: fellBack)
         return VStack(alignment: .leading, spacing: 8) {
-            SegmentedPillControl(
-                Range.allCases,
-                selection: $range,
-                fillsAvailableWidth: true
-            ) { $0.label }
+            if workoutsAccessibilityLayout {
+                Picker("Range", selection: $range) {
+                    ForEach(Range.allCases, id: \.self) { option in Text(verbatim: option.label).tag(option) }
+                }
+                .pickerStyle(.menu)
+                .noopFont(.bodySmall)
+            } else if workoutsRedesignEnabled {
+                SegmentedPills(Range.allCases, selection: $range) { Text(verbatim: $0.label) }
+            } else {
+                SegmentedPillControl(
+                    Range.allCases,
+                    selection: $range,
+                    fillsAvailableWidth: true
+                ) { $0.label }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
             filterBar
             Text(caption)
-                .font(StrandFont.footnote)
-                .foregroundStyle(fellBack ? StrandPalette.statusWarning : StrandPalette.textTertiary)
+                .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(fellBack ? workoutsPresentation.statusWarning : workoutsPresentation.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(caption)
         }
@@ -515,7 +637,7 @@ struct WorkoutsView: View {
     /// platforms. The predicate is the pure `WorkoutFilter`; these controls only drive its state.
     private var filterBar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+            workoutsFilterLayout {
                 filterMenu(
                     title: sportFilter ?? String(localized: "All sports"),
                     active: sportFilter != nil,
@@ -541,9 +663,16 @@ struct WorkoutsView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            HStack(alignment: .center, spacing: NoopMetrics.space2) {
-                NoopLiquidGlassSearchField(text: $searchText,
-                                           prompt: String(localized: "Search sport"))
+            HStack(alignment: .center, spacing: workoutsPresentation.space2) {
+                if workoutsRedesignEnabled {
+                    TextField("Search sport", text: $searchText)
+                        .noopFont(.bodySmall)
+                        .padding(NoopTheme.Layout.s)
+                        .background(NoopTheme.control, in: RoundedRectangle(cornerRadius: NoopTheme.Layout.s))
+                } else {
+                    NoopLiquidGlassSearchField(text: $searchText,
+                                               prompt: String(localized: "Search sport"))
+                }
                 if filter.isActive {
                     Button {
                         withAnimation(.easeOut(duration: 0.15)) {
@@ -551,8 +680,8 @@ struct WorkoutsView: View {
                         }
                     } label: {
                         Label(String(localized: "Clear"), systemImage: "xmark.circle.fill")
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textSecondary)
+                            .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                            .foregroundStyle(workoutsPresentation.textSecondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
                             .frame(minHeight: 44)
@@ -563,6 +692,12 @@ struct WorkoutsView: View {
         }
     }
 
+    private var workoutsFilterLayout: AnyLayout {
+        workoutsAccessibilityLayout
+            ? AnyLayout(VStackLayout(spacing: NoopTheme.Layout.s))
+            : AnyLayout(HStackLayout(spacing: 8))
+    }
+
     /// A pill-styled filter menu: the current selection as its label, tinted the Effort colour when a
     /// filter is active so the user can see at a glance that the list is narrowed.
     private func filterMenu<Content: View>(title: String, active: Bool, a11y: String,
@@ -571,21 +706,23 @@ struct WorkoutsView: View {
             content()
         } label: {
             HStack(spacing: 4) {
-                Text(title).font(StrandFont.footnote).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                Text(title).modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                    .lineLimit(workoutsRedesignEnabled ? nil : 1)
+                Image(systemName: "chevron.down").modifier(WorkoutsType(legacy: .system(size: 9, weight: .semibold), redesigned: .caption, enabled: workoutsRedesignEnabled))
             }
             .frame(maxWidth: .infinity)
-            .foregroundStyle(active ? StrandPalette.effortColor : StrandPalette.textSecondary)
+            .foregroundStyle(active ? workoutsPresentation.effortColor : workoutsPresentation.textSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                (active ? StrandPalette.effortColor.opacity(0.14) : StrandPalette.surfaceInset.opacity(0.6)),
+                (active ? workoutsPresentation.effortColor.opacity(0.14) : workoutsPresentation.surfaceInset.opacity(0.6)),
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
         .frame(maxWidth: .infinity)
+        .frame(minHeight: workoutsRedesignEnabled ? NoopTheme.Layout.minTouchTarget : 0)
         .accessibilityLabel(a11y)
         .accessibilityValue(title)
     }
@@ -608,18 +745,35 @@ struct WorkoutsView: View {
 
     /// Opens the add sheet (editing == nil). Present on the populated screen and the empty state so a
     /// user with no imports can still log a session.
-    private var addWorkoutButton: some View {
-        NoopButton("Add workout", systemImage: "plus", kind: .secondary, fullWidth: true) {
-            sheet = WorkoutSheetTarget(editing: nil)
+    @ViewBuilder private var addWorkoutButton: some View {
+        if workoutsRedesignEnabled {
+            Button { sheet = WorkoutSheetTarget(editing: nil) } label: {
+                Label("Add workout", systemImage: "plus")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .buttonStyle(NoopSecondaryButton())
+            .accessibilityLabel("Add a workout")
+        } else {
+            NoopButton("Add workout", systemImage: "plus", kind: .secondary, fullWidth: true) {
+                sheet = WorkoutSheetTarget(editing: nil)
+            }
+            .accessibilityLabel("Add a workout")
         }
-        .accessibilityLabel("Add a workout")
     }
 
     /// Equal-width primary actions share the same content width as every card below them.
     /// #459 / PERF: the live-workout button is `WorkoutStartControl`, a leaf that owns `AppModel` itself
     /// so this screen doesn't have to — see the comment on `profile`/`intelligence` above.
     private var workoutActionRow: some View {
-        HStack(spacing: NoopMetrics.rowSpacing) {
+        #if os(iOS)
+        let stackVertically = workoutsRedesignEnabled && workoutsTypeSize.isAccessibilitySize
+        #else
+        let stackVertically = false
+        #endif
+        let layout = stackVertically
+            ? AnyLayout(VStackLayout(spacing: workoutsPresentation.rowSpacing))
+            : AnyLayout(HStackLayout(spacing: workoutsPresentation.rowSpacing))
+        return layout {
             WorkoutStartControl()
                 .frame(maxWidth: .infinity)
             addWorkoutButton
@@ -753,7 +907,7 @@ struct WorkoutsView: View {
         let strains = rows.compactMap(\.strain)
         let avgStrain = strains.isEmpty ? 0 : strains.reduce(0, +) / Double(strains.count)
         let totalTimeH = rows.compactMap(\.durationS).reduce(0, +) / 3600.0
-        NoopCard(padding: 20, tint: StrandPalette.effortColor) {
+        workoutsCard(padding: 20, tint: workoutsPresentation.effortColor) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: 24) {
                     effortHeroGauge(avgStrain: avgStrain, hasData: !strains.isEmpty)
@@ -781,16 +935,35 @@ struct WorkoutsView: View {
         let scaleMax: Double = effortScale == .whoop ? 21 : 100
         let displayValue = UnitFormatter.effortValue(avgStrain, scale: effortScale)
         let fraction = max(0, min(1, displayValue / scaleMax))
+        if workoutsRedesignEnabled {
+            VStack(spacing: NoopTheme.Layout.s) {
+                Text("Typical").noopFont(.caption)
+                NoopArcGauge(value: hasData ? fraction : nil, color: NoopTheme.strain,
+                             radius: NoopArcGauge<EmptyView>.defaultRadius * 0.65) {
+                    VStack(spacing: NoopTheme.Layout.xs) {
+                        Text(verbatim: hasData ? UnitFormatter.effortDisplay(avgStrain, scale: effortScale) : "—")
+                            .noopFont(.statNumber)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        if hasData {
+                            Text(effortScale == .whoop ? "of 21" : "of 100").noopFont(.caption)
+                        }
+                    }
+                }
+                Text("Strain").noopFont(.footnote)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
         VStack(spacing: 18) {
             Text("TYPICAL EFFORT")
-                .font(StrandFont.overline).tracking(StrandFont.overlineTracking)
-                .foregroundStyle(StrandPalette.effortColor)
+                .modifier(WorkoutsOverline(enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.effortColor)
             if hasData {
                 ZStack {
                     // Hero vessel → animated (this is one of the page's live gauges, like the Sleep Rest
                     // hero and the Today score cells). Reduce-Motion falls back to the static frame inside
                     // LiquidVessel itself.
-                    LiquidVessel(value: fraction, tint: StrandPalette.effortColor, animated: true)
+                    LiquidVessel(value: fraction, tint: workoutsPresentation.effortColor, animated: true)
                         .frame(width: diameter, height: diameter)
                     VStack(spacing: 0) {
                         // `displayValue` is already on the selected scale (0–100 or 0–21), so the count-up
@@ -799,12 +972,12 @@ struct WorkoutsView: View {
                             value: displayValue,
                             format: { String(format: "%.1f", $0) },
                             font: StrandFont.rounded(46),
-                            color: StrandPalette.textPrimary
+                            color: workoutsPresentation.textPrimary
                         )
                         .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
                         Text(effortScale == .whoop ? "of 21" : "of 100")
-                            .font(StrandFont.caption)
-                            .foregroundStyle(StrandPalette.textSecondary)
+                            .modifier(WorkoutsType(legacy: StrandFont.caption, redesigned: .caption, enabled: workoutsRedesignEnabled))
+                            .foregroundStyle(workoutsPresentation.textSecondary)
                     }
                     .allowsHitTesting(false)   // taps fall through to the vessel → splash
                 }
@@ -815,11 +988,11 @@ struct WorkoutsView: View {
                 // No strain data in the window — an empty vessel (posed, no fill) with a centred "No data",
                 // the honest liquid analogue of the old empty ring.
                 ZStack {
-                    LiquidVessel(value: 0, tint: StrandPalette.effortColor, animated: false)
+                    LiquidVessel(value: 0, tint: workoutsPresentation.effortColor, animated: false)
                         .frame(width: diameter, height: diameter)
                     Text("No data")
-                        .font(StrandFont.headline)
-                        .foregroundStyle(StrandPalette.textSecondary)
+                        .modifier(WorkoutsType(legacy: StrandFont.headline, redesigned: .rowTitle, enabled: workoutsRedesignEnabled))
+                        .foregroundStyle(workoutsPresentation.textSecondary)
                         .lineLimit(1).minimumScaleFactor(0.7).fixedSize()
                         .allowsHitTesting(false)
                 }
@@ -828,38 +1001,43 @@ struct WorkoutsView: View {
                 .accessibilityLabel(String(localized: "Typical effort, no data"))
             }
         }
+        }
     }
 
     @ViewBuilder
     private func effortHeroStats(rows: [WorkoutRow], effectiveRange: Range,
                                  groups: [SportGroup], totalTimeH: Double) -> some View {
         let modal = modalSport(from: groups)
+        let statsLayout = workoutsAccessibilityLayout
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: workoutsPresentation.gap))
+            : AnyLayout(HStackLayout(spacing: workoutsPresentation.gap))
         VStack(alignment: .leading, spacing: 12) {
             Text("Effort this \(effectiveRange.heroWord)")
-                .font(StrandFont.headline)
-                .foregroundStyle(StrandPalette.textPrimary)
-            HStack(spacing: NoopMetrics.gap) {
+                .modifier(WorkoutsType(legacy: StrandFont.headline, redesigned: .rowTitle, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textPrimary)
+            statsLayout {
                 heroCountStat(String(localized: "Sessions"), value: Double(rows.count),
-                              format: { "\(Int($0.rounded()))" }, tint: StrandPalette.effortColor)
-                heroStat(String(localized: "Active"), String(localized: "\(oneDecimal(totalTimeH))h"), tint: StrandPalette.textPrimary)
+                              format: { "\(Int($0.rounded()))" }, tint: workoutsPresentation.effortColor)
+                heroStat(String(localized: "Active"), workoutsRedesignEnabled && !rows.contains { $0.durationS != nil }
+                         ? "—" : String(localized: "\(oneDecimal(totalTimeH))h"), tint: workoutsPresentation.textPrimary)
                 heroStat(String(localized: "Top sport"), modal.count > 0 ? "\(modal.count)×" : "—",
-                         tint: StrandPalette.effortBright)
+                         tint: workoutsPresentation.effortBright)
             }
             Text(modal.count > 0
                  ? "Mostly \(WorkoutSource.displaySport(modal.sport)) (\(effectiveRange.caption))."
                  : "Logged sessions across \(effectiveRange.caption).")
-                .font(StrandFont.footnote)
-                .foregroundStyle(StrandPalette.textTertiary)
+                .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func heroStat(_ title: String, _ value: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased())
-                .font(StrandFont.overline).tracking(StrandFont.overlineTracking)
-                .foregroundStyle(StrandPalette.textSecondary)
-            Text(value).font(StrandFont.number(20))
+            Text(workoutsRedesignEnabled ? title : title.uppercased())
+                .modifier(WorkoutsOverline(enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textSecondary)
+            Text(value).modifier(WorkoutsType(legacy: StrandFont.number(20), redesigned: .rowNumber, enabled: workoutsRedesignEnabled))
                 .foregroundStyle(tint).lineLimit(1).minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -870,11 +1048,17 @@ struct WorkoutsView: View {
     private func heroCountStat(_ title: String, value: Double,
                                format: @escaping (Double) -> String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title.uppercased())
-                .font(StrandFont.overline).tracking(StrandFont.overlineTracking)
-                .foregroundStyle(StrandPalette.textSecondary)
-            CountUpText(value: value, format: format, font: StrandFont.number(20), color: tint)
-                .lineLimit(1).minimumScaleFactor(0.6)
+            Text(workoutsRedesignEnabled ? title : title.uppercased())
+                .modifier(WorkoutsOverline(enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textSecondary)
+            if workoutsRedesignEnabled {
+                Text(verbatim: format(value)).noopFont(.rowNumber, color: false)
+                    .foregroundStyle(tint)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                CountUpText(value: value, format: format, font: StrandFont.number(20), color: tint)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -891,23 +1075,26 @@ struct WorkoutsView: View {
     private func heatmapSection() -> some View {
         let grid = ActivityHeatmap.build(values: dailyKcal, today: todayDayString())
         if !grid.isEmpty {
-            VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-                SectionHeader("Active calories", overline: "Last 13 weeks")
-                NoopCard(tint: StrandPalette.effortColor) {
+            VStack(alignment: .leading, spacing: workoutsPresentation.gap) {
+                workoutsSectionHeader("Active calories", overline: "Last 13 weeks")
+                workoutsCard(tint: workoutsPresentation.effortColor) {
                     VStack(alignment: .leading, spacing: 12) {
                         // Quarter total + current streak. Both come from the pure builder; the streak
                         // reuses the same "day(s) in a row" copy as the Settings streak (no new string).
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        let heatmapHeaderLayout = workoutsAccessibilityLayout
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+                            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
+                        heatmapHeaderLayout {
                             Text(grouped(grid.total))
-                                .font(StrandFont.number(24)).foregroundStyle(StrandPalette.textPrimary)
+                                .modifier(WorkoutsType(legacy: StrandFont.number(24), redesigned: .statNumber, enabled: workoutsRedesignEnabled)).foregroundStyle(workoutsPresentation.textPrimary)
                             Text(String(localized: "KCAL"))   // reuses the miniStat/colHeader unit label
-                                .font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
+                                .modifier(WorkoutsType(legacy: StrandFont.caption, redesigned: .caption, enabled: workoutsRedesignEnabled)).foregroundStyle(workoutsPresentation.textSecondary)
                             Spacer(minLength: 8)
                             if grid.streak > 0 {
-                                Text("\(grid.streak)").font(StrandFont.number(15))
-                                    .foregroundStyle(StrandPalette.effortColor)
+                                Text("\(grid.streak)").modifier(WorkoutsType(legacy: StrandFont.number(15), redesigned: .rowNumber, enabled: workoutsRedesignEnabled))
+                                    .foregroundStyle(workoutsPresentation.effortColor)
                                 Text(grid.streak == 1 ? "day in a row" : "days in a row")
-                                    .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+                                    .modifier(WorkoutsType(legacy: StrandFont.caption, redesigned: .caption, enabled: workoutsRedesignEnabled)).foregroundStyle(workoutsPresentation.textTertiary)
                             }
                         }
                         Canvas { ctx, size in drawHeatmap(ctx, size: size, grid: grid, today: todayDayString()) }
@@ -915,13 +1102,13 @@ struct WorkoutsView: View {
                         .frame(maxWidth: .infinity)
                         .accessibilityLabel(Text("Active-calorie heatmap, last 13 weeks"))
                         HStack(spacing: 4) {
-                            Text("Less").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+                            Text("Less").modifier(WorkoutsType(legacy: StrandFont.caption, redesigned: .caption, enabled: workoutsRedesignEnabled)).foregroundStyle(workoutsPresentation.textTertiary)
                             ForEach(0..<5, id: \.self) { lvl in
                                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                                     .fill(heatColor(lvl))
                                     .frame(width: 10, height: 10)
                             }
-                            Text("More").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+                            Text("More").modifier(WorkoutsType(legacy: StrandFont.caption, redesigned: .caption, enabled: workoutsRedesignEnabled)).foregroundStyle(workoutsPresentation.textTertiary)
                         }
                     }
                 }
@@ -941,8 +1128,8 @@ struct WorkoutsView: View {
         let cell = min((size.width - leftInset - gap * CGFloat(cols - 1)) / CGFloat(cols),
                        (size.height - topInset - gap * 6) / 7)
         guard cell > 0 else { return }
-        let labelFont = StrandFont.caption
-        let labelColor = StrandPalette.textTertiary
+        let labelFont = workoutsRedesignEnabled ? NoopType.caption.fixedFont : StrandFont.caption
+        let labelColor = workoutsPresentation.textTertiary
 
         // Weekday gutter: Mon/Wed/Fri/Sun. `veryShortWeekdaySymbols` is Sunday-first, so row r (Mon-first)
         // maps to symbol (r + 1) % 7.
@@ -984,7 +1171,7 @@ struct WorkoutsView: View {
                 let path = Path(roundedRect: rect, cornerRadius: cell * 0.24)
                 ctx.fill(path, with: .color(heatColor(col[r].level)))
                 if col[r].day == today {
-                    ctx.stroke(path, with: .color(StrandPalette.textPrimary), lineWidth: 1.5)
+                    ctx.stroke(path, with: .color(workoutsPresentation.textPrimary), lineWidth: 1.5)
                 }
             }
         }
@@ -993,18 +1180,20 @@ struct WorkoutsView: View {
     /// Level (0 = no data, 1...4 by intensity) → the amber calorie ramp.
     private func heatColor(_ level: Int) -> Color {
         switch level {
-        case 0: return StrandPalette.surfaceInset
-        case 1: return StrandPalette.metricAmber.opacity(0.28)
-        case 2: return StrandPalette.metricAmber.opacity(0.52)
-        case 3: return StrandPalette.metricAmber.opacity(0.78)
-        default: return StrandPalette.metricAmber
+        case 0: return workoutsPresentation.surfaceInset
+        case 1: return workoutsPresentation.metricAmber.opacity(0.28)
+        case 2: return workoutsPresentation.metricAmber.opacity(0.52)
+        case 3: return workoutsPresentation.metricAmber.opacity(0.78)
+        default: return workoutsPresentation.metricAmber
         }
     }
 
     private func summarySection(rows: [WorkoutRow], effectiveRange: Range, groups: [SportGroup]) -> some View {
         let totalCount = rows.count
-        let totalTimeH = rows.compactMap(\.durationS).reduce(0, +) / 3600.0
-        let totalKcal = rows.compactMap(\.energyKcal).reduce(0, +)
+        let durations = rows.compactMap(\.durationS)
+        let calories = rows.compactMap(\.energyKcal)
+        let totalTimeH = durations.reduce(0, +) / 3600.0
+        let totalKcal = calories.reduce(0, +)
         // Only POSITIVE distances count as "has distance" (a strap-detected sport with no GPS/manual
         // distance is nil, and an explicit 0 is not a real distance) — matches `distanceLabel`'s `m > 0`
         // guard on the per-workout rows. When nothing in the window has distance, the tile shows "–"
@@ -1013,81 +1202,96 @@ struct WorkoutsView: View {
         let totalKmRaw = distancesM.reduce(0, +) / 1000.0
         let modal = modalSport(from: groups)
 
-        return LazyVGrid(columns: tileColumns, alignment: .leading, spacing: NoopMetrics.gap) {
-            StatTile(label: "Total Workouts",
+        return LazyVGrid(columns: tileColumns, alignment: .leading, spacing: workoutsPresentation.gap) {
+            workoutsStatTile(label: "Total Workouts",
                      value: "\(totalCount)",
                      caption: effectiveRange.caption,
-                     accent: StrandPalette.effortColor)
-            StatTile(label: "Total Time",
-                     value: String(localized: "\(oneDecimal(totalTimeH))h"),
+                     accent: workoutsPresentation.effortColor)
+            workoutsStatTile(label: "Total Time",
+                     value: workoutsRedesignEnabled && durations.isEmpty ? "—" : String(localized: "\(oneDecimal(totalTimeH))h"),
                      caption: String(localized: "active"),
-                     accent: StrandPalette.textPrimary)
-            StatTile(label: "Total Calories",
-                     value: grouped(totalKcal),
+                     accent: workoutsPresentation.textPrimary)
+            workoutsStatTile(label: "Total Calories",
+                     value: workoutsRedesignEnabled && calories.isEmpty ? "—" : grouped(totalKcal),
                      caption: "kcal",
-                     accent: StrandPalette.metricAmber)
-            StatTile(label: "Total Distance",
+                     accent: workoutsPresentation.metricAmber)
+            workoutsStatTile(label: "Total Distance",
                      value: distancesM.isEmpty ? "–" : UnitFormatter.distanceFromKilometers(totalKmRaw, system: distanceUnitSystem),
                      caption: String(localized: "covered"),
-                     accent: StrandPalette.metricCyan)
-            StatTile(label: "Most Active",
+                     accent: workoutsPresentation.metricCyan)
+            workoutsStatTile(label: "Most Active",
                      value: modal.sport,
                      caption: modal.count > 0
                          ? (modal.count == 1 ? String(localized: "1 session") : String(localized: "\(modal.count) sessions"))
                          : nil,
-                     accent: StrandPalette.textPrimary)
+                     accent: workoutsPresentation.textPrimary)
         }
     }
 
     // MARK: - Activity breakdown (per-sport NoopCards, identical layout)
 
     private func breakdownSection(groups: [SportGroup], rows: [WorkoutRow]) -> some View {
-        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Activity Breakdown",
+        VStack(alignment: .leading, spacing: workoutsPresentation.gap) {
+            workoutsSectionHeader("Activity Breakdown",
                           overline: "By sport",
                           trailing: groups.count == 1
                               ? String(localized: "1 sport")
                               : String(localized: "\(groups.count) sports"))
-            LazyVGrid(columns: breakdownColumns, alignment: .leading, spacing: NoopMetrics.gap) {
+            LazyVGrid(columns: breakdownColumns, alignment: .leading, spacing: workoutsPresentation.gap) {
                 ForEach(groups) { g in
                     // This sport's own sessions, so the card can carry an HR-zone mini-bar.
-                    sportCard(g, zones: WorkoutZones.summary(from: rows.filter { $0.sport == g.sport }))
+                    let sportRows = rows.filter { $0.sport == g.sport }
+                    sportCard(g, zones: WorkoutZones.summary(from: sportRows),
+                              hasDuration: sportRows.contains { $0.durationS != nil },
+                              hasCalories: sportRows.contains { $0.energyKcal != nil })
                 }
             }
         }
     }
 
-    private func sportCard(_ g: SportGroup, zones: WorkoutZones.Summary?) -> some View {
+    private func sportCard(_ g: SportGroup, zones: WorkoutZones.Summary?,
+                           hasDuration: Bool, hasCalories: Bool) -> some View {
         // Frosted Effort-tinted card with the sport glyph in the Effort world, an HR-zone mini-bar when
         // the sessions carry imported zones, and the bright "now" end-cap on its busiest zone.
-        NoopCard(tint: StrandPalette.effortColor) {
+        workoutsCard(tint: workoutsPresentation.effortColor) {
             VStack(alignment: .leading, spacing: 12) {
                 // Identical header for every card.
                 HStack(spacing: 10) {
                     Image(systemName: sportIcon(g.sport))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(StrandPalette.effortColor)
+                        .modifier(WorkoutsType(legacy: .system(size: 15, weight: .semibold), redesigned: .rowTitle, enabled: workoutsRedesignEnabled))
+                        .foregroundStyle(workoutsPresentation.effortColor)
                         .frame(width: 22, alignment: .center)
                     Text(WorkoutSource.displaySport(g.sport))
-                        .font(StrandFont.headline)
-                        .foregroundStyle(StrandPalette.textPrimary)
-                        .lineLimit(1)
+                        .modifier(WorkoutsType(legacy: StrandFont.headline, redesigned: .rowTitle, enabled: workoutsRedesignEnabled))
+                        .foregroundStyle(workoutsPresentation.textPrimary)
+                        .lineLimit(workoutsRedesignEnabled ? nil : 1)
                     Spacer(minLength: 0)
                     Text("\(g.count)")
-                        .font(StrandFont.number(15))
-                        .foregroundStyle(StrandPalette.effortBright)
+                        .modifier(WorkoutsType(legacy: StrandFont.number(15), redesigned: .rowNumber, enabled: workoutsRedesignEnabled))
+                        .foregroundStyle(workoutsPresentation.effortBright)
                 }
                 if let zones { zoneMiniBar(zones) }
-                Divider().overlay(StrandPalette.hairline)
+                Divider().overlay(workoutsPresentation.hairline)
                 // Identical 4-up stat strip for every card.
-                HStack(spacing: 0) {
-                    miniStat(String(localized: "SESSIONS"), "\(g.count)")
-                    miniStat(String(localized: "TIME"), String(localized: "\(oneDecimal(g.totalTimeH))h"))
-                    miniStat(String(localized: "KCAL"), grouped(g.totalKcal), tint: StrandPalette.metricAmber)
-                    miniStat(String(localized: "AVG/SESS"), String(localized: "\(Int(g.avgTimePerSessionMin.rounded()))m"))
+                if workoutsRedesignEnabled {
+                    LazyVGrid(columns: workoutsDetailColumns, alignment: .leading, spacing: NoopTheme.Layout.m) {
+                        sportCardStats(g, hasDuration: hasDuration, hasCalories: hasCalories)
+                    }
+                } else {
+                    HStack(spacing: 0) { sportCardStats(g, hasDuration: hasDuration, hasCalories: hasCalories) }
                 }
             }
         }
+    }
+
+    @ViewBuilder private func sportCardStats(_ group: SportGroup, hasDuration: Bool, hasCalories: Bool) -> some View {
+        miniStat(String(localized: "SESSIONS"), "\(group.count)")
+        miniStat(String(localized: "TIME"), workoutsRedesignEnabled && !hasDuration
+                 ? "—" : String(localized: "\(oneDecimal(group.totalTimeH))h"))
+        miniStat(String(localized: "KCAL"), workoutsRedesignEnabled && !hasCalories
+                 ? "—" : grouped(group.totalKcal), tint: workoutsPresentation.metricAmber)
+        miniStat(String(localized: "AVG/SESS"), workoutsRedesignEnabled && !hasDuration
+                 ? "—" : String(localized: "\(Int(group.avgTimePerSessionMin.rounded()))m"))
     }
 
     /// A slim proportional HR-zone bar for one sport's sessions — the zone colours, with the busiest
@@ -1098,12 +1302,12 @@ struct WorkoutsView: View {
             HStack(spacing: 2) {
                 ForEach(0..<5, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(StrandPalette.hrZoneColor(i + 1))
+                        .fill(workoutsPresentation.hrZoneColor(i + 1))
                         .frame(width: max(0, CGFloat(z.minutes[i] / max(z.totalMinutes, 0.001)) * geo.size.width))
                         .overlay {
                             if i == busiest {
                                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                    .strokeBorder(StrandPalette.textPrimary.opacity(0.85), lineWidth: 1.5)
+                                    .strokeBorder(workoutsPresentation.textPrimary.opacity(0.85), lineWidth: 1.5)
                             }
                         }
                 }
@@ -1115,12 +1319,12 @@ struct WorkoutsView: View {
         .accessibilityLabel(String(localized: "Heart-rate zone split: \((1...5).map { String(localized: "zone \($0) \(Int((z.minutes[$0 - 1] / max(z.totalMinutes, 0.001) * 100).rounded())) percent") }.joined(separator: ", "))"))
     }
 
-    private func miniStat(_ label: String, _ value: String, tint: Color = StrandPalette.textPrimary) -> some View {
+    private func miniStat(_ label: String, _ value: String, tint: Color? = nil) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).strandOverline()
+            Text(workoutsRedesignEnabled ? label.localizedCapitalized : label).modifier(WorkoutsOverline(enabled: workoutsRedesignEnabled, legacyComponent: true))
             Text(value)
-                .font(StrandFont.number(15))
-                .foregroundStyle(tint)
+                .modifier(WorkoutsType(legacy: StrandFont.number(15), redesigned: .rowNumber, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(tint ?? workoutsPresentation.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -1130,13 +1334,13 @@ struct WorkoutsView: View {
     // MARK: - HR zones (imported per-workout zone split, one card)
 
     private func zonesSection(_ z: WorkoutZones.Summary, totalSessions: Int) -> some View {
-        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("HR Zones",
+        VStack(alignment: .leading, spacing: workoutsPresentation.gap) {
+            workoutsSectionHeader("HR Zones",
                           overline: "Whoop import",
                           trailing: totalSessions == 1
                               ? String(localized: "\(z.sessionsWithZones) of 1 session")
                               : String(localized: "\(z.sessionsWithZones) of \(totalSessions) sessions"))
-            NoopCard(tint: StrandPalette.effortColor) {
+            workoutsCard(tint: workoutsPresentation.effortColor) {
                 VStack(alignment: .leading, spacing: 12) {
                     // Proportional stacked bar — same construction as SleepView's stage bar, with the
                     // busiest zone carrying a crisp bright end-cap stroke so it reads as a chart. No glow.
@@ -1145,12 +1349,12 @@ struct WorkoutsView: View {
                         HStack(spacing: 2) {
                             ForEach(0..<5, id: \.self) { i in
                                 Rectangle()
-                                    .fill(StrandPalette.hrZoneColor(i + 1))
+                                    .fill(workoutsPresentation.hrZoneColor(i + 1))
                                     .frame(width: max(0, CGFloat(z.minutes[i] / z.totalMinutes) * geo.size.width))
                                     .overlay {
                                         if i == busiest {
                                             Rectangle()
-                                                .strokeBorder(StrandPalette.textPrimary.opacity(0.85), lineWidth: 1.5)
+                                                .strokeBorder(workoutsPresentation.textPrimary.opacity(0.85), lineWidth: 1.5)
                                         }
                                     }
                             }
@@ -1160,16 +1364,24 @@ struct WorkoutsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(String(localized: "Heart-rate zone split: \((1...5).map { String(localized: "zone \($0) \(Int((z.minutes[$0 - 1] / z.totalMinutes * 100).rounded())) percent") }.joined(separator: ", "))"))
-                    Divider().overlay(StrandPalette.hairline)
+                    Divider().overlay(workoutsPresentation.hairline)
                     // 5-up stat strip, identical rhythm to the sport cards' miniStat row.
-                    HStack(spacing: 0) {
-                        ForEach(0..<5, id: \.self) { i in
-                            zoneStat(i + 1, minutes: z.minutes[i], total: z.totalMinutes)
+                    if workoutsRedesignEnabled {
+                        LazyVGrid(columns: workoutsDetailColumns, alignment: .leading, spacing: NoopTheme.Layout.m) {
+                            ForEach(0..<5, id: \.self) { i in
+                                zoneStat(i + 1, minutes: z.minutes[i], total: z.totalMinutes)
+                            }
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            ForEach(0..<5, id: \.self) { i in
+                                zoneStat(i + 1, minutes: z.minutes[i], total: z.totalMinutes)
+                            }
                         }
                     }
                     Text("Share of imported zone time, duration-weighted across sessions (approximate).")
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                        .foregroundStyle(workoutsPresentation.textTertiary)
                 }
             }
         }
@@ -1179,16 +1391,16 @@ struct WorkoutsView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(StrandPalette.hrZoneColor(zone))
+                    .fill(workoutsPresentation.hrZoneColor(zone))
                     .frame(width: 9, height: 9)
-                Text("Z\(zone)" as String).strandOverline()
+                Text("Z\(zone)" as String).modifier(WorkoutsOverline(enabled: workoutsRedesignEnabled, legacyComponent: true))
             }
             Text("\(Int((minutes / max(total, 0.001) * 100).rounded()))%")
-                .font(StrandFont.number(15))
-                .foregroundStyle(StrandPalette.textPrimary)
+                .modifier(WorkoutsType(legacy: StrandFont.number(15), redesigned: .rowNumber, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textPrimary)
             Text(durationLabel(minutes * 60))
-                .font(StrandFont.footnote)
-                .foregroundStyle(StrandPalette.textTertiary)
+                .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1206,15 +1418,15 @@ struct WorkoutsView: View {
     }
 
     private func sessionsSection(rows: [WorkoutRow]) -> some View {
-        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+        VStack(alignment: .leading, spacing: workoutsPresentation.gap) {
             HStack(alignment: .firstTextBaseline) {
-                SectionHeader("All Sessions",
+                workoutsSectionHeader("All Sessions",
                               overline: "Log",
                               trailing: String(localized: "\(rows.count) total"))
                 selectPill(rows: rows)
             }
             if selectionMode { selectionToolbar(rows: rows) }
-            NoopCard(padding: 0) {
+            workoutsCard(padding: 0) {
                 if usesCompactSessions {
                     // #64: full-width native rows, no horizontal scroll — the iPhone list reads like the
                     // rest of the app (Apple-Fitness x WHOOP), and the Android weight-column list. The
@@ -1231,8 +1443,8 @@ struct WorkoutsView: View {
             // iPad regular keeps the table's hint (byte-identical to before); the compact list drops it.
             if !usesCompactSessions {
                 Text("Tap a workout for its detail · tap ••• to re-label, edit or delete it.")
-                    .font(StrandFont.caption)
-                    .foregroundStyle(StrandPalette.textTertiary)
+                    .modifier(WorkoutsType(legacy: StrandFont.caption, redesigned: .caption, enabled: workoutsRedesignEnabled))
+                    .foregroundStyle(workoutsPresentation.textTertiary)
                     .padding(.horizontal, 4)
             }
             #endif
@@ -1253,12 +1465,12 @@ struct WorkoutsView: View {
                 }
             } label: {
                 Text(selectionMode ? String(localized: "Done") : String(localized: "Select"))
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(selectionMode ? StrandPalette.effortColor : StrandPalette.accent)
+                    .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                    .foregroundStyle(selectionMode ? workoutsPresentation.effortColor : workoutsPresentation.accent)
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(
-                        (selectionMode ? StrandPalette.effortColor.opacity(0.14)
-                                       : StrandPalette.surfaceInset.opacity(0.6)),
+                        (selectionMode ? workoutsPresentation.effortColor.opacity(0.14)
+                                       : workoutsPresentation.surfaceInset.opacity(0.6)),
                         in: Capsule())
             }
             .accessibilityLabel(selectionMode
@@ -1272,15 +1484,18 @@ struct WorkoutsView: View {
     private func selectionToolbar(rows: [WorkoutRow]) -> some View {
         let chosen = rows.filter { selected.contains(selectionKey($0)) }
         let canMerge = WorkoutMerge.canMerge(chosen)
-        return HStack(spacing: 10) {
+        let selectionLayout = workoutsAccessibilityLayout
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.m))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return selectionLayout {
             Button {
                 beginMerge(chosen)
             } label: {
                 Label(String(localized: "Merge (\(chosen.count))"), systemImage: "arrow.triangle.merge")
-                    .font(StrandFont.subhead)
+                    .modifier(WorkoutsType(legacy: StrandFont.subhead, redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
             }
             .disabled(!canMerge)
-            .foregroundStyle(canMerge ? StrandPalette.effortColor : StrandPalette.textTertiary)
+            .foregroundStyle(canMerge ? workoutsPresentation.effortColor : workoutsPresentation.textTertiary)
 
             Button(role: .destructive) {
                 let toDelete = chosen
@@ -1288,22 +1503,22 @@ struct WorkoutsView: View {
                 Task { await repo.bulkDeleteWorkouts(toDelete); await reload() }
             } label: {
                 Label(String(localized: "Delete (\(chosen.count))"), systemImage: "trash")
-                    .font(StrandFont.subhead)
+                    .modifier(WorkoutsType(legacy: StrandFont.subhead, redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
             }
             .disabled(chosen.isEmpty)
-            .foregroundStyle(chosen.isEmpty ? StrandPalette.textTertiary : StrandPalette.metricRose)
+            .foregroundStyle(chosen.isEmpty ? workoutsPresentation.textTertiary : workoutsPresentation.metricRose)
 
             Spacer(minLength: 0)
             Button(String(localized: "Cancel")) {
                 withAnimation(.easeOut(duration: 0.15)) { selectionMode = false; selected.removeAll() }
             }
-            .font(StrandFont.subhead)
-            .foregroundStyle(StrandPalette.textSecondary)
+            .modifier(WorkoutsType(legacy: StrandFont.subhead, redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+            .foregroundStyle(workoutsPresentation.textSecondary)
         }
-        .padding(.horizontal, NoopMetrics.space3)
-        .padding(.vertical, NoopMetrics.space3)
-        .background(StrandPalette.effortColor.opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+        .padding(.horizontal, workoutsPresentation.space3)
+        .padding(.vertical, workoutsPresentation.space3)
+        .background(workoutsPresentation.effortColor.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: workoutsPresentation.cardRadius, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 
@@ -1338,10 +1553,10 @@ struct WorkoutsView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
                 compactSessionRow(row)
                     .background(idx % 2 == 1
-                                ? StrandPalette.surfaceInset.opacity(0.4)
+                                ? workoutsPresentation.surfaceInset.opacity(0.4)
                                 : Color.clear)
                 if idx != rows.count - 1 {
-                    Divider().overlay(StrandPalette.hairline.opacity(0.5))
+                    Divider().overlay(workoutsPresentation.hairline.opacity(0.5))
                 }
             }
         }
@@ -1351,14 +1566,14 @@ struct WorkoutsView: View {
     private func sessionsTable(rows: [WorkoutRow]) -> some View {
         LazyVStack(spacing: 0) {
             sessionHeaderRow
-            Divider().overlay(StrandPalette.hairline)
+            Divider().overlay(workoutsPresentation.hairline)
             ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
                 sessionRow(row)
                     .background(idx % 2 == 1
-                                ? StrandPalette.surfaceInset.opacity(0.4)
+                                ? workoutsPresentation.surfaceInset.opacity(0.4)
                                 : Color.clear)
                 if idx != rows.count - 1 {
-                    Divider().overlay(StrandPalette.hairline.opacity(0.5))
+                    Divider().overlay(workoutsPresentation.hairline.opacity(0.5))
                 }
             }
         }
@@ -1381,12 +1596,12 @@ struct WorkoutsView: View {
             // Empty header over the per-row "•••" actions menu column (keeps SOURCE aligned).
             Color.clear.frame(width: ColWidth.action)
         }
-        .padding(.horizontal, NoopMetrics.cardPadding)
+        .padding(.horizontal, workoutsPresentation.cardPadding)
         .frame(height: RowMetrics.headerHeight)
     }
 
     private func colHeader(_ t: String, width: CGFloat, align: Alignment) -> some View {
-        Text(t).strandOverline().frame(width: width, alignment: align)
+        Text(t).modifier(WorkoutsOverline(enabled: workoutsRedesignEnabled, legacyComponent: true)).frame(width: width, alignment: align)
     }
 
     private func sessionRow(_ row: WorkoutRow) -> some View {
@@ -1414,42 +1629,42 @@ struct WorkoutsView: View {
             // Date + time
             VStack(alignment: .leading, spacing: 1) {
                 Text(dateLabel(row.startTs))
-                    .font(StrandFont.subhead)
-                    .foregroundStyle(StrandPalette.textPrimary)
+                    .modifier(WorkoutsType(legacy: StrandFont.subhead, redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+                    .foregroundStyle(workoutsPresentation.textPrimary)
                 Text(timeRangeLabel(row.startTs, row.endTs))
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
+                    .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                    .foregroundStyle(workoutsPresentation.textTertiary)
             }
             .frame(width: ColWidth.date, alignment: .leading)
 
             // Sport ("detected" reads as "Activity")
             HStack(spacing: 7) {
                 Image(systemName: sportIcon(row.sport))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(StrandPalette.textSecondary)
+                    .modifier(WorkoutsType(legacy: .system(size: 12, weight: .medium), redesigned: .caption, enabled: workoutsRedesignEnabled))
+                    .foregroundStyle(workoutsPresentation.textSecondary)
                     .frame(width: 16)
                 Text(WorkoutSource.displaySport(row.sport))
-                    .font(StrandFont.subhead)
-                    .foregroundStyle(StrandPalette.textPrimary)
+                    .modifier(WorkoutsType(legacy: StrandFont.subhead, redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+                    .foregroundStyle(workoutsPresentation.textPrimary)
                     .lineLimit(1)
             }
             .frame(width: ColWidth.sport, alignment: .leading)
 
             cell(durationLabel(row.durationS), width: ColWidth.duration)
             cell(row.avgHr.map { "\($0)" } ?? "–", width: ColWidth.hr,
-                 color: row.avgHr != nil ? StrandPalette.metricRose : nil)
+                 color: row.avgHr != nil ? workoutsPresentation.metricRose : nil)
             cell(row.energyKcal.map { grouped($0) } ?? "–", width: ColWidth.kcal,
-                 color: row.energyKcal != nil ? StrandPalette.metricAmber : nil)
+                 color: row.energyKcal != nil ? workoutsPresentation.metricAmber : nil)
             cell(distanceLabel(row.distanceM), width: ColWidth.dist)
             // #796 - per-session Effort, on the user's scale, tinted the Effort colour when present.
             cell(Self.effortCellLabel(strain: row.strain, scale: effortScale), width: ColWidth.effort,
-                 color: row.strain != nil ? StrandPalette.effortColor : nil)
+                 color: row.strain != nil ? workoutsPresentation.effortColor : nil)
 
             Spacer(minLength: 0)
 
             HStack {
                 Spacer(minLength: 0)
-                sourceBadge(row.source)
+                workoutsRowSource(row)
             }
             .frame(width: ColWidth.source, alignment: .trailing)
 
@@ -1458,7 +1673,7 @@ struct WorkoutsView: View {
             // its own taps rather than being swallowed by the row button (the DevicesView #318 idiom).
             Color.clear.frame(width: ColWidth.action)
           }
-          .padding(.horizontal, NoopMetrics.cardPadding)
+          .padding(.horizontal, workoutsPresentation.cardPadding)
           .frame(height: RowMetrics.rowHeight)
           .contentShape(Rectangle())
         }
@@ -1470,7 +1685,7 @@ struct WorkoutsView: View {
             if !selectionMode {
                 rowActionsMenu(row)
                     .frame(width: ColWidth.action, alignment: .trailing)
-                    .padding(.trailing, NoopMetrics.cardPadding)
+                    .padding(.trailing, workoutsPresentation.cardPadding)
             }
         }
         .contextMenu { if !selectionMode { rowMenu(row) } }
@@ -1504,45 +1719,52 @@ struct WorkoutsView: View {
                     compactSelectionGlyph(selectable: selectable, isSelected: isSelected)
                 }
                 Image(systemName: sportIcon(row.sport))
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(StrandPalette.textSecondary)
+                    .modifier(WorkoutsType(legacy: .system(size: 15, weight: .medium), redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+                    .foregroundStyle(workoutsPresentation.textSecondary)
                     .frame(width: 22)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(WorkoutSource.displaySport(row.sport))
-                            .font(StrandFont.subhead)
-                            .foregroundStyle(StrandPalette.textPrimary)
-                            .lineLimit(1)
+                            .modifier(WorkoutsType(legacy: StrandFont.subhead, redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+                            .foregroundStyle(workoutsPresentation.textPrimary)
+                            .lineLimit(workoutsRedesignEnabled ? nil : 1)
                         Spacer(minLength: 0)
                         Text(Self.effortCellLabel(strain: row.strain, scale: effortScale))
-                            .font(StrandFont.number(15))
-                            .foregroundStyle(row.strain != nil ? StrandPalette.effortColor : StrandPalette.textTertiary)
+                            .modifier(WorkoutsType(legacy: StrandFont.number(15), redesigned: .rowNumber, enabled: workoutsRedesignEnabled))
+                            .foregroundStyle(row.strain != nil ? workoutsPresentation.effortColor : workoutsPresentation.textTertiary)
                     }
                     Text(compactRowSubtitle(row))
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textTertiary)
-                        .lineLimit(1)
+                        .modifier(WorkoutsType(legacy: StrandFont.footnote, redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                        .foregroundStyle(workoutsPresentation.textTertiary)
+                        .lineLimit(workoutsRedesignEnabled ? nil : 1)
                         .truncationMode(.tail)
+                    #if os(iOS)
+                    if workoutsRedesignEnabled {
+                        TrainingSourceLine(provenance: TrainingProvenance.forWorkout(row))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    #endif
                 }
-                sourceBadge(row.source)
+                if !workoutsRedesignEnabled { sourceBadge(row.source) }
                 // Reserve the ••• column width inside the label; the interactive Menu is overlaid on top
                 // (below) so it captures its own taps instead of being swallowed by the row button (#318).
                 if !selectionMode {
                     Color.clear.frame(width: ColWidth.action)
                 }
             }
-            .padding(.horizontal, NoopMetrics.cardPadding)
+            .padding(.horizontal, workoutsPresentation.cardPadding)
+            .padding(.vertical, workoutsRedesignEnabled ? NoopTheme.Layout.rowVerticalPadding : 0)
             .frame(minHeight: 56)
             .contentShape(Rectangle())
         }
-        .buttonStyle(LiquidPressStyle())
+        .modifier(WorkoutsRowPress(enabled: workoutsRedesignEnabled))
         // Visible per-row ••• actions (#1/#318), layered at the trailing edge over its reserved column.
         .overlay(alignment: .trailing) {
             if !selectionMode {
                 rowActionsMenu(row)
                     .frame(width: ColWidth.action, alignment: .trailing)
-                    .padding(.trailing, NoopMetrics.cardPadding)
+                    .padding(.trailing, workoutsPresentation.cardPadding)
             }
         }
         .contextMenu { if !selectionMode { rowMenu(row) } }
@@ -1560,13 +1782,13 @@ struct WorkoutsView: View {
     private func compactSelectionGlyph(selectable: Bool, isSelected: Bool) -> some View {
         if selectable {
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(isSelected ? StrandPalette.effortColor : StrandPalette.textTertiary)
+                .modifier(WorkoutsType(legacy: .system(size: 20, weight: .regular), redesigned: .rowNumber, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(isSelected ? workoutsPresentation.effortColor : workoutsPresentation.textTertiary)
                 .accessibilityHidden(true)
         } else {
             Image(systemName: "lock.fill")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(StrandPalette.textTertiary.opacity(0.6))
+                .modifier(WorkoutsType(legacy: .system(size: 14, weight: .regular), redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textTertiary.opacity(0.6))
                 .frame(width: 20)
                 .accessibilityHidden(true)
         }
@@ -1607,8 +1829,8 @@ struct WorkoutsView: View {
             rowMenu(row)
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(StrandPalette.textTertiary)
+                .modifier(WorkoutsType(legacy: .system(size: 13, weight: .semibold), redesigned: .footnote, enabled: workoutsRedesignEnabled))
+                .foregroundStyle(workoutsPresentation.textTertiary)
                 .frame(width: ColWidth.action, height: RowMetrics.rowHeight)
                 .contentShape(Rectangle())
         }
@@ -1661,8 +1883,8 @@ struct WorkoutsView: View {
 
     private func cell(_ text: String, width: CGFloat, color: Color? = nil) -> some View {
         Text(text)
-            .font(StrandFont.number(13, weight: .regular))
-            .foregroundStyle(color ?? (text == "–" ? StrandPalette.textTertiary : StrandPalette.textPrimary))
+            .modifier(WorkoutsType(legacy: StrandFont.number(13, weight: .regular), redesigned: .bodySmall, enabled: workoutsRedesignEnabled))
+            .foregroundStyle(color ?? (text == "–" ? workoutsPresentation.textTertiary : workoutsPresentation.textPrimary))
             .frame(width: width, alignment: .trailing)
     }
 
@@ -1672,25 +1894,46 @@ struct WorkoutsView: View {
     private func sourceBadge(_ source: String) -> some View {
         let (label, tint, a11y): (String, Color, String) = {
             switch WorkoutSource.classify(source) {
-            case .whoop:    return (String(localized: "Whoop"), StrandPalette.accent, String(localized: "Source Whoop"))
-            case .apple:    return (String(localized: "Apple"), StrandPalette.metricCyan, String(localized: "Source Apple Health"))
-            case .detected: return (String(localized: "Detected"), StrandPalette.metricPurple, String(localized: "Source on-device detected"))
-            case .manual:   return (String(localized: "Manual"), StrandPalette.statusWarning, String(localized: "Source manual entry"))
-            case .lifting:  return (String(localized: "Lifting"), StrandPalette.zone2, String(localized: "Source imported lifting log"))
-            case .activityFile: return (String(localized: "File"), StrandPalette.metricAmber, String(localized: "Source imported activity file"))
+            case .whoop:    return (String(localized: "Whoop"), workoutsPresentation.accent, String(localized: "Source Whoop"))
+            case .apple:    return (String(localized: "Apple"), workoutsPresentation.metricCyan, String(localized: "Source Apple Health"))
+            case .detected: return (String(localized: "Detected"), workoutsPresentation.metricPurple, String(localized: "Source on-device detected"))
+            case .manual:   return (String(localized: "Manual"), workoutsPresentation.statusWarning, String(localized: "Source manual entry"))
+            case .lifting:  return (String(localized: "Lifting"), workoutsPresentation.zone2, String(localized: "Source imported lifting log"))
+            case .activityFile: return (String(localized: "File"), workoutsPresentation.metricAmber, String(localized: "Source imported activity file"))
             }
         }()
         // String interpolation lifts the computed label into a LocalizedStringKey (SourceBadge's type).
         return SourceBadge("\(label)", tint: tint).accessibilityLabel(a11y)
     }
 
+    @ViewBuilder private func workoutsRowSource(_ row: WorkoutRow) -> some View {
+        #if os(iOS)
+        if workoutsRedesignEnabled {
+            TrainingSourceLine(provenance: TrainingProvenance.forWorkout(row))
+        } else {
+            sourceBadge(row.source)
+        }
+        #else
+        sourceBadge(row.source)
+        #endif
+    }
+
     // MARK: - Grid columns
 
     private var tileColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 168), spacing: NoopMetrics.gap)]
+        #if os(iOS)
+        if workoutsRedesignEnabled && workoutsTypeSize.isAccessibilitySize { return [GridItem(.flexible())] }
+        #endif
+        return [GridItem(.adaptive(minimum: 168), spacing: workoutsPresentation.gap)]
     }
     private var breakdownColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 260), spacing: NoopMetrics.gap, alignment: .top)]
+        [GridItem(.adaptive(minimum: 260), spacing: workoutsPresentation.gap, alignment: .top)]
+    }
+    private var workoutsDetailColumns: [GridItem] {
+        #if os(iOS)
+        if workoutsTypeSize.isAccessibilitySize { return [GridItem(.flexible(), alignment: .leading)] }
+        #endif
+        return [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)]
     }
 
     // MARK: - Aggregation
@@ -1865,6 +2108,69 @@ struct WorkoutsView: View {
     }
 }
 
+/// Presentation adapters keep the classic/macOS path's existing tokens intact while the iPhone uses
+/// the redesign tokens. They carry no data, preference keys, filtering or action behavior.
+private struct WorkoutsPresentation {
+    let redesign: Bool
+    var textPrimary: Color { redesign ? NoopTheme.textPrimary : StrandPalette.textPrimary }
+    var textSecondary: Color { redesign ? NoopTheme.textSecondary : StrandPalette.textSecondary }
+    var textTertiary: Color { redesign ? NoopTheme.textTertiary : StrandPalette.textTertiary }
+    var effortColor: Color { redesign ? NoopTheme.strain : StrandPalette.effortColor }
+    var effortBright: Color { redesign ? NoopTheme.strain : StrandPalette.effortBright }
+    var accent: Color { redesign ? NoopTheme.textPrimary : StrandPalette.accent }
+    var statusWarning: Color { redesign ? NoopTheme.recoveryMid : StrandPalette.statusWarning }
+    var metricRose: Color { redesign ? NoopTheme.heart : StrandPalette.metricRose }
+    var metricCyan: Color { redesign ? NoopTheme.hrv : StrandPalette.metricCyan }
+    var metricPurple: Color { redesign ? NoopTheme.sleep : StrandPalette.metricPurple }
+    var metricAmber: Color { redesign ? NoopTheme.lift : StrandPalette.metricAmber }
+    var zone2: Color { redesign ? NoopTheme.zone2 : StrandPalette.zone2 }
+    var surfaceInset: Color { redesign ? NoopTheme.control : StrandPalette.surfaceInset }
+    var hairline: Color { redesign ? NoopTheme.separator : StrandPalette.hairline }
+    var gap: CGFloat { redesign ? NoopTheme.Layout.cardGap : NoopMetrics.gap }
+    var space2: CGFloat { redesign ? NoopTheme.Layout.s : NoopMetrics.space2 }
+    var space3: CGFloat { redesign ? NoopTheme.Layout.m : NoopMetrics.space3 }
+    var space4: CGFloat { redesign ? NoopTheme.Layout.l : NoopMetrics.space4 }
+    var rowSpacing: CGFloat { redesign ? NoopTheme.Layout.m : NoopMetrics.rowSpacing }
+    var cardRadius: CGFloat { redesign ? NoopTheme.Layout.cardRadius : NoopMetrics.cardRadius }
+    var cardPadding: CGFloat { redesign ? NoopTheme.Layout.cardPadding : NoopMetrics.cardPadding }
+    var chartHeight: CGFloat { NoopMetrics.chartHeight }
+    func hrZoneColor(_ zone: Int) -> Color {
+        redesign ? NoopTheme.zoneColor(zone) : StrandPalette.hrZoneColor(zone)
+    }
+}
+
+private struct WorkoutsType: ViewModifier {
+    let legacy: Font
+    let redesigned: NoopType
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.noopFont(redesigned, color: false) }
+        else { content.font(legacy) }
+    }
+}
+
+private struct WorkoutsOverline: ViewModifier {
+    let enabled: Bool
+    var legacyComponent = false
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.noopFont(.caption, color: false).textCase(nil) }
+        else if legacyComponent {
+            content.font(StrandFont.overline).tracking(StrandFont.overlineTracking)
+                .textCase(.uppercase).foregroundStyle(StrandPalette.textSecondary)
+        } else {
+            content.font(StrandFont.overline).tracking(StrandFont.overlineTracking)
+        }
+    }
+}
+
+private struct WorkoutsRowPress: ViewModifier {
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled { content.buttonStyle(.noopPress) }
+        else { content.buttonStyle(LiquidPressStyle()) }
+    }
+}
+
 /// Three raw-bpm HRR lines on one shared axis (#516). Unlike Compare's normalized overlay, these values
 /// share a unit and scale, so their vertical distance remains meaningful. Point marks keep a single eligible
 /// workout visible even when there is not yet enough history to draw a line.
@@ -1878,6 +2184,17 @@ struct WorkoutsView: View {
 /// Hover/tooltip (previously missing): reuses the same `CrosshairRule`/`HighlightDot`/`PositionedTooltip`/
 /// `ChartTooltip` components `TrendChart`'s `chartOverlay` uses — no new mechanism.
 private struct WorkoutRecoveryTrendChart: View {
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var workoutsRedesign = true
+    #endif
+    private var workoutsRedesignEnabled: Bool {
+        #if os(iOS)
+        workoutsRedesign
+        #else
+        false
+        #endif
+    }
+    private var workoutsPresentation: WorkoutsPresentation { .init(redesign: workoutsRedesignEnabled) }
     let points: [WorkoutRecoveryTrendPoint]
 
     /// The x-position the cursor is hovering, in chart-local coordinates.
@@ -1971,7 +2288,7 @@ private struct WorkoutRecoveryTrendChart: View {
         }
         .chartForegroundStyleScale(
             domain: [Self.oneLabel, Self.twoLabel, Self.fiveLabel],
-            range: [StrandPalette.metricRose, StrandPalette.metricCyan, StrandPalette.metricPurple]
+            range: [workoutsPresentation.metricRose, workoutsPresentation.metricCyan, workoutsPresentation.metricPurple]
         )
         .chartLegend(.hidden)
         // Day-aligned marks, not a requested count. This axis already formats day-only, so a sub-day
@@ -1979,18 +2296,18 @@ private struct WorkoutRecoveryTrendChart: View {
         // over the other. Four labels kept, matching what the count asked for.
         .chartXAxis {
             AxisMarks(values: axisDays) { value in
-                AxisGridLine().foregroundStyle(StrandPalette.hairline)
+                AxisGridLine().foregroundStyle(workoutsPresentation.hairline)
                 AxisValueLabel(format: ChartAxisDays.labelFormat(for: axisDays))
-                    .foregroundStyle(StrandPalette.textTertiary)
+                    .foregroundStyle(workoutsPresentation.textTertiary)
             }
         }
         .chartYAxis {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                AxisGridLine().foregroundStyle(StrandPalette.hairline)
+                if !workoutsRedesignEnabled { AxisGridLine().foregroundStyle(workoutsPresentation.hairline) }
                 AxisValueLabel {
                     if let bpm = value.as(Int.self) { Text("\(bpm)") }
                 }
-                .foregroundStyle(StrandPalette.textTertiary)
+                .foregroundStyle(workoutsPresentation.textTertiary)
             }
         }
         .chartOverlay { proxy in

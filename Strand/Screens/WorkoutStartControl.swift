@@ -18,17 +18,12 @@ struct WorkoutStartControl: View {
     @EnvironmentObject var model: AppModel
     @State private var showLiveWorkout = false
     @State private var showStartSport = false
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var workoutsRedesign = true
+    #endif
 
     var body: some View {
-        NoopButton(model.activeWorkout == nil ? "Start workout" : "View active workout",
-                   systemImage: model.activeWorkout == nil ? "figure.run" : "timer",
-                   kind: .primary,
-                   fullWidth: true) {
-            // No active session → pick a named sport first (#519), then the sheet's onStart begins it
-            // and opens the in-exercise view. Already active → jump straight back into the live view.
-            if model.activeWorkout == nil { showStartSport = true }
-            else { showLiveWorkout = true }
-        }
+        startWorkoutButton
         .accessibilityLabel(model.activeWorkout == nil ? "Start a workout" : "View the active workout")
         // #459: the in-exercise view, presented when Start Workout is tapped here (same screen LiveView
         // shows). activeWorkout is global on AppModel, so ending it from either surface stays in sync.
@@ -46,5 +41,34 @@ struct WorkoutStartControl: View {
                 showLiveWorkout = true
             }
         }
+    }
+
+    @ViewBuilder private var startWorkoutButton: some View {
+        #if os(iOS)
+        if workoutsRedesign {
+            Button(action: presentWorkout) {
+                Label(model.activeWorkout == nil ? "Start workout" : "View active workout",
+                      systemImage: model.activeWorkout == nil ? "figure.run" : "timer")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .buttonStyle(NoopPrimaryButton())
+        } else {
+            classicStartWorkoutButton
+        }
+        #else
+        classicStartWorkoutButton
+        #endif
+    }
+
+    private var classicStartWorkoutButton: some View {
+        NoopButton(model.activeWorkout == nil ? "Start workout" : "View active workout",
+                   systemImage: model.activeWorkout == nil ? "figure.run" : "timer",
+                   kind: .primary, fullWidth: true, action: presentWorkout)
+    }
+
+    private func presentWorkout() {
+        // An active session opens directly; otherwise the named-sport picker starts it first.
+        if model.activeWorkout == nil { showStartSport = true }
+        else { showLiveWorkout = true }
     }
 }
