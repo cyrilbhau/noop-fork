@@ -208,7 +208,50 @@ struct InsightsView: View {
     /// prior answers move to their real date. Local CALENDAR day (matches the journal's `localDayKey`).
     @State private var currentDayKey = Repository.localDayKey(Date())
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    #endif
+
     var body: some View {
+        Group {
+            #if os(iOS)
+            // iPhone redesign (C5): the same journal card, mood and caffeine logging, experiment, ranked
+            // effects, activity costs and relationships, over the same load and memoized state.
+            if redesignEnabled { insightsRedesignScreen } else { classicScaffold }
+            #else
+            classicScaffold
+            #endif
+        }
+        // #860 item 4: key on the data-refresh seq AND today's day-key, so the journal re-loads both on a
+        // data change and the moment the calendar day rolls over (driven by the foreground/appear refresh
+        // of `currentDayKey` below), so yesterday's answers leave "Today" and the new day starts fresh.
+        .task(id: InsightsLoadKey(seq: repo.refreshSeq, dayKey: currentDayKey)) { await load(allowCache: true) }
+        // Recompute the cached ranking only when the outcome selection changes.
+        // (behaviours / outcomeByKey change only at load, which calls
+        //  recomputeRanked() directly, so keying on `outcome` is sufficient.)
+        .onChangeCompat(of: outcome) { _ in recomputeRanked() }
+        // Refresh the day anchor on appear and whenever the app returns to the foreground; if the date has
+        // advanced this bumps the `.task(id:)` key and the journal reloads for the new logical day (#860).
+        .onAppear {
+            refreshCurrentDayKey()
+            // #656: honour a day the Today journal widget deep-linked to (tapping a bar opens the journal
+            // at THAT day). Consumed once on arrival, then cleared. Reload explicitly — setting the offset
+            // here doesn't run the pill's onChanged, and the `.task` keys on the day-key, not the offset.
+            if let day = router.pendingJournalDayOffset {
+                journalDayOffset = day
+                router.pendingJournalDayOffset = nil
+                Task { await load() }
+            }
+        }
+        .onChangeCompat(of: scenePhase) { phase in
+            if phase == .active { refreshCurrentDayKey() }
+        }
+    }
+
+    /// The classic Insights screen (macOS, and iOS with the redesign switched off). Unchanged layout.
+    private var classicScaffold: some View {
         ScreenScaffold(title: "Insights", subtitle: "Interrogate what affects what.",
                        // PERF (scroll): lazy column, byte-identical layout (LazyVStack == eager VStack
                        // alignment/spacing/header). The content is one inner eager VStack, so any nested
@@ -257,30 +300,6 @@ struct InsightsView: View {
                     relationshipsSection
                 }
             }
-        }
-        // #860 item 4: key on the data-refresh seq AND today's day-key, so the journal re-loads both on a
-        // data change and the moment the calendar day rolls over (driven by the foreground/appear refresh
-        // of `currentDayKey` below), so yesterday's answers leave "Today" and the new day starts fresh.
-        .task(id: InsightsLoadKey(seq: repo.refreshSeq, dayKey: currentDayKey)) { await load(allowCache: true) }
-        // Recompute the cached ranking only when the outcome selection changes.
-        // (behaviours / outcomeByKey change only at load, which calls
-        //  recomputeRanked() directly, so keying on `outcome` is sufficient.)
-        .onChangeCompat(of: outcome) { _ in recomputeRanked() }
-        // Refresh the day anchor on appear and whenever the app returns to the foreground; if the date has
-        // advanced this bumps the `.task(id:)` key and the journal reloads for the new logical day (#860).
-        .onAppear {
-            refreshCurrentDayKey()
-            // #656: honour a day the Today journal widget deep-linked to (tapping a bar opens the journal
-            // at THAT day). Consumed once on arrival, then cleared. Reload explicitly — setting the offset
-            // here doesn't run the pill's onChanged, and the `.task` keys on the day-key, not the offset.
-            if let day = router.pendingJournalDayOffset {
-                journalDayOffset = day
-                router.pendingJournalDayOffset = nil
-                Task { await load() }
-            }
-        }
-        .onChangeCompat(of: scenePhase) { phase in
-            if phase == .active { refreshCurrentDayKey() }
         }
     }
 
@@ -1413,6 +1432,355 @@ struct InsightsView: View {
         return String(localized: "\(strength.capitalizedFirst) \(dir) relationship (r = \(String(format: "%.2f", r)), n = \(rel.corr.n)).")
     }
 }
+
+// MARK: - iPhone redesign (C5 Journal host)
+//
+// The screen the Journal row and the "Log journal" quick action open, redrawn for the iPhone redesign over
+// the same load, memoized ranking and correlations, experiment state and journal writes. The ranked
+// effects and correlations reuse the C6 diverging-bar row; nothing is recomputed for the new layout.
+
+#if os(iOS)
+extension InsightsView {
+    var insightsRedesignScreen: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                InsightsScreenHeader("Journal")
+                    .noopEntrance(index: 0)
+                if !loaded {
+                    NoopGlassCard {
+                        Text("Reading your journal and outcomes…")
+                            .noopFont(.bodySmall)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .noopSkeleton(true)
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.l)
+                } else {
+                    insightsRdLoaded
+                }
+            }
+            .padding(.bottom, NoopMetrics.tabBarClearance)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .insightsAmbient(.journal, intensityRaw: ambientIntensityRaw)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    @ViewBuilder
+    private var insightsRdLoaded: some View {
+        JournalLogCard(importedQuestions: importedQuestions,
+                       answers: dayAnswers,
+                       numericAnswers: dayNumeric,
+                       dayOffset: $journalDayOffset,
+                       onChanged: { Task { await load() } })
+            .padding(.top, NoopTheme.Layout.m)
+            .noopEntrance(index: 1)
+
+        // Mood check-in and the caffeine window keep their own loads and layouts.
+        MindSection()
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .padding(.top, NoopTheme.Layout.xl)
+        CaffeineLogCard()
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .padding(.top, NoopTheme.Layout.cardGap)
+
+        InsightsSectionTitle("What moves you")
+        Button { router.openInsightsHub() } label: {
+            NoopGlassCard(flush: true) {
+                NoopListRow("What moves you", systemImage: "wand.and.sparkles", color: NoopTheme.recovery,
+                            detail: String(localized: "Ranked, lag-aware: which of your habits actually move your Charge, plus your personal alcohol/caffeine dose-response."),
+                            showsDivider: false)
+            }
+        }
+        .buttonStyle(.noopPress)
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+
+        InsightsSectionTitle("Personal Experiment")
+        NoopGlassCard {
+            if let snapshot = activeExperimentSnapshot {
+                insightsRdActiveExperiment(snapshot)
+            } else {
+                insightsRdExperimentSetup
+            }
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+
+        InsightsSectionTitle("Behaviour Effects")
+        insightsRdEffects
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+
+        InsightsSectionTitle("Activity Cost", trailing: String(localized: "What each activity costs your recovery"))
+        insightsRdActivityCosts
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+
+        InsightsSectionTitle("Metric Relationships")
+        insightsRdRelationships
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+    }
+
+    // MARK: Experiment
+
+    private var insightsRdExperimentSetup: some View {
+        let candidates = experimentCandidates
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Run a clean personal test").noopFont(.rowTitle)
+                Spacer(minLength: NoopTheme.Layout.s)
+                NoopPill("Local only", systemImage: "iphone")
+            }
+            Text("Pick one behaviour you log, one outcome, and a short window. NOOP compares the days you log the behaviour against your behaviour-free days before the start.")
+                .noopFont(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
+            if candidates.isEmpty {
+                Text("Log at least one behaviour above before starting an experiment.")
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack {
+                    Text("Behaviour").noopFont(.footnote)
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    Picker("Behaviour", selection: experimentBehaviourBinding) {
+                        ForEach(candidates, id: \.self) { q in Text(verbatim: q).tag(q) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .tint(NoopTheme.textPrimary)
+                    .accessibilityLabel("Experiment behaviour")
+                }
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                    Text("Outcome").noopFont(.footnote)
+                    SegmentedPills(Outcome.allCases, selection: experimentOutcomeBinding) { Text(verbatim: $0.label) }
+                        .accessibilityLabel(Text("Experiment outcome metric"))
+                }
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                    Text("Window").noopFont(.footnote)
+                    SegmentedPills(ExperimentLength.allCases, selection: experimentLengthBinding) { Text(verbatim: $0.label) }
+                        .accessibilityLabel(Text("Experiment window length"))
+                }
+                Button { startExperiment() } label: {
+                    Label("Start experiment", systemImage: "flask.fill")
+                }
+                .buttonStyle(NoopPrimaryButton())
+                .disabled(resolvedExperimentBehaviour == nil)
+            }
+        }
+    }
+
+    private func insightsRdActiveExperiment(_ snapshot: ExperimentSnapshot) -> some View {
+        let counts = "\(String(localized: "\(snapshot.baselineCount) days without it")) · \(String(localized: "\(snapshot.interventionCount) logged days"))"
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                Text(verbatim: snapshot.behavior).noopFont(.rowTitle).lineLimit(2)
+                Text("Started \(snapshot.startDay) · testing \(snapshot.outcome.outcomeName.lowercased())")
+                    .noopFont(.caption)
+            }
+            Text(verbatim: experimentReading(snapshot))
+                .noopFont(.bodySmall)
+                .fixedSize(horizontal: false, vertical: true)
+            StatGrid([
+                StatGridItem("Baseline", value: snapshot.baselineMean.map { formatOutcome($0, as: snapshot.outcome) }),
+                StatGridItem("Intervention", value: snapshot.interventionMean.map { formatOutcome($0, as: snapshot.outcome) }),
+                StatGridItem("Change", value: snapshot.delta == nil ? nil
+                             : formatExperimentDelta(snapshot.delta, outcome: snapshot.outcome)),
+                StatGridItem("Compliance", value: "\(Int(snapshot.compliance.rounded()))%"),
+            ])
+            Text(verbatim: "\(counts) · \(snapshot.loggedToday ? String(localized: "logged today") : String(localized: "not logged today"))")
+                .noopFont(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                InsightsProgressBar(fraction: snapshot.progress, color: NoopTheme.coach)
+                    .accessibilityLabel(Text("Experiment progress"))
+                    .accessibilityValue(Text("\(snapshot.daysElapsed) of \(snapshot.durationDays) days"))
+                HStack {
+                    Text("\(snapshot.daysElapsed) of \(snapshot.durationDays) days").noopFont(.caption)
+                    Spacer()
+                    Text(verbatim: snapshot.confidence.label.lowercased().capitalizedFirst)
+                        .noopFont(.caption, color: false)
+                        .foregroundStyle(NoopTheme.textSecondary)
+                }
+            }
+            HStack(spacing: NoopTheme.Layout.m) {
+                Button { Task { await markExperimentToday(true) } } label: {
+                    Label("Mark done today", systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(NoopPrimaryButton())
+                .disabled(snapshot.loggedToday)
+                Button { Task { await markExperimentToday(false) } } label: {
+                    Label("Skip today", systemImage: "xmark.circle")
+                }
+                .buttonStyle(NoopSecondaryButton())
+            }
+            Button(role: .destructive) { endExperiment() } label: {
+                Label("End", systemImage: "stop.circle")
+                    .noopFont(.bodySmall, color: false)
+                    .foregroundStyle(NoopTheme.recoveryLow)
+                    .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: Behaviour effects
+
+    @ViewBuilder
+    private var insightsRdEffects: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            SegmentedPills(Outcome.allCases, selection: $outcome) { Text(verbatim: $0.label) }
+                .accessibilityLabel(Text("Outcome metric"))
+            if behaviours.isEmpty {
+                NoopGlassCard {
+                    Text("Log behaviours above. After a few days of answers, NOOP ranks how each one moves your charge, HRV and rest. Importing a WHOOP export (which includes its journal) backfills history instantly.")
+                        .noopFont(.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else if ranked.isEmpty {
+                NoopGlassCard {
+                    Text(verbatim: String(localized: "Not enough overlap between your journal answers and \(outcome.outcomeName.lowercased()) to measure an effect yet. Keep logging. Effects need days both with and without each behaviour."))
+                        .noopFont(.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                let fractions = InsightsDivergingBar.fractions(ranked.map { $0.pctChange ?? $0.delta })
+                NoopGlassCard(flush: true) {
+                    ForEach(ranked.indices, id: \.self) { i in
+                        insightsRdEffectRow(ranked[i], fraction: fractions[i], showsDivider: i > 0)
+                    }
+                }
+                insightsRdCausationNote
+            }
+        }
+    }
+
+    private func insightsRdEffectRow(_ e: BehaviorEffect, fraction: Double, showsDivider: Bool) -> some View {
+        let movedGood: Bool? = e.delta == 0 ? nil : ((e.delta > 0) == outcome.higherIsBetter)
+        let color: Color = movedGood.map { good in
+            good ? NoopTheme.recovery : (e.significant ? NoopTheme.recoveryLow : NoopTheme.recoveryMid)
+        } ?? NoopTheme.textTertiary
+        let value = e.pctChange.map { "\($0 >= 0 ? "+" : "−")\(Int(abs($0).rounded()))%" }
+            ?? formatExperimentDelta(e.delta, outcome: outcome)
+        let word = e.significant ? String(localized: "Significant") : String(localized: "Exploratory")
+        let sentence = MetricCatalog.scoreDisplayText(BehaviorInsights.sentence(e))
+        return InsightsEffectRow(
+            title: e.behavior,
+            caption: String(localized: "\(word) · \(e.nWith) days with, \(e.nWithout) without"),
+            valueText: value, fraction: fraction, color: color, muted: !e.significant,
+            showsDivider: showsDivider
+        ) {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                Text(verbatim: sentence)
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                StatGrid([
+                    StatGridItem("With", value: formatOutcome(e.meanWith)),
+                    StatGridItem("Without", value: formatOutcome(e.meanWithout)),
+                    StatGridItem("Effect size", value: String(format: "d = %.2f", e.cohensD),
+                                 unit: effectMagnitudeWord(e.cohensD)),
+                ], columns: 3)
+            }
+        }
+    }
+
+    private var insightsRdCausationNote: some View {
+        (Text("Average change versus days without it.") + Text(verbatim: " ")
+         + Text("A pattern in your data, not proof of cause."))
+            .noopFont(.footnote)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, NoopTheme.Layout.xs)
+    }
+
+    // MARK: Activity cost
+
+    @ViewBuilder
+    private var insightsRdActivityCosts: some View {
+        if activityCosts.isEmpty {
+            NoopGlassCard {
+                Text("Tag a few sessions of the same activity and NOOP will learn its personal recovery cost.")
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            VStack(spacing: NoopTheme.Layout.cardGap) {
+                ForEach(Array(activityCosts.enumerated()), id: \.element.sport) { _, cost in
+                    insightsRdActivityCostCard(cost)
+                }
+            }
+        }
+    }
+
+    private func insightsRdActivityCostCard(_ cost: ActivityCost) -> some View {
+        let costing = cost.delta >= ActivityCostEngine.barelyMovesPoints
+        let lifting = cost.delta <= -ActivityCostEngine.barelyMovesPoints
+        let accent: Color = costing ? NoopTheme.recoveryLow : (lifting ? NoopTheme.recovery : NoopTheme.recoveryMid)
+        let pointsLabel = String(format: "%@%.0f", cost.delta >= 0 ? "−" : "+", abs(cost.delta))
+        let bounce = cost.daysToBaseline != nil ? String(localized: "to baseline") : String(localized: "not within 7d")
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack(spacing: NoopTheme.Layout.m) {
+                    DomainIcon(systemImage: sportSymbol(cost.sport), color: accent, size: DomainIcon.smallSize)
+                    Text(verbatim: cost.sport).noopFont(.rowTitle).lineLimit(1)
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    Text(verbatim: cost.confidence == .solid ? String(localized: "solid") : String(localized: "building"))
+                        .noopFont(.caption)
+                }
+                Text(verbatim: MetricCatalog.scoreDisplayText(cost.sentence()))
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                StatGrid([
+                    StatGridItem("Next morning", value: "\(Int(cost.meanNextMorning.rounded()))"),
+                    StatGridItem("Rest baseline", value: "\(Int(cost.baselineMean.rounded()))"),
+                    StatGridItem("Bounce back", value: cost.daysToBaseline.map { "\($0)d" }),
+                    StatGridItem("Sessions", value: "\(cost.n)"),
+                ])
+                Text(verbatim: "\(String(localized: "Charge · \(pointsLabel) pts")) · \(bounce)")
+                    .noopFont(.caption)
+            }
+        }
+    }
+
+    // MARK: Relationships
+
+    @ViewBuilder
+    private var insightsRdRelationships: some View {
+        let rels = relationships
+        if rels.isEmpty {
+            NoopGlassCard {
+                Text("Not enough overlapping history to correlate your metrics yet.")
+                    .noopFont(.bodySmall)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            NoopGlassCard(flush: true) {
+                ForEach(Array(rels.enumerated()), id: \.element.id) { idx, rel in
+                    let r = rel.corr.r
+                    let significant = rel.corr.pApprox < 0.05
+                    InsightsEffectRow(
+                        title: rel.title,
+                        caption: "\(significant ? "p < 0.05" : "n.s.") · n = \(rel.corr.n)",
+                        valueText: String(format: "r = %+.2f", r),
+                        fraction: r,
+                        color: NoopTheme.recoveryColor(for: (r + 1) / 2 * 100),
+                        muted: !significant,
+                        showsDivider: idx > 0
+                    ) {
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                            Text(verbatim: relationshipSentence(rel))
+                                .noopFont(.footnote)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(verbatim: rel.blurb)
+                                .noopFont(.caption)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+#endif
 
 // MARK: - Correlation magnitude bar (hover-aware)
 
