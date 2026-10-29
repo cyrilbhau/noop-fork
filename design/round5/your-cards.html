@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP Your Cards</title>
+<link rel="stylesheet" href="../system/noop.css">
+<style>
+/* Your Cards (round 5). Synthetic data only. Tokens: --r-tile 20, --gap 12, card padding 14 (rowVerticalPadding). */
+.ycgrid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+.yc{background:var(--card);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.05);border-radius:var(--r-tile);padding:14px;min-height:112px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden}
+.yc .hd{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;min-width:0}
+.yc .hd b{font-weight:600;flex:1;min-width:0;line-height:17px}
+.yc .hd .chev{margin-left:0;font-size:15px}
+.yc .v{font-size:24px;font-weight:600;letter-spacing:-.5px;line-height:28px;margin-top:auto}
+.yc .v small{font-size:13px;color:var(--t2);font-weight:500;letter-spacing:0;margin-left:3px}
+.yc .v.none{color:var(--t3)}
+.yc .c{font-size:12px;color:var(--t2);line-height:16px}
+.yc .c.warn{color:var(--rec-mid)}
+.yc.launch .d{font-size:13px;color:var(--t2);line-height:18px;margin-top:auto}
+.yc.launch .ico{width:28px;height:28px;border-radius:9px;display:grid;place-items:center}
+.yc.wide{grid-column:1 / -1}
+/* AX5: one column, scaled type (SwiftUI .accessibility5 scales footnote ~3x, title3 ~2.2x). */
+.ax .yc{min-height:0;padding:18px;gap:8px}
+.ax .yc .hd{font-size:30px;gap:10px}.ax .yc .hd b{line-height:36px}
+.ax .yc .v{font-size:46px;line-height:52px}.ax .yc .v small{font-size:28px}
+.ax .yc .c{font-size:26px;line-height:32px}
+.ax .yc .hd svg{width:30px;height:30px}.ax .yc .hd .chev{font-size:30px}.ax .yc.launch .ico{width:44px;height:44px;border-radius:12px}
+.ax .yc.launch .d{font-size:28px;line-height:34px}
+.ax .sec h3{font-size:40px}.ax .sec a{font-size:30px}
+.note{font-size:12px;color:var(--t2);background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.14);border-radius:14px;padding:10px 12px;line-height:17px}
+.note b{color:var(--t1);font-weight:600}
+/* editor (iOS inset-grouped list on the sheet colour) */
+.ed{position:absolute;left:0;right:0;top:54px;bottom:0;background:#1A1A1E;border-radius:14px 14px 0 0;padding:0 16px 30px;overflow:hidden}
+.ed .bar{display:flex;align-items:center;justify-content:space-between;height:52px;font-size:17px}
+.ed .bar .t{font-weight:600}.ed .bar .a{color:var(--strain)}.ed .bar .a.b{font-weight:600}
+.grp{background:rgba(44,44,50,.72);border-radius:12px;overflow:hidden}
+.gh{font-size:13px;color:var(--t2);padding:18px 16px 7px;text-transform:uppercase;letter-spacing:.02em}
+.gf{font-size:13px;color:var(--t2);padding:7px 16px 0;line-height:18px}
+.er{display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
+.er:first-child{border-top:0}
+.er .ti{width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.06);display:grid;place-items:center;flex:none}
+.er .tt{font-size:16px;line-height:21px}.er .st{font-size:12px;color:var(--t2);line-height:16px;margin-top:1px}
+.er .st.warn{color:var(--rec-mid)}
+.er .edit{font-size:13px;font-weight:600;color:var(--strain)}
+.er .mn,.er .pl{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:17px;font-weight:700;flex:none;color:#000}
+.er .mn{background:#FF453A}.er .pl{background:#30D158}
+.er .gr{color:var(--t3);font-size:16px;letter-spacing:-2px;flex:none}
+.er.off .tt{color:var(--t2)}
+.banner{display:flex;gap:12px;align-items:flex-start;background:rgba(255,200,61,.10);border:1px solid rgba(255,200,61,.22);border-radius:14px;padding:12px 14px;margin-top:12px}
+.banner .bt{font-size:15px;font-weight:600}.banner .bd{font-size:13px;color:var(--t2);line-height:18px;margin-top:2px}
+.banner .bb{font-size:15px;font-weight:600;color:var(--rec-mid);white-space:nowrap;align-self:center}
+.reset{text-align:center;color:#FF453A;font-size:17px;padding:12px 0}
+.legend{max-width:900px;font-size:13px;color:var(--t2);line-height:19px;margin:-8px 0 28px}
+.legend b{color:var(--t1)}
+</style>
+</head>
+<body>
+<div class="controls"><button id="replay">Replay load</button><span>Round 5 · Your cards on Today · synthetic data</span></div>
+<p class="legend"><b>Your cards</b> is the user's own pick of metrics and shortcuts, drawn as a two-column grid of tiles so it reads differently from <b>Key metrics</b> (compact rows with a trend line) and <b>Added cards</b> (full cards mirrored from Sleep, Trends and Stress). Tiles follow the saved order exactly. Metric tiles show one number, its unit and an honest caption. Shortcut tiles (Coupled view, Coach) show no number. Section titles sit on the 16pt gutter (spacing plan, 29 Oct).</p>
+<div class="board">
+
+<!-- ================= YC1 NORMAL ================= -->
+<section><div class="board-title">YC1 · Today, Your cards (few cards)</div>
+<div class="screen" data-ambient="today:84,68,11.4">
+  <div class="sb"></div>
+  <div class="hdr">
+    <div><div class="lt">Today</div><div class="sub">Wed, 29 Oct</div></div>
+    <div class="row gap10"><div class="pill"><span class="dot" style="background:var(--recovery)"></span><span class="num">84%</span></div><div class="ibtn" data-ic="person" data-s="22"></div></div>
+  </div>
+  <div class="wrap" style="margin-top:20px"><div class="card" style="padding:18px 14px 16px"><div class="rings" data-s="86" data-r="68" data-st="11.4"></div></div></div>
+
+  <div class="sec"><h3>Key metrics</h3><a>Edit<span class="chev">›</span></a></div>
+  <div class="wrap"><div class="card" style="padding:14px 18px">
+    <div class="mrow"><div><div class="k" style="color:var(--hrv)">HRV</div></div><div class="v num"><span data-count="62">62</span><small>ms</small></div><svg class="line" data-c="--hrv" data-v="50,54,51,58,55,57,62" width="72" height="34"></svg></div>
+    <div class="mrow"><div><div class="k" style="color:var(--heart)">Resting heart rate</div></div><div class="v num"><span data-count="52">52</span><small>bpm</small></div><svg class="line" data-c="--heart" data-v="55,54,53,54,52,53,52" width="72" height="34"></svg></div>
+    <div class="mrow"><div><div class="k" style="color:var(--lift)">Steps</div><div class="s">Estimated from strap</div></div><div class="v num">~<span data-count="6240" data-sep="1">6,240</span></div><svg class="line" data-c="--lift" data-v="8,6,9,4,7,10,6" width="72" height="34"></svg></div>
+  </div></div>
+
+  <div class="sec"><h3>Your cards</h3><a>Edit<span class="chev">›</span></a></div>
+  <div class="wrap"><div class="ycgrid" data-set="few"></div></div>
+  <div class="tabbar" data-on="0"></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= YC2 MANY ================= -->
+<section><div class="board-title">YC2 · All 16 cards, saved order, long labels</div>
+<div class="screen" style="min-height:1500px" data-ambient="today:84,68,11.4">
+  <div class="sb"></div>
+  <div class="navbar"><div style="width:40px"></div><div class="ttl">Today</div><div style="width:40px"></div></div>
+  <div class="sec" style="padding-top:12px"><h3>Your cards</h3><a>Edit<span class="chev">›</span></a></div>
+  <div class="wrap"><div class="ycgrid" data-set="all"></div></div>
+  <div class="wrap mt16"><div class="note"><b>Order is the user's.</b> Shortcut tiles take one grid cell like any other card, so a saved order is never re-sorted. An odd final tile spans the full width. Hydration and Coach appear only while their features are on; switched off, they keep their place in the saved list and return there.</div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= YC3 EMPTY / STALE ================= -->
+<section><div class="board-title">YC3 · Today, strap away: carried, stale, not measured, empty</div>
+<div class="screen" data-ambient='[["--rec-mid",210,-30,200,0.22],["--sleep",40,10,160,0.16]]'>
+  <div class="sb"></div>
+  <div class="hdr">
+    <div><div class="lt">Today</div><div class="sub">Wed, 29 Oct</div></div>
+    <div class="row gap10"><div class="pill" style="color:var(--rec-mid)"><span class="dot" style="background:var(--rec-mid)"></span>2h ago</div><div class="ibtn" data-ic="person" data-s="22"></div></div>
+  </div>
+  <div class="sec" style="padding-top:20px"><h3>Your cards</h3><a>Edit<span class="chev">›</span></a></div>
+  <div class="wrap"><div class="ycgrid" data-set="stale"></div></div>
+  <div class="wrap mt16"><div class="note"><b>No number stands in for a missing one.</b> Last night's HRV did not arrive, so the tile shows a dash and names the night it last had ("Last: 58 ms · Tue"), exactly like the Key metrics row. Fitness age is a weekly value and says when it was computed; the date turns amber once it is more than two weekly updates old. Blood oxygen keeps the WHOOP 4.0 "not measured" gate and is not tappable.</div></div>
+  <div class="tabbar" data-on="0"></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= YC4 PAST DAY ================= -->
+<section><div class="board-title">YC4 · A past day (Mon, 27 Oct)</div>
+<div class="screen" data-ambient="today:71,52,14.2">
+  <div class="sb"></div>
+  <div class="hdr">
+    <div><div class="lt">Monday</div><div class="sub">Mon, 27 Oct</div></div>
+    <div class="row gap10"><div class="pill"><span class="dot" style="background:var(--recovery)"></span><span class="num">84%</span></div><div class="ibtn" data-ic="person" data-s="22"></div></div>
+  </div>
+  <div class="sec" style="padding-top:20px"><h3>Your cards</h3><a>Edit<span class="chev">›</span></a></div>
+  <div class="wrap"><div class="ycgrid" data-set="past"></div></div>
+  <div class="wrap mt16"><div class="note"><b>Past days show that day.</b> Nightly and daily values are that day's own, with no carry. Weekly values use the latest one on or before that day, stamped "as of". Stress uses that day's point on the stress trend. Hydration is logged for today only, so it says so instead of showing today's total on Monday. Taps open that day's detail.</div></div>
+  <div class="tabbar" data-on="0"></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= YC5 AX5 ================= -->
+<section><div class="board-title">YC5 · Largest accessibility size (AX5)</div>
+<div class="screen ax">
+  <div class="sb"></div>
+  <div class="navbar"><div style="width:40px"></div><div class="ttl">Today</div><div style="width:40px"></div></div>
+  <div class="sec" style="padding-top:12px;flex-wrap:wrap;gap:4px 12px"><h3>Your cards</h3><a>Edit<span class="chev">›</span></a></div>
+  <div class="wrap"><div class="ycgrid" style="grid-template-columns:1fr" data-set="ax"></div></div>
+  <div class="wrap mt16"><div class="note" style="font-size:13px"><b>At accessibility sizes the grid becomes one column</b> (the same <code>isAccessibilitySize</code> switch the rings card uses). Nothing truncates: titles and captions wrap, values never shrink below the type ramp. Each tile is one VoiceOver element: "Stress, 1.4 of 3, moderate. Button."</div></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= YC6 CUSTOMIZE ROOT ================= -->
+<section><div class="board-title">YC6 · Customize Today: three card sections, three purposes</div>
+<div class="screen" data-nomotion style="background:#000">
+  <div class="sb"></div>
+  <div class="ed">
+    <div class="bar"><span class="a">Cancel</span><span class="t">Customize Today</span><span class="a b">Save</span></div>
+    <div class="gh">Shown on Today</div>
+    <div class="grp">
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--recovery)" data-ic="today" data-s="18"></span><div class="grow1"><div class="tt">Sleep, Recovery &amp; Strain</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--hrv)" data-ic="chart" data-s="18"></span><div class="grow1"><div class="tt">Key metrics</div><div class="st">4 shown · readings with a trend line</div></div><span class="edit">Edit</span><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--heart)" data-ic="heart" data-s="18"></span><div class="grow1"><div class="tt">Heart rate</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--strain)" data-ic="sliders" data-s="18"></span><div class="grow1"><div class="tt">Your cards</div><div class="st">6 shown · metrics and shortcuts you pick</div></div><span class="edit">Edit</span><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--lift)" data-ic="dumbbell" data-s="18"></span><div class="grow1"><div class="tt">Activity</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--sleep)" data-ic="plus" data-s="18"></span><div class="grow1"><div class="tt">Added cards</div><div class="st">2 added · full cards from Sleep, Trends and Stress</div></div><span class="edit">Edit</span><span class="gr">≡</span></div>
+    </div>
+    <div class="gf">Drag to reorder. Move an item to Hidden to remove it from Today without deleting it.</div>
+    <div class="gh">Hidden</div>
+    <div class="grp"><div class="er off"><span class="pl">+</span><span class="ti" style="color:var(--t3)" data-ic="book" data-s="18"></span><div class="grow1"><div class="tt">Journal</div></div></div></div>
+    <div class="wrap mt16" style="padding:0"><div class="note"><b>Purpose lines</b> are the only new copy on this page: one short line per card section says what it holds, so "Your cards" and "Added cards" stop reading as the same thing. The hero row uses the Sleep / Recovery / Strain name in the redesign (follow-up F5).</div></div>
+  </div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= YC7 YOUR CARDS EDITOR ================= -->
+<section><div class="board-title">YC7 · Your cards editor: duplicates, gated cards, position</div>
+<div class="screen" data-nomotion style="background:#000;min-height:1060px">
+  <div class="sb"></div>
+  <div class="ed">
+    <div class="bar"><span class="a">‹ Customize</span><span class="t">Your cards</span><span class="a b">Save</span></div>
+    <div class="gh">Shown</div>
+    <div class="grp">
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--stress)" data-ic="bolt" data-s="18"></span><div class="grow1"><div class="tt">Stress</div><div class="st">Autonomic load</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--recovery)" data-ic="run" data-s="18"></span><div class="grow1"><div class="tt">Fitness age</div><div class="st">Updated weekly</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--hrv)" data-ic="trend" data-s="18"></span><div class="grow1"><div class="tt">HRV</div><div class="st">Also in Key metrics</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--hrv)" data-ic="cup" data-s="18"></span><div class="grow1"><div class="tt">Hydration</div><div class="st warn">Hidden while Hydration is off</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--steps,var(--lift))" data-ic="steps" data-s="18"></span><div class="grow1"><div class="tt">30-day step average</div><div class="st">Rolling average over the last 30 days</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--coach)" data-ic="spark" data-s="18"></span><div class="grow1"><div class="tt">Coach</div><div class="st">Shortcut · opens Coach</div></div><span class="gr">≡</span></div>
+    </div>
+    <div class="gf">Shown on Today after Heart rate. <span style="color:var(--strain)">Change position</span></div>
+    <div class="gh">Metrics</div>
+    <div class="grp">
+      <div class="er off"><span class="pl">+</span><span class="ti" style="color:var(--t3)" data-ic="spark" data-s="18"></span><div class="grow1"><div class="tt">Vitality</div><div class="st">Wellness score</div></div></div>
+      <div class="er off"><span class="pl">+</span><span class="ti" style="color:var(--t3)" data-ic="lungs" data-s="18"></span><div class="grow1"><div class="tt">VO₂ max</div><div class="st">Estimated, updated weekly</div></div></div>
+      <div class="er off"><span class="pl">+</span><span class="ti" style="color:var(--t3)" data-ic="drop" data-s="18"></span><div class="grow1"><div class="tt">Blood oxygen</div><div class="st">Not measured on WHOOP 4.0</div></div></div>
+      <div class="er off"><span class="pl">+</span><span class="ti" style="color:var(--t3)" data-ic="moon" data-s="18"></span><div class="grow1"><div class="tt">Sleep</div><div class="st">Last night</div></div></div>
+    </div>
+    <div class="gh">Shortcuts</div>
+    <div class="grp">
+      <div class="er off"><span class="pl">+</span><span class="ti" style="color:var(--t3)" data-ic="today" data-s="18"></span><div class="grow1"><div class="tt">Coupled view</div><div class="st">Recovery, strain and sleep in one glance</div></div></div>
+    </div>
+    <div class="gf">Hidden items remain available here and can be restored at any time.</div>
+    <div class="grp" style="margin-top:22px"><div class="reset">Reset This Layout</div></div>
+  </div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= YC8 HIDDEN SECTION ================= -->
+<section><div class="board-title">YC8 · Editing while Your cards is hidden</div>
+<div class="screen" data-nomotion style="background:#000">
+  <div class="sb"></div>
+  <div class="ed">
+    <div class="bar"><span class="a">‹ Customize</span><span class="t">Your cards</span><span class="a b">Save</span></div>
+    <div class="banner">
+      <div class="grow1"><div class="bt">Hidden on Today</div><div class="bd">Your choices here are saved, but the section stays hidden until you show it.</div></div>
+      <span class="bb">Show</span>
+    </div>
+    <div class="gh">Shown</div>
+    <div class="grp">
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--stress)" data-ic="bolt" data-s="18"></span><div class="grow1"><div class="tt">Stress</div><div class="st">Autonomic load</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--recovery)" data-ic="run" data-s="18"></span><div class="grow1"><div class="tt">Fitness age</div><div class="st">Updated weekly</div></div><span class="gr">≡</span></div>
+      <div class="er"><span class="mn">−</span><span class="ti" style="color:var(--sleep)" data-ic="sun" data-s="18"></span><div class="grow1"><div class="tt">Vitality</div><div class="st">Wellness score</div></div><span class="gr">≡</span></div>
+    </div>
+    <div class="gf">Show changes the section list in this same draft: Cancel discards it with everything else, and Save is the only thing that writes.</div>
+  </div>
+  <div class="home"></div>
+</div></section>
+
+</div>
+<script src="../system/noop.js"></script>
+<script>
+// Tile specs: [kind, icon, tint, title, value, unit, caption, opts]. kind: m = metric, l = launcher (shortcut).
+// opts: none (value is a dash), warn (caption in amber), nolink (no chevron: not tappable), approx (leading ~).
+const T = {
+  hrv:      ['m','trend','--hrv','HRV','62','ms','Last night'],
+  rhr:      ['m','heart','--heart','Resting heart rate','52','bpm','Last night'],
+  resp:     ['m','lungs','--breath','Respiratory rate','14.8','rpm','Last night'],
+  steps:    ['m','steps','--lift','Steps','6,240','','Estimated from strap',{approx:1}],
+  steps30:  ['m','steps','--lift','30-day step average','7,812','','24 of 30 days'],
+  stress:   ['m','bolt','--stress','Stress','1.4','of 3','Moderate'],
+  fit:      ['m','run','--recovery','Fitness age','≤ 34','yrs','as of 26 Oct'],
+  vo2:      ['m','lungs','--recovery','VO₂ max','48.2','','Estimated · as of 26 Oct'],
+  vit:      ['m','sun','--sleep','Vitality','72','','as of 28 Oct'],
+  spo2:     ['m','drop','--t3','Blood oxygen','—','','Not measured on WHOOP 4.0',{none:1,nolink:1}],
+  skin:     ['m','thermo','--temp','Skin temperature','+0.3°','C','Relative to baseline'],
+  sleep:    ['m','moon','--sleep','Sleep','7h 42m','','Last night'],
+  kcal:     ['m','bolt','--temp','Calories','612','kcal','Apple Health'],
+  water:    ['m','cup','--hrv','Hydration','1.4 / 2.5','L',"Today's fluid"],
+  coupled:  ['l','today','--recovery','Coupled view','','','Recovery, strain and sleep in one glance'],
+  coach:    ['l','spark','--coach','Coach','','','Ask about your recovery, strain, sleep and workouts, grounded in your own numbers.'],
+};
+const v = (k, over) => { const s = T[k].slice(); Object.entries(over || {}).forEach(([i, x]) => s[+i] = x); return s; };
+const SETS = {
+  few: [T.stress, T.fit, T.vit, T.vo2, T.steps30, T.coach],
+  all: [T.stress, T.fit, T.vit, T.hrv, T.rhr, T.resp, T.steps, T.steps30, T.vo2, T.spo2, T.skin, T.sleep, T.kcal, T.water, T.coupled, T.coach],
+  stale: [
+    v('hrv', {4:'—', 6:'Last: 58 ms · Tue', 7:{none:1}}),
+    v('rhr', {4:'—', 6:'Last: 51 bpm · Tue', 7:{none:1}}),
+    v('stress', {4:'—', 5:'', 6:'No data', 7:{none:1}}),
+    v('fit', {6:'as of 12 Oct', 7:{warn:1}}),
+    T.spo2,
+    v('steps30', {4:'—', 6:'No step data in the last 30 days', 7:{none:1}}),
+    v('sleep', {4:'—', 6:'No data', 7:{none:1}}),
+    T.coach,
+  ],
+  past: [
+    v('stress', {4:'2.1', 6:'High'}),
+    v('fit', {4:'≤ 35', 6:'as of 19 Oct'}),
+    v('vit', {4:'69', 6:'as of 27 Oct'}),
+    v('hrv', {4:'54', 6:'Night of 27 Oct'}),
+    v('steps', {4:'11,402', 6:'Apple Health', 7:{}}),
+    v('water', {4:'—', 5:'', 6:'Logged for today only', 7:{none:1,nolink:1}}),
+    v('sleep', {4:'6h 58m', 6:'Night of 27 Oct'}),
+    T.coach,
+  ],
+  ax: [T.stress, v('fit', {}), T.coach],
+};
+function tile([kind, icon, tint, title, value, unit, cap, o = {}]) {
+  const col = `var(${tint})`;
+  const chev = o.nolink ? '' : '<span class="chev">›</span>';
+  if (kind === 'l') return `<div class="yc launch"><div class="hd" style="color:${col}"><span class="ico" style="background:${hexA(C(tint), .18)}" data-ic="${icon}" data-s="16"></span><b>${title}</b>${chev}</div><div class="d">${cap}</div></div>`;
+  const val = o.none ? `<div class="v none num">—</div>` : `<div class="v num">${o.approx ? '~' : ''}${value}${unit ? `<small>${unit}</small>` : ''}</div>`;
+  return `<div class="yc"><div class="hd" style="color:${col}"><span data-ic="${icon}" data-s="16"></span><b>${title}</b>${chev}</div>${val}<div class="c${o.warn ? ' warn' : ''}">${cap}</div></div>`;
+}
+document.querySelectorAll('.ycgrid').forEach(g => {
+  const set = SETS[g.dataset.set];
+  g.innerHTML = set.map(tile).join('');
+  if (set.length % 2 && getComputedStyle(g).gridTemplateColumns.split(' ').length > 1) g.lastElementChild.classList.add('wide');
+});
+boot();
+</script>
+</body>
+</html>

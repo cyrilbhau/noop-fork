@@ -1,7 +1,9 @@
 <script>
-// Fetches the frames exported by design/round4's exportSvgFrames() from the local preview server.
-fetch('http://localhost:8765/export/r4-frames.json')
+// Fetches the frames a design page's exportSvgFrames() exported to the local preview server. The plugin
+// names the file, since each import command reads its own round.
+onmessage = e => fetch('http://localhost:8765/export/' + e.data.pluginMessage.file)
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
   .then(json => parent.postMessage({ pluginMessage: { type: 'frames', json } }, '*'))
   .catch(e => parent.postMessage({ pluginMessage: { type: 'error', message: String(e) } }, '*'));
+parent.postMessage({ pluginMessage: { type: 'ready' } }, '*');
 </script>

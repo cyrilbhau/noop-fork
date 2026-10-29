@@ -22,8 +22,16 @@
       "command": "import"
     },
     {
+      "name": "Import round 5 frames",
+      "command": "import5"
+    },
+    {
       "name": "Repair imported rings",
       "command": "repair"
+    },
+    {
+      "name": "Align section titles to gutter",
+      "command": "align"
     }
   ]
 }
