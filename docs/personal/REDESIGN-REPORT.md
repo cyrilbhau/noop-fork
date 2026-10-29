@@ -1,6 +1,6 @@
 # NOOP iPhone redesign: implementation report
 
-Written 29 October 2026 at the end of the implementation of
+Initial implementation and follow-up audit: 29 October 2026 (Asia/Kolkata), following
 [REDESIGN-IMPLEMENTATION.md](REDESIGN-IMPLEMENTATION.md). Branch `personal/redesign` on the private
 repository, branched from `claude/noop-design-overhaul-3b7185` (30a7b3b7). Nothing was pushed to `main`
 or `personal/iphone-baseline`, no PR was opened, and nothing was installed on the owner's phone.
@@ -19,7 +19,47 @@ or `personal/iphone-baseline`, no PR was opened, and nothing was installed on th
 | 10 Visual check fix | `e9479898` |
 
 Every commit message carries its own verification output and a per-phase gap list. This report
-summarises them.
+summarises them. The audit continuation below supersedes the original gap and verification claims.
+
+## Audit continuation — 29 October 2026
+
+The handoff was audited against the source, both app builds, the isolated app tests, and settled
+simulator screenshots. Changes stay on `personal/redesign`; no PR, merge, tag, phone install, or
+remote branch deletion has been performed. The accepted baseline and checkpoint remain intact.
+
+| Handoff item | Result |
+|---|---|
+| A1 readiness wording | Stale Swift assertions now expect the accepted “Rest up”. The Kotlin twin was checked; its “Rest” wording remains unchanged, with the same readiness-level mapping. |
+| A2 Live Activity scale | Widgets and Live Activities share one formatter over the original Strain value. Optional display text preserves old payload decoding. Scale changes refresh quiet banners; nil remains different from measured zero. |
+| A3 tab tint | Neutral redesign tint; saved classic accent retained. |
+| A4 inactive appearance settings | Preset, day-cycle background, sky, transparency and image controls are hidden with the redesign on. Stored choices remain untouched. |
+| A5 shared presentation | Sleep marks, debt, stages versus typical, asleep duration, both body-clock cards, Mind, caffeine, stress check-in, training load, the live lifting editor and Workouts are restyled behind the iOS flag. Existing actions and reads remain shared. |
+| A6 Coach shape | Explicit native `.prominent` on iOS 27; `.search` on iOS 26; normal fallback below that. The settled iOS 27 simulator screenshot confirms the separate circle. |
+| A7 largest Dynamic Type | Removed the redesign's inherited AX1 cap. Verified AX5 before launch; adapted app headers, rows, grids, controls, week strip and lifting fields. Widget gallery and physical accessibility acceptance remain manual. |
+| A8 duplicated decisions | Liquid Today/Recovery share the original readiness sentence; Coupled/Strain share original band thresholds. Boundary tests cover readiness levels, stale nights, and Strain cutovers. |
+| Additional display audit | Today no longer truncates sleep minutes while Sleep rounds them. Both use the existing Sleep rounding and localized duration through one formatter, with a minute/hour-boundary regression. Daily-import totals and decoded-night totals retain their existing source semantics. |
+| Additional honesty audit | Today and Health share one positive WHOOP 4.0 registry-family gate. They show blood oxygen as not measured, with no percentage, while preserving stored imports and other devices' source-labelled values. Percentages stay gated until the current device resolves. |
+| A9 optional widget additions | No speculative metrics, new widget kinds, or invented sync totals/percentages added. |
+
+| Audit concern | Commit |
+|---|---|
+| A1 — align readiness expectations with accepted wording | [`48ca0ce6`](https://github.com/cyrilbhau/noop-fork/commit/48ca0ce68be86fbafb77c165b42c505fdc017c63) |
+| A2 — share the selected Strain scale with Live Activities | [`ff41e121`](https://github.com/cyrilbhau/noop-fork/commit/ff41e1210bd2efcd9882abe4bde0db3dd3cb6e46) |
+| A3 — use neutral tab tint in the iPhone redesign | [`724d121c`](https://github.com/cyrilbhau/noop-fork/commit/724d121cc3ffdff8b262e4a56d227a01361bab2f) |
+| A4 — hide inactive classic appearance settings | [`b0c3e773`](https://github.com/cyrilbhau/noop-fork/commit/b0c3e77318297a8e0b110fd40345852e37b26dd9) |
+| A6 — request native prominent Coach tab on iOS 27 | [`ce02776d`](https://github.com/cyrilbhau/noop-fork/commit/ce02776dcf4ca61cd09914405f8fe5c582a9f15f) |
+| A8 — share readiness copy and Strain band decisions | [`c26378e3`](https://github.com/cyrilbhau/noop-fork/commit/c26378e35ceaa43b4ff0c49667302b0df01e0f2c) |
+| A7 — support actual AX5 text in redesigned screens | [`c779cacd`](https://github.com/cyrilbhau/noop-fork/commit/c779cacd393187a145e046873503889349de937b) |
+| A10 — keep WHOOP 4 blood oxygen readouts consistent | [`0b7caf08`](https://github.com/cyrilbhau/noop-fork/commit/0b7caf080d435702ec90e19d0ea7a54d3fa74907) |
+| A5-sleep — finish redesigned shared sleep cards | [`5e8f5a11`](https://github.com/cyrilbhau/noop-fork/commit/5e8f5a1133fe331604842ad53364bd20027adc71) |
+| A5-wellness — finish redesigned wellness and training-load cards | [`115997bb`](https://github.com/cyrilbhau/noop-fork/commit/115997bb9298a4cfb435cd6d68657cbe385eab67) |
+| A5-lift — finish the live lifting editor presentation | [`bb3d82ef`](https://github.com/cyrilbhau/noop-fork/commit/bb3d82efd2ade54eb0afe1ea189dab92d1d9c725) |
+| A5-workouts — finish the redesigned workout history | [`95a2f1da`](https://github.com/cyrilbhau/noop-fork/commit/95a2f1da3e3517d9fe1514fa2305533771c7d178) |
+| A7-caption — keep the full Strain target readable at AX5 | [`552be742`](https://github.com/cyrilbhau/noop-fork/commit/552be742f984273fa24700a39246fb385f3639c4) |
+| A11-duration — format sleep duration consistently across Today and Sleep | [`b9a24f7f`](https://github.com/cyrilbhau/noop-fork/commit/b9a24f7fabb100887f6c2fcf4d760e45a7831095) |
+
+The Strain target caption moves outside the arc at accessibility sizes so the actual range can wrap.
+The minimized lifting-session bar retains its existing chrome; the full editor and finish flow are restyled.
 
 ## How the redesign is switched
 
@@ -108,12 +148,12 @@ summarises them.
 | E2 | Start/ready dates; 4-night average tiles |
 | 02 Recovery | Sleep "of need" sub-line; nav-bar date and info button |
 | A1 Strain | "Today so far" cumulative line (no cumulative Strain series); coaching copy |
-| 03 Sleep | Stages "Details ›" link; disturbances typical; shared sleep cards (sleep marks, debt ledger, stages vs typical, asleep duration, body clock) keep their old style, including an uppercase overline in Sleep marks |
+| 03 Sleep | Stages "Details ›" link; disturbances typical |
 | 04 Training | Sessions-per-week goal (none exists, so the ring is unfilled and reads "no goal set"); weekly Strain total and week-over-week change; "3.4 a week"; distinguishing pasted from CSV |
-| B1–B3 | "HR from strap" badge; usual HR recovery; Up next / active program; a per-dumbbell flag; RPE badge colours. The live lift-session screen and `WorkoutsView` are not restyled |
+| B1–B3 | "HR from strap" badge; usual HR recovery; Up next / active program; a per-dumbbell flag; RPE badge colours |
 | A2–A4 | Per-row latest value and sparkline; a D range and manual entry; motion-stream freshness |
 | 05 Health | "14 nights" link |
-| C2–C6 | Sleep-hours Trends tile (Trends shows performance %, #732); live stress and notes; journal item icons; one-tap experiment start. MindSection, CaffeineLogCard, StressCheckInCard and TrainingLoadCard keep their old style |
+| C2–C6 | Sleep-hours Trends tile (Trends shows performance %, #732); live stress and notes; journal item icons; one-tap experiment start |
 | D1–D6, A6, C1, E3 | Coach context chips; verification time and extra include toggles; profile name and "tracking since"; per-row counts and ages; backup size, nights and snapshot list; per-stream dots, "worn on", "last charged"; a readback-confirmed alarm time and week strip; pair-strap step counter |
 | R4 | Strain small widget and Lock Screen gauge (need a new kind or intent); sleep "% of need"; stress band word; imported vs computed provenance in widgets; zone bpm range; HR trace in the island; lift set totals and session name; sync total, percentage and strap model |
 | R4-5 | Morning summary (no sender exists); the long-press custom notification view (a Notification Content Extension, which the plan says to ask about first) |
@@ -127,8 +167,8 @@ summarises them.
   7-second undo; every former More row is reachable.
 - Missing data reads "—" or a dashed empty ring and is never animated or shown as 0.
 - Steps are labelled estimated. Skin temperature is shown relative to baseline only.
-- Blood oxygen shows a value only where the existing logic resolves one. Otherwise it is a "not measured"
-  row.
+- A positively identified WHOOP 4.0 shows blood oxygen as “not measured” in Today and Health. Other
+  or unknown devices retain existing source-labelled values after the shared registry lookup resolves.
 - Imported vs computed scores carry source captions. Health workouts are labelled "summary only".
 - Never-settling animations consult `NoopMotionState.poseStill` (Reduce Motion, Low Power, quiet motion).
 - The new Devices buttons call existing user-initiated actions: Sync now (`syncNow`) and Buzz strap
@@ -143,56 +183,62 @@ summarises them.
 - **Hidden with the redesign on:** Theme (System/Light/Dark), which is inert because the root is pinned
   dark; **Accent colour**; **Chart colours**. Their stored values are untouched, and macOS still honours
   them.
-- **Left visible, though they only affect classic or Liquid screens:** Preset, Day-cycle background, Sky
-  behind cards, card transparency and background image.
-- **Not hidden yet:** the tab bar tint still follows the Accent setting.
+- **Also hidden with the redesign on:** Preset, Day-cycle background, Sky behind cards, card transparency
+  and background image. Their stored values are retained.
+- **Tab tint:** neutral for the redesign; the saved Accent is used by classic mode.
 
-## Test and build results (final tree, `38c5e2c1` + `e9479898`)
+## Test and build results — audited source
 
-- **`cd Packages/StrandDesign && swift test`:** 211 tests, 0 failures.
-- **NOOPiOS (app and widgets), generic iOS Simulator:** `** BUILD SUCCEEDED **`.
-- **Strand macOS build plus StrandTests:** 2392 tests, 2 skipped, 2 failures.
-  - Both failures are assertions in `TodayChargeTapCollapseTests.testReadinessWord_mapsEveryLevel`, which
-    expects "Rest" where `TodayView.readinessWord` returns "Rest up".
-  - That function is untouched by this work; the mismatch dates from `e6e14c6a` on the baseline.
-- **`python3 Tools/i18n_audit.py --ci HEAD`:** exit 0. Every new string has all 10 locales.
-- **`python3 Tools/doc_comment_lint.py`:** OK.
-- **`python3 -m unittest discover -s Tools`:** only the failures already present on the unmodified
-  baseline.
-  - 4 × `test_check_source_references` (macOS `/var` vs `/private/var` temp paths).
-  - Parity governance `test_checked_metadata_is_compact_v3...` (authority 509 vs 510 files).
-- **Process notes.**
-  - The lexical parity ledger and i18n audit flagged generic helper names three times during the work
-    (`clock`, `stat`/`statCell`, and a literal nested in an interpolation). Each was renamed or hoisted
-    rather than editing a baseline.
-  - Two StrandTests hosts run concurrently left `noop.coachEnabled = 0` in the throwaway test host's
-    defaults domain (`com.noopapp.noop.staging`), which produced spurious Coach test failures. The key was
-    removed and the suites were re-run one at a time.
-  - That domain belongs to the unsigned /tmp worktree builds, not to the owner's app.
+- **`cd Packages/StrandDesign && swift build && swift test`:** passed, 211 tests, zero failures.
+- **NOOPiOS, generic iOS Simulator:** app and widget build succeeded.
+- **Strand macOS build + StrandTests:** passed, 2,398 tests, two optional fixture tests skipped, zero
+  failures. Tests ran alone with `-parallel-testing-enabled NO` in a disposable `/tmp` Git worktree,
+  without `Config/BundleIdSecrets.xcconfig`, using the throwaway staging defaults domain.
+- **Signed generic iOS build:** passed with the existing personal identity/profile and unchanged local
+  config. App and widget signatures verify; they share the same team and App Groups. No watch app is embedded.
+- **`python3 Tools/i18n_audit.py --ci HEAD`:** passed before each audit commit. Existing translated keys
+  were reused; no catalog changes were required.
+- **`python3 Tools/doc_comment_lint.py`:** passed.
+- **`python3 -m unittest discover -s Tools`:** 339 tests; five failures, exactly the reproduced baseline set:
+  four `test_check_source_references` assertions over `/var` versus `/private/var`, and the existing
+  compact parity-authority mismatch (509 versus 510 files). The new Live Activity payload regression passed.
+- **`git diff --check`:** passed.
 
-## Screenshots (simulator only, synthetic `--demo-seed` data, no personal data)
+The body-clock dial retains fixed-size hour numerals and its existing layout invariant test. The new Strain and sleep-duration
+formatter tests and shared-readout tests pass in the full app suite. These checks establish compilation and
+regression coverage; real strap interactions and physical widget refresh remain the checklist below.
+Local build logs, device metadata and `.xcresult` bundles remain outside Git.
 
-- **Simulator:** a dedicated "NOOP Redesign Review" device (iPhone 18 Pro, iOS 27.0), dark mode, status
-  bar pinned to 9:41.
-- **Location:** the gitignored `build/personal/redesign-screens/` folder in this worktree. The paths are
-  local to the owner's Mac.
-- **Before:** baseline build 30a7b3b7, in `before/`.
-  - Populated: shell, liquidtoday, sleep, health, live, explore, trends, stress, insights, settings,
-    devices, workouts.
-  - Empty: liquidtoday, sleep, health, live, trends, settings.
-- **After:** final build, in `after/`, populated and empty for shell, redesigntoday, recovery, strain,
-  sleep, training, redesignhealth, profile, live, explore, trends, stress, insights, settings, devices
-  and gallery. "shell-empty" is the first-run gate, as expected without a seed.
-- **Largest accessibility text size:** `after-ax5/` holds redesigntoday, recovery, sleep, training,
-  redesignhealth and profile. Titles and rows wrap without clipping in those shots.
-- **Regenerating:** run a DEBUG build with `--demo-seed --demo-screen <name>`. The new names are
-  redesigntoday, recovery, strain, training, redesignhealth, profile and gallery (the component gallery).
+## Screenshots (simulator only, synthetic data)
+
+- Dedicated **NOOP Redesign Review**, iPhone 18 Pro / iOS 27.0; dark appearance, status bar pinned to 9:41.
+  The personal-data simulator was not used.
+- Refreshed screenshots: gitignored `build/personal/redesign-screens/audit/default/` and `audit/ax5/`.
+  They cover Today, Recovery, Strain, Sleep, Training, Health, Profile, Settings, Workouts and live lifting.
+  The native shell capture confirms Coach's separate circle. Earlier before/after captures remain available.
+- AX5 was set with `simctl ui … content_size accessibility-extra-extra-extra-large`, then read back before
+  launching each batch. `capture-settings.json` records the category. The redesign now allows that category
+  through the root; classic mode retains the previous cap.
+- True empty-state captures use a separately created **NOOP Empty Audit** simulator with a fresh app
+  container and no seed, covering Today, Recovery, Strain and Health. Missing scores/vitals render dashes
+  and dashed rings, while calibration truthfully shows 0 of 4 nights. Simply omitting `--demo-seed`
+  retains the previous database; those initial
+  captures were relabelled `audit/retained-demo/`, never accepted as empty-state evidence.
+- Captures wait for loading and entrance motion to settle. Early captures that were still loading were replaced; a loading
+  frame is not evidence of a settled zero or an empty screen.
+- Compared with the canonical Round 2, Round 3 and Round 4 HTML opened with `?static=1`. Functional controls,
+  provenance and honest empty states take precedence over the mockups' illustrative values.
+- At AX sizes, content stacks or scrolls instead of forcing data into fixed columns. Lifting numeric widths
+  scale, the clock strip scrolls horizontally, and range/intensity pickers use menus. Fixed-family widget
+  layouts still need native gallery/Lock Screen review; this host exposes simulator CLI capture but has no
+  Simulator.app GUI for exercising that gallery.
 
 ## Needs on-device checking
 
-- **Coach tab shape.** On the iOS 27 simulator, `Tab(role: .search)` drew Coach inside the bar as a fifth
-  item rather than as the separate circle. The code follows the plan; check on the phone.
-- **Dynamic Type at the largest size.** The AX5 capture scaled less than expected, so check on the device.
+- **Coach tab shape.** The separate circle is verified on the iOS 27 simulator with the explicit prominent
+  role. Confirm it on the phone, including Coach being disabled and re-enabled.
+- **Dynamic Type.** App AX5 captures now apply the real size. Confirm lower scrolled content, VoiceOver,
+  native pickers, widget gallery and Lock Screen layouts on the phone.
 - **Widgets.** Gallery sizes, Lock Screen vibrancy, refresh timing and "Updated" labels.
 - **Live Activities.** Zone colours on a live banner from a real strap; the rest ring draining in the
   compact island; the striped sync bar.
@@ -205,6 +251,25 @@ summarises them.
 - **Settings.** Flipping "Use classic Today" live keeps navigation state.
 - **Readouts across screens.** That Recovery and Strain match the Today rings after the 04:00 rollover and
   while calibrating.
-- **Follow-up inconsistency.** The Live Activity shows Strain on the 0–100 axis, while widgets use the
-  user's scale (pre-existing). Fixing it needs an `effortDisplay` field in the activity state.
-- **Install.** The owner installs with `Tools/personal/ios.sh` and their own identity, as before.
+- **Live Activity scale.** Fixed in source and covered by payload/formatter tests. Confirm both display
+  scales against the app with a real activity, including switching scales without another HR sample.
+- **Install.** Signed update prepared, awaiting the owner's backup and explicit permission as below.
+
+## Install record — prepared, awaiting permission
+
+- **Preparation:** signed app and one widget extension built from the redesign worktree. Existing ignored
+  signing config is byte-identical to the baseline checkout and remains ignored. No Config, entitlements,
+  bundle IDs, team settings, storage keys or database migrations were changed by this audit.
+- **Identity check:** read-only connected-phone metadata confirms that the installed **NOOP Cyril** has
+  the same bundle identifier as the signed build. Private device/profile identifiers are not recorded here.
+- **Status:** no phone install, uninstall, restore or application launch was performed by this audit.
+- **Next step:** the owner exports a fresh `.noopbak` from the current app and explicitly confirms the
+  in-place update. Installation must use the existing app identity, retain its container, Keychain access
+  and widget identity, and must never uninstall first.
+- A source checkout changes files on the Mac; it cannot downgrade or wipe the installed phone database.
+  It is also not a backup of health data. An install or restore is a separate action requiring approval.
+- After installation, record the owner-observed results for Coach sign-in, pasted-workout preview/save,
+  Health summaries, Today/detail consistency and 04:00 rollover, calibration, widgets, alarms, Devices
+  actions, Breathe timing, haptics, live HR/rest ring, and live classic-mode toggling.
+- If accepted, ask separately before merging into `personal/iphone-baseline` and before creating an
+  annotated checkpoint tag. Propose deleting `personal/redesign-wip` only after merge and explicit approval.
