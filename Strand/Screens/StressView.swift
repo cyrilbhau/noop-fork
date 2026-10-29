@@ -72,7 +72,30 @@ struct StressView: View {
     @State private var model: StressModel?
     @State private var modelSignature: StressInputs?
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @Environment(\.locale) private var locale
+    #endif
+
     var body: some View {
+        // The loads and the model cache run once for whichever layout is showing.
+        Group {
+            #if os(iOS)
+            // iPhone redesign (C3): the same model, intraday read, advanced readouts, range and Breathe sheet.
+            if redesignEnabled { stressRedesignScreen } else { classicScaffold }
+            #else
+            classicScaffold
+            #endif
+        }
+        .onAppear { rebuildModelIfNeeded() }
+        .onChangeCompat(of: repo.days) { _ in rebuildModelIfNeeded() }
+        .task(id: repo.refreshSeq) { await load() }
+    }
+
+    /// The classic Stress screen (macOS, and iOS with the redesign switched off). Unchanged layout.
+    private var classicScaffold: some View {
         ScreenScaffold(title: "Stress", subtitle: "Autonomic load across your waking day",
                        // PERF (scroll): lazy column — byte-identical layout (LazyVStack == eager VStack
                        // alignment/spacing/header). The content is one inner eager VStack, so the staggered
@@ -90,9 +113,6 @@ struct StressView: View {
                 emptyState
             }
         }
-        .onAppear { rebuildModelIfNeeded() }
-        .onChangeCompat(of: repo.days) { _ in rebuildModelIfNeeded() }
-        .task(id: repo.refreshSeq) { await load() }
     }
 
     private func load() async {
@@ -259,19 +279,23 @@ struct StressView: View {
         }
         // The sustained-stress suggestion opens the existing Breathe trainer in a sheet —
         // in-app and passive (no alert / notification), inheriting the app environment.
-        .sheet(isPresented: $showBreathe) {
-            NavigationStack {
-                BreathingView()
-                    .toolbar {
-                        ToolbarItem {
-                            Button("Done") { showBreathe = false }
-                        }
+        .sheet(isPresented: $showBreathe) { breatheSheet }
+    }
+
+    /// The existing Breathe trainer in a sheet, opened from the sustained-stress suggestion (and, on the
+    /// redesigned iPhone screen, from its Breathe row).
+    private var breatheSheet: some View {
+        NavigationStack {
+            BreathingView()
+                .toolbar {
+                    ToolbarItem {
+                        Button("Done") { showBreathe = false }
                     }
-            }
-            #if os(macOS)
-            .frame(width: 520, height: 760)
-            #endif
+                }
         }
+        #if os(macOS)
+        .frame(width: 520, height: 760)
+        #endif
     }
 
     // MARK: 3 · Daytime timeline (intraday, same 0–3 proxy)
@@ -571,25 +595,10 @@ struct StressView: View {
     /// A vs-baseline marker as a fixed-height StatTile. The delta is tinted by
     /// whether the move is toward stress (warning) or recovery (positive).
     private func markerTile(label: LocalizedStringKey, value: String, delta: Double?, accent: Color, higherIsStress: Bool) -> some View {
-        let deltaText: String?
-        let deltaColor: Color
-        // NO CHIP for a missing delta, rather than a claim we cannot make (#2145). It is nil when
-        // today has no reading or there is no 30-day baseline to stand one against, and both fell
-        // through to the at-baseline chip: a tile with no reading read "— at baseline", and a
-        // first-week tile put a reading exactly on a baseline that did not exist yet. StatTile draws
-        // the pill only for a non-nil delta, so nil is already the way to say nothing here.
-        if delta == nil {
-            deltaText = nil
-            deltaColor = StrandPalette.textTertiary
-        } else if let delta, abs(delta) >= 0.5 {
-            let up = delta > 0
-            let isStressful = (up == higherIsStress)
-            deltaText = String(localized: "\(up ? "+" : "−")\(Int(abs(delta).rounded())) vs base")
-            deltaColor = isStressful ? StrandPalette.statusWarning : StrandPalette.statusPositive
-        } else {
-            deltaText = String(localized: "at baseline")
-            deltaColor = StrandPalette.textTertiary
-        }
+        let marker = stressMarkerDelta(delta, higherIsStress: higherIsStress)
+        let deltaText = marker.text
+        let deltaColor: Color = marker.stressful.map { $0 ? StrandPalette.statusWarning : StrandPalette.statusPositive }
+            ?? StrandPalette.textTertiary
         return StatTile(
             label: label,
             value: value,
@@ -598,6 +607,23 @@ struct StressView: View {
             delta: deltaText,
             deltaColor: deltaColor
         )
+    }
+
+    /// The vs-baseline wording for a marker, shared by the classic tile and the redesigned row. `stressful`
+    /// is nil when the move has no direction worth colouring (at baseline, or no delta at all).
+    ///
+    /// NO CHIP for a missing delta, rather than a claim we cannot make (#2145). It is nil when today has no
+    /// reading or there is no 30-day baseline to stand one against, and both fell through to the
+    /// at-baseline chip: a tile with no reading read "— at baseline", and a first-week tile put a reading
+    /// exactly on a baseline that did not exist yet. StatTile draws the pill only for a non-nil delta, so
+    /// nil is already the way to say nothing here.
+    private func stressMarkerDelta(_ delta: Double?, higherIsStress: Bool) -> (text: String?, stressful: Bool?) {
+        guard let delta else { return (nil, nil) }
+        if abs(delta) >= 0.5 {
+            let up = delta > 0
+            return (String(localized: "\(up ? "+" : "−")\(Int(abs(delta).rounded())) vs base"), up == higherIsStress)
+        }
+        return (String(localized: "at baseline"), nil)
     }
 
     // MARK: 3 · Trend (range-controlled)
@@ -707,6 +733,428 @@ struct StressView: View {
         ComingSoon(what: "No stress history yet. Import your WHOOP export in Data Sources to see it.")
     }
 }
+
+// MARK: - iPhone redesign (C3 Stress)
+//
+// `design/round3/sleep-health.html` C3 over this screen's own state: the same cached `StressModel`, the
+// same intraday read with its activity mask and personal-baseline caption, the same advanced readouts,
+// the same `range` and the same Breathe sheet. Stress lines use `NoopTheme.stress`; the level bar uses the
+// mockup's green → amber → red track. Missing data is a dash or an empty state, never a zero.
+
+#if os(iOS)
+extension StressView {
+    var stressRedesignScreen: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                InsightsScreenHeader("Stress", subtitle: "Autonomic load across your waking day")
+                    .noopEntrance(index: 0)
+                if let model {
+                    stressRdContent(model)
+                } else {
+                    NoopGlassCard {
+                        Text(loaded
+                             ? "No stress history yet. Import your WHOOP export in Data Sources to see it."
+                             : "Reading your heart-rate variability and resting heart rate…")
+                            .noopFont(.bodySmall)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .noopSkeleton(!loaded)
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.l)
+                }
+            }
+            .padding(.bottom, NoopMetrics.tabBarClearance)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .refreshable { await repo.refresh() }
+        .insightsAmbient(.stress, intensityRaw: ambientIntensityRaw)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showBreathe) { breatheSheet }
+    }
+
+    @ViewBuilder
+    private func stressRdContent(_ model: StressModel) -> some View {
+        stressRdHero(model)
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .padding(.top, NoopTheme.Layout.l)
+            .noopEntrance(index: 1)
+
+        // Today's intraday line: a skeleton while the read runs (#2535), silent when the day had nothing
+        // scorable, the line otherwise.
+        if daytime == nil {
+            InsightsSectionTitle("Today's Timeline")
+            NoopGlassCard {
+                Text("Reading today's heart rate…")
+                    .noopFont(.footnote)
+                    .frame(maxWidth: .infinity, minHeight: InsightsLayout.stressDayChart)
+            }
+            .noopSkeleton(true)
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        } else if let daytime, !daytime.scored.isEmpty {
+            InsightsSectionTitle("Today's Timeline", trailing: timelineTrailing(daytime))
+            stressRdDaytime(daytime)
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+                .noopEntrance(index: 2)
+        }
+
+        stressRdBreatheCard
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .padding(.top, NoopTheme.Layout.cardGap)
+            .noopEntrance(index: 3)
+
+        InsightsSectionTitle("Markers", trailing: String(localized: "vs 30-day baseline"))
+        stressRdMarkers(model)
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .noopEntrance(index: 4)
+
+        if hasAdvancedReadouts {
+            InsightsSectionTitle("Advanced HRV", trailing: String(localized: "on demand · today's R-R"))
+            stressRdAdvanced
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+                .noopEntrance(index: 5)
+        }
+
+        InsightsSectionTitle("Stress Trend", trailing: range.name)
+        stressRdTrend(model)
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .noopEntrance(index: 6)
+
+        InsightsSectionTitle("How this is computed")
+        stressRdMethod(model)
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .noopEntrance(index: 7)
+    }
+
+    // MARK: Hero
+
+    private func stressRdBandWord(_ band: StressBand) -> String {
+        switch band {
+        case .low: return String(localized: "Low")
+        case .medium: return String(localized: "Medium")
+        case .high: return String(localized: "High")
+        }
+    }
+
+    private func stressRdBandColor(_ band: StressBand) -> Color {
+        switch band {
+        case .low: return NoopTheme.recovery
+        case .medium: return NoopTheme.recoveryMid
+        case .high: return NoopTheme.recoveryLow
+        }
+    }
+
+    /// "Last: Tue 28 Oct" when the scored day is not today (the model carries the newest day with signal,
+    /// #543), so a carried score never reads as today's.
+    private func stressRdStaleCaption(_ model: StressModel) -> String? {
+        guard let last = model.fullTrend.last?.date else { return nil }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        let parts = utc.dateComponents([.year, .month, .day], from: last)
+        guard let y = parts.year, let m = parts.month, let d = parts.day else { return nil }
+        let key = String(format: "%04d-%02d-%02d", y, m, d)
+        guard key != Repository.localDayKey(Date()) else { return nil }
+        var style = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(locale)
+        style.timeZone = utc.timeZone
+        return String(localized: "Last: \(last.formatted(style))")
+    }
+
+    private func stressRdHero(_ model: StressModel) -> some View {
+        let level = StressTrace.formatLevel(model.score)
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                HStack(alignment: .lastTextBaseline) {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                        Text("Stress monitor").noopFont(.footnote)
+                        HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
+                            Text(verbatim: level).noopFont(.bigNumber, color: false).foregroundStyle(NoopTheme.stress)
+                            Text("of 3").noopFont(.unit)
+                        }
+                    }
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    Text(verbatim: stressRdBandWord(model.band))
+                        .noopFont(.sectionTitle, color: false)
+                        .foregroundStyle(stressRdBandColor(model.band))
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: String(localized: "Stress \(level) of 3")))
+                .accessibilityValue(Text(verbatim: stressRdBandWord(model.band)))
+                VStack(spacing: NoopTheme.Layout.s) {
+                    InsightsStressLevelBar(fraction: model.score / 3)
+                    HStack {
+                        Text("Low")
+                        Spacer()
+                        Text("Medium")
+                        Spacer()
+                        Text("High")
+                    }
+                    .noopFont(.caption)
+                    .accessibilityHidden(true)
+                }
+                Text(verbatim: model.explanation)
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    if model.usingStored {
+                        SourceCaption("Today's value is your recorded daily stress score (0-3).")
+                    } else {
+                        SourceCaption("Stress is derived from two autonomic signals.")
+                    }
+                    if let stale = stressRdStaleCaption(model) {
+                        SourceCaption(verbatim: stale)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Intraday
+
+    private func stressRdDaytime(_ day: DaytimeStress.Result) -> some View {
+        let totals = StressTotals(hours: day.hours)
+        // The peak of what is DRAWN (#2144): a sliding window can exceed both hourly neighbours.
+        let drawnPeak = day.timeline.filter { $0.level != nil }.max { ($0.level ?? 0) < ($1.level ?? 0) }
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                InsightsStressDayLine(points: day.timeline, color: NoopTheme.stress)
+                    .frame(height: InsightsLayout.stressDayChart)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("Today's Timeline"))
+                    .accessibilityValue(Text(verbatim: timelineTrailing(day)))
+                if let lo = day.timeline.first?.hour, let hi = day.timeline.last?.hour {
+                    HStack {
+                        Text(verbatim: hourLabel(lo))
+                        Spacer()
+                        Text(verbatim: hourLabel((lo + hi) / 2))
+                        Spacer()
+                        Text(verbatim: hourLabel(hi))
+                    }
+                    .noopFont(.caption)
+                    .accessibilityHidden(true)
+                }
+                if let peak = drawnPeak, let lvl = peak.level {
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        Circle().fill(NoopTheme.stress)
+                            .frame(width: InsightsLayout.dot, height: InsightsLayout.dot)
+                            .accessibilityHidden(true)
+                        Text(verbatim: String(localized: "peak \(StressTrace.formatLevel(lvl)) · \(hourLabel(peak.hour))"))
+                            .noopFont(.footnote)
+                    }
+                }
+                Rectangle().fill(NoopTheme.separator).frame(height: 1).accessibilityHidden(true)
+                stressRdTotals(totals)
+                Text(daytimeTimelineCaption)
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let masked = stressActivityMaskedHoursCaption(day.activityMaskedHours) {
+                    Text(verbatim: masked)
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// The calm / moderate / high split of the scored waking hours as one stacked bar with its legend. A
+    /// day with no scored hours draws an empty track.
+    private func stressRdTotals(_ totals: StressTotals) -> some View {
+        let bands: [(StressBand, String, Color)] = [
+            (.low, String(localized: "Calm"), NoopTheme.recovery),
+            (.medium, String(localized: "Moderate"), NoopTheme.recoveryMid),
+            (.high, String(localized: "High"), NoopTheme.recoveryLow),
+        ]
+        let hoursText: (Int) -> String = { $0 <= 0 ? "—" : String(localized: "\($0)h") }
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    ForEach(bands.indices, id: \.self) { i in
+                        let f = totals.fraction(bands[i].0)
+                        if f > 0 {
+                            Rectangle().fill(bands[i].2).frame(width: geo.size.width * CGFloat(f))
+                        }
+                    }
+                }
+                .clipShape(Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Capsule().fill(NoopTheme.track))
+            }
+            .frame(height: InsightsLayout.levelBarHeight)
+            HStack(spacing: NoopTheme.Layout.l) {
+                ForEach(bands.indices, id: \.self) { i in
+                    HStack(spacing: NoopTheme.Layout.xs) {
+                        Circle().fill(bands[i].2).frame(width: InsightsLayout.dot, height: InsightsLayout.dot)
+                        Text(verbatim: "\(bands[i].1) \(hoursText(totals.hours(bands[i].0)))").noopFont(.caption)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: String(localized: "Today's stress split: calm \(hoursText(totals.calmHours)), moderate \(hoursText(totals.moderateHours)), high \(hoursText(totals.highHours)).")))
+    }
+
+    // MARK: Breathe
+
+    /// The sustained-high nudge when the recent hours stayed high (the classic card's condition and copy);
+    /// otherwise a plain way into the same Breathe sheet.
+    @ViewBuilder
+    private var stressRdBreatheCard: some View {
+        if let day = daytime, day.sustainedHigh {
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                    HStack(spacing: NoopTheme.Layout.m) {
+                        DomainIcon(systemImage: "wind", color: NoopTheme.breath)
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                            Text("Sustained high stress").noopFont(.rowTitle)
+                            Text("\(day.sustainedRun)h elevated").noopFont(.footnote, color: false)
+                                .foregroundStyle(NoopTheme.recoveryMid)
+                        }
+                    }
+                    Text("Your last \(day.sustainedRun) hours have stayed in the high band. A few minutes of paced breathing can help downshift your nervous system.")
+                        .noopFont(.bodySmall)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button { showBreathe = true } label: {
+                        Label("Start a Breathe session", systemImage: "wind")
+                    }
+                    .buttonStyle(NoopPrimaryButton())
+                }
+            }
+            .insightsTintedCard(NoopTheme.breath)
+        } else {
+            Button { showBreathe = true } label: {
+                NoopGlassCard {
+                    HStack(spacing: NoopTheme.Layout.m) {
+                        DomainIcon(systemImage: "wind", color: NoopTheme.breath)
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                            Text("Breathe").noopFont(.rowTitle)
+                            Text("Haptic-paced breathing · find your pace · calm down")
+                                .noopFont(.footnote)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right")
+                            .noopFont(.footnote, color: false)
+                            .foregroundStyle(NoopTheme.textTertiary)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .insightsTintedCard(NoopTheme.breath)
+            }
+            .buttonStyle(.noopPress)
+        }
+    }
+
+    // MARK: Markers
+
+    private func stressRdMarkers(_ model: StressModel) -> some View {
+        let rhr = stressMarkerDelta(model.rhrDelta, higherIsStress: true)
+        let hrv = stressMarkerDelta(model.hrvDelta, higherIsStress: false)
+        return NoopGlassCard(flush: true) {
+            NoopMetricRow("Resting HR", color: NoopTheme.heart, subtitle: rhr.text,
+                          value: model.rhrToday.map { "\($0)" }, unit: "bpm", showsDivider: false)
+            NoopMetricRow("HRV", color: NoopTheme.hrv, subtitle: hrv.text,
+                          value: model.hrvToday.map { "\(Int($0.rounded()))" }, unit: "ms")
+            NoopMetricRow("Calm time", color: NoopTheme.recovery, subtitle: model.calmTimeCaption,
+                          value: model.calmTimeValue == "—" ? nil : model.calmTimeValue)
+        }
+    }
+
+    // MARK: Advanced
+
+    private var stressRdAdvanced: some View {
+        NoopGlassCard(flush: true) {
+            if let si = stressIndex {
+                NoopMetricRow("Baevsky Stress Index", color: NoopTheme.stress,
+                              subtitle: String(localized: "Autonomic rigidity from your heart-rate rhythm. Higher means a more rigid, stressed rhythm."),
+                              value: "\(Int(si.si.rounded()))", showsDivider: false)
+            }
+            if let f = freqHRV {
+                if let ratio = f.lfhf {
+                    NoopMetricRow("Autonomic balance (LF/HF)", color: NoopTheme.hrv,
+                                  subtitle: String(localized: "Sympathetic vs parasympathetic tone from frequency-domain HRV. Higher leans sympathetic (stress-ward)."),
+                                  value: StressTrace.formatRatio(ratio), showsDivider: stressIndex != nil)
+                } else if f.hf > 0 {
+                    NoopMetricRow("HF power", color: NoopTheme.hrv,
+                                  subtitle: String(localized: "Parasympathetic (rest) band of your HRV."),
+                                  value: "\(Int(f.hf.rounded()))", showsDivider: stressIndex != nil)
+                }
+            }
+            Text("These are extra, on-demand HRV lenses computed from today's R-R intervals. They are informational and do not change the stress score above.")
+                .noopFont(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, NoopTheme.Layout.m)
+        }
+    }
+
+    // MARK: Trend
+
+    private func stressRdTrend(_ model: StressModel) -> some View {
+        let points = windowedTrend(model)
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                SegmentedPills(ExploreRange.allCases, selection: $range) { Text(verbatim: $0.label) }
+                if points.count >= 2 {
+                    let avg = points.map(\.value).reduce(0, +) / Double(points.count)
+                    // The typical range only sets the y-domain: it keeps the calm floor (0) in view.
+                    NoopLineChart(
+                        points: points.map { NoopChartPoint(date: $0.date, y: $0.value) },
+                        color: NoopTheme.stress,
+                        typicalRange: 0...1,
+                        xLabels: stressRdAxisLabels(points),
+                        accessibilityLabel: Text(verbatim: String(localized: "Stress trend")),
+                        valueFormat: { StressTrace.formatLevel($0) })
+                        .frame(height: InsightsLayout.stressTrendChart)
+                    StatGrid([
+                        StatGridItem("Average", value: StressTrace.formatLevel(avg)),
+                        StatGridItem("Days", value: "\(points.count)"),
+                    ])
+                } else {
+                    Text("Not enough recent days to chart a trend yet. Import a history or keep wearing your strap.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private func stressRdAxisLabels(_ pts: [TrendPoint]) -> [String] {
+        guard let first = pts.first, let last = pts.last else { return [] }
+        var style = Date.FormatStyle.dateTime.day().month(.abbreviated).locale(locale)
+        style.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        return [first.date.formatted(style), pts[pts.count / 2].date.formatted(style), last.date.formatted(style)]
+    }
+
+    // MARK: Method
+
+    private func stressRdMethod(_ model: StressModel) -> some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                Text("We compare today's resting heart rate and HRV to your own 30-day baseline. A higher-than-usual resting HR and a lower-than-usual HRV both push the score up, classic signs the body is activated. The combined shift is mapped onto a 0-3 scale: 0 is calm, 1.5 sits at your baseline, 3 is highly activated.")
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 0) {
+                    stressRdLegendItem(.low, range: "0-1")
+                    stressRdLegendItem(.medium, range: "1-2")
+                    stressRdLegendItem(.high, range: "2-3")
+                }
+            }
+        }
+    }
+
+    private func stressRdLegendItem(_ band: StressBand, range: String) -> some View {
+        HStack(spacing: NoopTheme.Layout.s) {
+            Circle().fill(stressRdBandColor(band)).frame(width: InsightsLayout.dot, height: InsightsLayout.dot)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(verbatim: stressRdBandWord(band)).noopFont(.rowTitle)
+                Text(verbatim: range).noopFont(.caption)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+#endif
 
 // MARK: - Stress hero gauge (liquid vessel + count-up score)
 
