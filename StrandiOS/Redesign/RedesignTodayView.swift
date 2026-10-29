@@ -47,6 +47,7 @@ struct RedesignTodayView: View {
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
     @State private var showDayPicker = false
+    @State private var showStepSources = false
     @State private var customizationDestination: TodayCustomizationDestination?
     /// Gate percentages until registry evidence has resolved the current device, including strap switches.
     @State private var activeStrapFamily: (deviceId: String, isWhoop4: Bool)?
@@ -150,6 +151,7 @@ struct RedesignTodayView: View {
                 hostedCardsRaw: $hostedCardsRaw
             )
         }
+        .sheet(isPresented: $showStepSources) { PersonalStepSourcesView(day: selectedDayKey) }
     }
 
     @ViewBuilder
@@ -576,7 +578,11 @@ struct RedesignTodayView: View {
                 Color.clear
             }
         }
-        if let route = c.route {
+        if metric == .steps {
+            Button { showStepSources = true } label: { row.contentShape(Rectangle()) }
+                .buttonStyle(.noopPress)
+                .accessibilityHint("Opens step sources and a phone-free walk check")
+        } else if let route = c.route {
             NavigationLink(value: route) { row.contentShape(Rectangle()) }
                 .buttonStyle(.noopPress)
         } else {
@@ -652,7 +658,8 @@ struct RedesignTodayView: View {
             let detail = dayModel.stepsDetailMetric
             let measured = displayDay?.steps != nil
             let imported = !measured && dayModel.importedStepsDay != nil
-            let subtitle: String = measured ? String(localized: "Strap")
+            let subtitle: String = dayModel.stepCount == nil ? String(localized: "No step data for this day")
+                : measured ? String(localized: "Strap")
                 : imported ? "Apple Health" : String(localized: "Estimated from strap")
             let value = dayModel.stepCount.map { count -> String in
                 let text = count.formatted(.number.precision(.fractionLength(0)).locale(AppLanguage.activeLocale))
