@@ -1012,19 +1012,37 @@ private struct FitnessAgeSection: View {
     /// "my-whoop" (the Repository merges the computed "-noop" rows under any real import). Takes the
     /// freshest point — the weekly value is keyed to the week's Saturday and refines through the week.
     private func load() async {
+        let snapshot = await FitnessAgeSnapshot.load(repo: repo)
+        fitnessAge = snapshot.fitnessAge
+        vo2max = snapshot.vo2max
+        vo2maxEstimator = snapshot.vo2maxEstimator
+        loaded = true
+    }
+}
+
+/// The weekly Fitness Age read, shared by the Health hub's `FitnessAgeSection` and the iPhone redesign's
+/// Health tab so both show the same value from ONE read path. Uses the same `exploreSeries(key:source:)`
+/// path every other metric on this screen reads, with source "my-whoop" (the Repository merges the computed
+/// "-noop" rows under any real import), and takes the freshest point: the weekly value is keyed to the
+/// week's Saturday and refines through the week.
+struct FitnessAgeSnapshot: Equatable {
+    var fitnessAge: Double?
+    var vo2max: Double?
+    /// Estimator captured beside the latest VO₂max. nil is an honest legacy-unknown state.
+    var vo2maxEstimator: Vo2MaxEstimator?
+
+    @MainActor
+    static func load(repo: Repository) async -> FitnessAgeSnapshot {
         let faPts = await repo.exploreSeries(key: "fitness_age", source: "my-whoop")
         let vo2Resolution = await repo.resolvedSeries(key: "vo2max_est", source: "my-whoop")
-        fitnessAge = faPts.last?.value
+        var snapshot = FitnessAgeSnapshot(fitnessAge: faPts.last?.value)
         if let latest = vo2Resolution.points.last {
-            vo2max = latest.value
+            snapshot.vo2max = latest.value
             let tag = await repo.scoreProvenanceTag(
                 resolvedSource: latest.source, day: latest.day, metricKey: "vo2max_est")
-            vo2maxEstimator = tag.flatMap { Vo2MaxEstimator(rawValue: $0) }
-        } else {
-            vo2max = nil
-            vo2maxEstimator = nil
+            snapshot.vo2maxEstimator = tag.flatMap { Vo2MaxEstimator(rawValue: $0) }
         }
-        loaded = true
+        return snapshot
     }
 }
 
@@ -1341,18 +1359,14 @@ private struct VitalsSection: View {
         return UnitPrefs.resolveTemperature(system: system, override: temperatureRaw)
     }
 
-    // #103/queue-11a: SpO₂ candidate nightly means from metricSeries — WHOOP `spo2_candidate_82`, or an
-    // Oura owner's ceiling@100 `0x6F` mean (device-conditional, see IntelligenceEngine) — loaded when
-    // the experimental toggle is ON. Empty when the toggle is OFF or no candidate data exists.
-    @State private var spo2CandidateByDay: [String: Double] = [:]
-    @State private var hrvOverCountByDay: [String: Double] = [:]   // #1118
+    // The SpO₂ candidate means (#103/queue-11a, toggle ON only) and HRV over-count flags (#1118), loaded
+    // through the shared `HealthVitalsInputs` funnel the iPhone redesign's Health tab also reads.
+    @State private var inputs = HealthVitalsInputs()
 
     var body: some View {
-        let readings = BodyVitalSigns.readings(
-            sourceRows: repo.vitalMetricRows,
+        let readings = inputs.readings(
+            repo: repo,
             temperatureUnit: temperatureUnit,
-            spo2CandidateByDay: spo2CandidateByDay,
-            hrvOverCountByDay: hrvOverCountByDay,
             skinTempPreferred: SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute   // #1846
         )
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
@@ -1378,25 +1392,52 @@ private struct VitalsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .task(id: PuffinExperiment.spo2CandidateDisplayEnabled) {
-            // #1118: load the per-night HRV over-count flags (always — no toggle) so the HRV tile can
-            // caption an over-counted 4.0 night's reading "unverified". The engine writes "hrv_rr_overcount"
-            // (1/0) under the "-noop" computed device ID; `exploreSeries` with source "my-whoop" reads it
-            // from the computed metricSeries. Absent/0 on a clean or imported night → no caveat.
-            let ocPts = await repo.exploreSeries(key: "hrv_rr_overcount", source: "my-whoop", days: 14)
-            hrvOverCountByDay = Dictionary(ocPts.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
-            // #103/queue-11a: load the SpO₂ candidate nightly means from metricSeries when the toggle is
-            // ON. The engine writes "spo2_candidate" under the "-noop" computed device ID; `exploreSeries`
-            // with source "my-whoop" reads it from Layer 2 (computed metricSeries) — "my-whoop" is the
-            // generic active-strap sentinel, resolved through `computedReadIds`, so this already covers
-            // an Oura ring's own computed id. Empty when the toggle is OFF (the engine writes nothing) or
-            // the owner has no in-band reading for its device.
-            guard PuffinExperiment.spo2CandidateDisplayEnabled else {
-                spo2CandidateByDay = [:]
-                return
-            }
-            let pts = await repo.exploreSeries(key: "spo2_candidate", source: "my-whoop", days: 14)
-            spo2CandidateByDay = Dictionary(pts.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
+            inputs = await HealthVitalsInputs.load(repo: repo)
         }
+    }
+}
+
+/// The two per-night side inputs the vital-sign readings need beyond `repo.vitalMetricRows`, loaded once
+/// and shared by the Health hub's `VitalsSection` and the iPhone redesign's Health tab, so both screens
+/// resolve the same readings through ONE funnel (`readings(repo:temperatureUnit:skinTempPreferred:)`).
+struct HealthVitalsInputs: Equatable {
+    /// #103/queue-11a: SpO₂ candidate nightly means — WHOOP `spo2_candidate_82`, or an Oura owner's
+    /// ceiling@100 `0x6F` mean — present only when the experimental toggle is ON.
+    var spo2CandidateByDay: [String: Double] = [:]
+    /// #1118: per-night HRV over-count flags.
+    var hrvOverCountByDay: [String: Double] = [:]
+
+    @MainActor
+    static func load(repo: Repository) async -> HealthVitalsInputs {
+        var inputs = HealthVitalsInputs()
+        // #1118: load the per-night HRV over-count flags (always — no toggle) so the HRV tile can
+        // caption an over-counted 4.0 night's reading "unverified". The engine writes "hrv_rr_overcount"
+        // (1/0) under the "-noop" computed device ID; `exploreSeries` with source "my-whoop" reads it
+        // from the computed metricSeries. Absent/0 on a clean or imported night → no caveat.
+        let ocPts = await repo.exploreSeries(key: "hrv_rr_overcount", source: "my-whoop", days: 14)
+        inputs.hrvOverCountByDay = Dictionary(ocPts.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
+        // #103/queue-11a: load the SpO₂ candidate nightly means from metricSeries when the toggle is
+        // ON. The engine writes "spo2_candidate" under the "-noop" computed device ID; `exploreSeries`
+        // with source "my-whoop" reads it from Layer 2 (computed metricSeries) — "my-whoop" is the
+        // generic active-strap sentinel, resolved through `computedReadIds`, so this already covers
+        // an Oura ring's own computed id. Empty when the toggle is OFF (the engine writes nothing) or
+        // the owner has no in-band reading for its device.
+        guard PuffinExperiment.spo2CandidateDisplayEnabled else { return inputs }
+        let pts = await repo.exploreSeries(key: "spo2_candidate", source: "my-whoop", days: 14)
+        inputs.spo2CandidateByDay = Dictionary(pts.map { ($0.day, $0.value) }, uniquingKeysWith: { a, _ in a })
+        return inputs
+    }
+
+    @MainActor
+    func readings(repo: Repository, temperatureUnit: TemperatureUnit,
+                  skinTempPreferred: SkinTempDisplay.Kind) -> [BodyVitalReading] {
+        BodyVitalSigns.readings(
+            sourceRows: repo.vitalMetricRows,
+            temperatureUnit: temperatureUnit,
+            spo2CandidateByDay: spo2CandidateByDay,
+            hrvOverCountByDay: hrvOverCountByDay,
+            skinTempPreferred: skinTempPreferred
+        )
     }
 }
 
@@ -1610,6 +1651,42 @@ private struct HealthHubLinksSection: View {
         .accessibilityLabel("\(title). \(subtitle)")
     }
 }
+
+#if os(iOS)
+// MARK: - Classic sections, reachable from the iPhone redesign's Health tab
+
+/// The Health Monitor sections the redesigned Health tab (round 2 "05 Health") does not restate, each
+/// reachable on its own so nothing the classic screen offered is lost. Every case renders the SAME private
+/// section view the classic screen stacks, so the reads, gates and controls are unchanged.
+enum HealthClassicSection: String, Hashable, CaseIterable {
+    case fitnessAge, skinTemperature, vitality, contributors, sync
+}
+
+/// One classic Health section on its own screen, pushed from the redesigned Health tab.
+struct HealthClassicSectionScreen: View {
+    let section: HealthClassicSection
+    @EnvironmentObject private var repo: Repository
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                switch section {
+                case .fitnessAge: FitnessAgeSection()
+                case .skinTemperature: SkinTempSection()
+                case .vitality: VitalitySection()
+                case .contributors: RecoveryContributorsSection()
+                case .sync: SyncStatusSection()
+                }
+            }
+            .padding(NoopMetrics.screenPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .refreshable { await repo.refresh() }
+        .background(NoopTheme.canvas.ignoresSafeArea())
+    }
+}
+#endif
 
 // MARK: - Preview
 

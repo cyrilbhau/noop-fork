@@ -136,6 +136,15 @@ struct SleepView: View {
     @AppStorage(SleepLayoutPrefs.hiddenKey) private var sleepHiddenSectionsRaw = ""
     @State private var showSleepCustomize = false
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scrollToTopSignal) private var scrollToTopSignal
+    #endif
+
     /// The analytical cards to render, in saved order minus the hidden set.
     private var sleepVisibleSections: [SleepSection] {
         SleepLayoutPrefs.visibleOrder(orderRaw: sleepSectionOrderRaw, hiddenRaw: sleepHiddenSectionsRaw)
@@ -149,6 +158,22 @@ struct SleepView: View {
         // synchronously, so the very first frame already shows content (no empty-state flash).
         let key = dataKey
         let resolved: SleepModel? = (key == modelKey) ? model : buildModel()
+        #if os(iOS)
+        // iPhone redesign (round 2 "03 Sleep"): the same state, loading, sheets and actions under a new
+        // presentation. Off restores the classic screen below; macOS never takes this branch.
+        if redesignEnabled {
+            sleepLifecycle(redesignScreen(resolved), key: key, resolved: resolved)
+        } else {
+            classicScreen(key: key, resolved: resolved)
+        }
+        #else
+        classicScreen(key: key, resolved: resolved)
+        #endif
+    }
+
+    /// The classic Sleep screen (macOS, and iOS with the redesign switched off). Unchanged layout.
+    @ViewBuilder
+    private func classicScreen(key: SleepInputKey, resolved: SleepModel?) -> some View {
         // Title lives inside the immersive night hero (Bevel-style composition). Omit the scaffold
         // header + generic sky so the Rest world owns the upper band and everything below returns to
         // the normal Sleep canvas. Empty state still gets a plain scaffold title for orientation.
@@ -164,7 +189,7 @@ struct SleepView: View {
                        onRefresh: { await repo.refresh() },
                        lazy: true,
                        topBackground: resolved == nil ? nil : AnyView(sleepNightTopBackground)) {
-            Group {
+            sleepLifecycle(Group {
                 if let resolved {
                     // Each top-level section fades + rises in sequence on first appear (Reduce-Motion safe).
                     VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
@@ -193,7 +218,15 @@ struct SleepView: View {
                     emptyState
                     alarmsEntry
                 }
-            }
+            }, key: key, resolved: resolved)
+        }
+    }
+
+    /// The screen's data lifecycle, sheets and change observers, shared by the classic and the iPhone
+    /// redesign presentations so both run the exact same loads, edits, deletes and undo.
+    private func sleepLifecycle<Content: View>(_ content: Content, key: SleepInputKey,
+                                               resolved: SleepModel?) -> some View {
+        content
             // LiquidScoreGauge owns its own count-up animation (same as Home heroes).
             // Persist the freshly-built model so subsequent renders with the same inputs hit
             // the cache. Writing State during body is not allowed, so commit it after layout;
@@ -309,7 +342,6 @@ struct SleepView: View {
                     await repo.refresh()
                 }
             }
-        }
     }
 
     /// A direct route to the one alarm screen, available even before a night is recorded.
@@ -465,7 +497,12 @@ struct SleepView: View {
     /// the Today Rest score reads), keyed by the wake-day (sleep is filed under the day you woke) so
     /// a navigated past night reads ITS OWN score, never last night's. nil when that day has no score.
     private func performanceScore(for night: Night) -> Double? {
-        let wakeDay = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
+        performanceScore(wakeDay: Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs))))
+    }
+
+    /// The same per-day resolution keyed directly by a wake-day, so the redesign's 7-night strip and the
+    /// hero ring read one resolver and cannot disagree about a night's score.
+    private func performanceScore(wakeDay: String) -> Double? {
         if let p = repo.importedSleep[wakeDay]?.performancePct { return p }
         guard let daily = repo.days.last(where: { $0.day == wakeDay }) else { return nil }
         return AnalyticsEngine.Rest.composite(daily: daily)
@@ -2200,6 +2237,1048 @@ struct SleepView: View {
     }
 
 }
+
+#if os(iOS)
+// MARK: - iPhone redesign (round 2 "03 Sleep")
+//
+// The redesigned Sleep tab. It reads the same memoized `SleepModel`, the same navigation state and the
+// same edit / nap / delete / undo / provenance helpers as the classic screen; `sleepLifecycle` attaches the
+// same loads and sheets. Only the presentation is new, drawn from NoopTheme / NoopType and the StrandDesign
+// redesign components.
+
+/// Geometry for the redesigned Sleep tab that has no `NoopTheme` token yet.
+private enum SleepRedesignMetrics {
+    static let topAnchor = "sleep.redesign.top"
+    static let stripRing: CGFloat = 30
+    static let stripRingLine: CGFloat = 4
+    static let heroRing: CGFloat = 76
+    static let heroRingLine: CGFloat = 9
+    static let needBarHeight: CGFloat = 8
+    static let chartHeight: CGFloat = 150
+    static let laneLabelWidth: CGFloat = 50
+    static let laneGap: CGFloat = 8
+    static let laneRadius: CGFloat = 8
+    static let laneOpacity: Double = 0.45
+    static let stepLine: CGFloat = 4
+    static let riserLine: CGFloat = 2
+    static let heartHeight: CGFloat = 64
+    static let heartLine: CGFloat = 1.5
+    static let heartWashOpacity: Double = 0.13
+    /// Matches `SleepHRChart`: the trace breaks across gaps longer than this and draws weak-optical
+    /// buckets dashed.
+    static let heartGapSeconds = 300
+    static let heartWeakConfidence = 0.3
+    static let stageNameWidth: CGFloat = 62
+    static let stageDurationWidth: CGFloat = 64
+    static let stagePercentWidth: CGFloat = 40
+    static let stageBarHeight: CGFloat = 6
+    static let typicalMarkHeight: CGFloat = 14
+    static let typicalMarkLine: CGFloat = 2
+    static let fallbackBarHeight: CGFloat = 28
+    static let segmentGap: CGFloat = 2
+    static let dimmedOpacity: Double = 0.25
+    static let rowDimmedOpacity: Double = 0.5
+    static let disabledOpacity: Double = 0.4
+    static let stageSmoothingSeconds: TimeInterval = 180
+    static let skeletonHeights: [CGFloat] = [96, 200, 280]
+}
+
+/// The night the redesigned screen shows: the merged night, its stage timeline and whether it carries
+/// usable stages (false for the honest stage-less stub of a night that did not decode).
+private typealias SleepDisplayedNight = (night: Night, intervals: [SleepInterval], hasStages: Bool)
+
+/// One cell of the 7-night strip.
+private struct SleepStripNight: Identifiable {
+    let id: String
+    let weekday: String
+    let score: Double?
+    /// The ◀/▶ offset of the recorded night for this wake-day; nil when no night is stored for it.
+    let offset: Int?
+}
+
+extension SleepView {
+
+    private var ringsAnimate: Bool {
+        NoopTheme.Motion.ringsAnimate(reduceMotion: reduceMotion, fillOnLoad: ringsFillOnLoad)
+    }
+
+    /// The redesigned screen. A fixed sleep ambient wash behind a plain scroll column; the section
+    /// headers carry their own screen-edge padding, cards take the gutter.
+    @ViewBuilder
+    private func redesignScreen(_ resolved: SleepModel?) -> some View {
+        let intensity = AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    Color.clear.frame(height: 0).id(SleepRedesignMetrics.topAnchor)
+                    if let resolved {
+                        redesignContent(resolved, displayed: redesignDisplayed(resolved))
+                    } else {
+                        redesignEmptyContent
+                    }
+                }
+                .padding(.bottom, NoopMetrics.tabBarClearance)
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .refreshable { await repo.refresh() }
+            .onChange(of: scrollToTopSignal) { _, _ in
+                withAnimation(NoopTheme.Motion.resolved(NoopTheme.Motion.entrance, reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(SleepRedesignMetrics.topAnchor, anchor: .top)
+                }
+            }
+        }
+        .noopAmbientBackground(AmbientPreset.sleep.blobs(intensity: intensity))
+    }
+
+    /// A card in the column: gutter on both sides, the standard gap below and the staggered entrance.
+    private func redesignBlock<V: View>(_ index: Int, @ViewBuilder _ content: () -> V) -> some View {
+        content()
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .padding(.bottom, NoopTheme.Layout.cardGap)
+            .noopEntrance(index: index)
+    }
+
+    @ViewBuilder
+    private func redesignContent(_ model: SleepModel, displayed: SleepDisplayedNight) -> some View {
+        redesignHeader(displayed.night).noopEntrance(index: 0)
+        // One stack so a freshness note that has nothing to say (it renders no view) leaves no gap.
+        redesignBlock(1) {
+            VStack(spacing: NoopTheme.Layout.cardGap) {
+                if let sleepUndo { sleepUndoBanner(sleepUndo) }
+                SleepFreshnessNote(latestWakeTs: model.night.session.endTs)
+                if resultNoticeVisible {
+                    DataPendingNote(title: "Sleep result updated",
+                                    message: "This night's sleep times or total asleep changed by at least five minutes.",
+                                    symbol: "checkmark.circle")
+                }
+                redesignWeekStrip(selectedDay: Self.wakeDayKey(displayed.night))
+            }
+        }
+        redesignBlock(2) { redesignNightNav }
+        redesignBlock(3) { redesignHero(displayed) }
+        redesignBlock(4) { redesignAlarmsRow }
+        ForEach(Array(sleepVisibleSections.enumerated()), id: \.element) { idx, section in
+            redesignSection(section, model, displayed, index: idx + 5)
+        }
+        redesignBlock(5 + sleepVisibleSections.count) {
+            Button { showSleepCustomize = true } label: {
+                Label("Customize", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(NoopSecondaryButton())
+        }
+        .padding(.top, NoopTheme.Layout.l)
+    }
+
+    /// No model: a skeleton while the repository is still loading, else the honest empty state (a dashed
+    /// ring and the import / wear-it-to-bed copy, never zeros). Alarms stay reachable either way.
+    @ViewBuilder
+    private var redesignEmptyContent: some View {
+        redesignHeader(nil)
+        if repo.loaded {
+            redesignBlock(1) {
+                VStack(spacing: NoopTheme.Layout.cardGap) {
+                    SleepFreshnessNote(latestWakeTs: nil)
+                    redesignWeekStrip(selectedDay: nil)
+                }
+            }
+            redesignBlock(2) {
+                NoopGlassCard {
+                    HStack(alignment: .top, spacing: NoopTheme.Layout.l) {
+                        NoopRing(value: nil, color: NoopTheme.sleep, lineWidth: SleepRedesignMetrics.heroRingLine,
+                                 diameter: SleepRedesignMetrics.heroRing, label: "—", animate: false,
+                                 accessibilityLabel: String(localized: "Sleep performance"),
+                                 accessibilityValue: String(localized: "No sleep recorded"))
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                            Text("No sleep recorded").noopFont(.rowTitle)
+                            Text("No nights here yet. Import your WHOOP export in Data Sources to see every night, your sleep stages and trends straight away. Or open Intelligence to see last night computed from the strap after you wear it to bed.")
+                                .noopFont(.footnote)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(SleepRedesignMetrics.skeletonHeights.enumerated()), id: \.offset) { idx, height in
+                    redesignBlock(idx) {
+                        NoopGlassCard { Color.clear.frame(height: height) }
+                            .noopSkeleton(true)
+                    }
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("Loading your sleep history…"))
+        }
+        redesignBlock(3) { redesignAlarmsRow }
+    }
+
+    // MARK: Displayed night
+
+    /// The night every redesigned surface reads: last night (offset 0), the ◀/▶-navigated night, or the
+    /// honest stage-less stub for a day whose blocks did not decode. Score, stages, need, source and
+    /// quality all resolve from this one night, so they cannot disagree with each other.
+    private func redesignDisplayed(_ model: SleepModel) -> SleepDisplayedNight {
+        if nightOffset == 0, !model.isStubNight { return (model.night, model.intervals, true) }
+        if nightOffset != 0, let night = navNight { return (night, night.intervals, true) }
+        if let session = sessionRow(at: nightOffset) {
+            let stub = Night(session: session, stages: Stages(awake: 0, light: 0, deep: 0, rem: 0),
+                             sourceBlocks: dayBlocks(at: nightOffset),
+                             habitualMidsleepSec: habitualMidsleepSec)
+            return (stub, [], false)
+        }
+        return (model.night, model.intervals, !model.isStubNight)
+    }
+
+    /// The night's LOCAL wake-day (sleep is filed under the day you woke), the key every per-night
+    /// lookup on this screen uses.
+    private static func wakeDayKey(_ night: Night) -> String {
+        Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(night.session.endTs)))
+    }
+
+    // MARK: Header and navigation
+
+    private func redesignHeader(_ night: Night?) -> some View {
+        HStack(alignment: .center, spacing: NoopTheme.Layout.m) {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                Text("Sleep")
+                    .noopFont(.largeTitle)
+                    .accessibilityAddTraits(.isHeader)
+                if let night {
+                    Text(verbatim: night.spanLabel).noopFont(.footnote)
+                }
+            }
+            Spacer(minLength: NoopTheme.Layout.s)
+            if let night { redesignAddMenu(night) }
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+        .padding(.top, NoopTheme.Layout.s)
+        .padding(.bottom, NoopTheme.Layout.l)
+    }
+
+    /// The header "+": add a nap, or correct the displayed night's times (the same editor the hero's
+    /// pencil opens).
+    private func redesignAddMenu(_ night: Night) -> some View {
+        Menu {
+            Button { addNap = AddNapSeed(forNight: night) } label: {
+                Label("Add nap", systemImage: "powersleep")
+            }
+            if night.editTarget != nil {
+                Button { openWakeEdit(night) } label: {
+                    Label("Edit sleep times", systemImage: "pencil")
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .noopFont(.navTitle, color: false)
+                .foregroundStyle(NoopTheme.textPrimary)
+                .frame(width: NoopTheme.Layout.iconButton, height: NoopTheme.Layout.iconButton)
+                .background {
+                    ZStack {
+                        Circle().fill(.ultraThinMaterial)
+                        Circle().fill(NoopTheme.control)
+                    }
+                }
+                .clipShape(Circle())
+                .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(Text("Add or edit sleep"))
+    }
+
+    /// Opens the wake-time editor for the night's real stored main block, exactly as the classic
+    /// `wakeEditButton` does. (#318)
+    private func openWakeEdit(_ night: Night) {
+        guard let target = night.editTarget else { return }
+        wakeEdit = WakeEdit(detectedStartTs: target.startTs,
+                            bedTs: target.effectiveStartTs,
+                            wakeTs: target.endTs,
+                            stagesJSON: target.stagesJSON,
+                            userEdited: target.userEdited)
+    }
+
+    /// The ◀/▶ browse row, with the same bounds and "no earlier night" hint as the classic header.
+    private var redesignNightNav: some View {
+        let lastIndex = max(navDays.count - 1, 0)
+        let atOldest = nightOffset >= lastIndex
+        return VStack(spacing: NoopTheme.Layout.xs) {
+            HStack(spacing: NoopTheme.Layout.s) {
+                NoopIconButton(systemImage: "chevron.left", accessibilityLabel: "Previous night") {
+                    if nightOffset < lastIndex { nightOffset += 1 }
+                }
+                .disabled(atOldest)
+                .opacity(atOldest ? SleepRedesignMetrics.disabledOpacity : 1)
+                Spacer(minLength: 0)
+                Text(nightRelativeLabel).noopFont(.rowTitle)
+                Spacer(minLength: 0)
+                NoopIconButton(systemImage: "chevron.right", accessibilityLabel: "Next night") {
+                    if nightOffset > 0 { nightOffset -= 1 }
+                }
+                .disabled(nightOffset == 0)
+                .opacity(nightOffset == 0 ? SleepRedesignMetrics.disabledOpacity : 1)
+            }
+            if atOldest {
+                Text("No earlier night stored yet. Earlier nights sync in the morning.")
+                    .noopFont(.caption)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    // MARK: 7-night strip
+
+    /// The last seven wake-days ending today. Each ring is that day's sleep performance from the same
+    /// resolver the hero ring uses; a day with no score is a dashed empty ring. Tapping a day with a
+    /// stored night jumps the ◀/▶ navigation to it.
+    private func stripNights() -> [SleepStripNight] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        var offsetByDay: [String: Int] = [:]
+        // `navDays` is newest-first; two weeks of groups always covers the seven days shown.
+        for (idx, blocks) in navDays.prefix(14).enumerated() {
+            guard let block = blocks.first else { continue }
+            let key = Repository.localDayKey(Date(timeIntervalSince1970: TimeInterval(block.endTs)))
+            if offsetByDay[key] == nil { offsetByDay[key] = idx }
+        }
+        return (0..<7).reversed().compactMap { back -> SleepStripNight? in
+            guard let date = cal.date(byAdding: .day, value: -back, to: today) else { return nil }
+            let key = Repository.localDayKey(date)
+            return SleepStripNight(
+                id: key,
+                weekday: date.formatted(.dateTime.weekday(.abbreviated).locale(AppClock.formattingLocale)),
+                score: performanceScore(wakeDay: key),
+                offset: offsetByDay[key])
+        }
+    }
+
+    private func redesignWeekStrip(selectedDay: String?) -> some View {
+        HStack(spacing: NoopTheme.Layout.xs) {
+            ForEach(stripNights()) { night in
+                stripCell(night, selected: night.id == selectedDay)
+            }
+        }
+    }
+
+    private func stripCell(_ cell: SleepStripNight, selected: Bool) -> some View {
+        Button {
+            if let offset = cell.offset { nightOffset = offset }
+        } label: {
+            VStack(spacing: NoopTheme.Layout.s) {
+                Text(verbatim: cell.weekday)
+                    .noopFont(.caption, color: false)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(selected ? NoopTheme.textPrimary : NoopTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                NoopRing(value: cell.score.map { $0 / 100 }, color: NoopTheme.sleep,
+                         lineWidth: SleepRedesignMetrics.stripRingLine,
+                         diameter: SleepRedesignMetrics.stripRing, animate: ringsAnimate)
+            }
+            .padding(.vertical, NoopTheme.Layout.s)
+            .frame(maxWidth: .infinity)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: NoopTheme.Layout.iconTileRadius, style: .continuous)
+                        .fill(NoopTheme.control)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.noopPress)
+        .disabled(cell.offset == nil)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(stripAccessibilityLabel(cell)))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func stripAccessibilityLabel(_ cell: SleepStripNight) -> String {
+        if let score = cell.score {
+            return String(localized: "\(cell.weekday), sleep performance \(Int(score.rounded()))")
+        }
+        return cell.offset == nil
+            ? String(localized: "\(cell.weekday), no sleep recorded")
+            : String(localized: "\(cell.weekday), no sleep score")
+    }
+
+    // MARK: Hero
+
+    /// "Asleep" hero: total asleep, the window, the night's sleep-performance ring, the need bar and the
+    /// provenance line with the main-sleep explainer and the time editor.
+    private func redesignHero(_ displayed: SleepDisplayedNight) -> some View {
+        let night = displayed.night
+        let wakeDay = Self.wakeDayKey(night)
+        let score = performanceScore(wakeDay: wakeDay)
+        let asleep: Double? = displayed.hasStages ? night.stages.asleep : nil
+        // The need the "Hours vs needed" figure already measures against: the imported WHOOP need for
+        // that day, else the personal-mean need. Read, not re-derived.
+        let need = repo.importedSleep[wakeDay]?.needMin ?? SleepModel.sleepNeedMin(days: repo.days)
+        let inBed = displayed.hasStages ? night.timeInBed : Double(night.session.endTs - night.session.startTs) / 60.0
+        let windowLine = [night.onsetText + "–" + night.wakeText,
+                          String(localized: "\(durationText(inBed)) in bed")].joined(separator: " · ")
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                        Text("Asleep")
+                            .noopFont(.footnote, color: false)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(NoopTheme.sleep)
+                        Text(verbatim: asleep.map { durationText($0) } ?? "—")
+                            .noopFont(.bigNumber, color: false)
+                            .foregroundStyle(asleep == nil ? NoopTheme.textTertiary : NoopTheme.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                        Text(verbatim: windowLine)
+                            .noopFont(.footnote)
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    NoopRing(value: score.map { $0 / 100 }, color: NoopTheme.sleep,
+                             lineWidth: SleepRedesignMetrics.heroRingLine,
+                             diameter: SleepRedesignMetrics.heroRing,
+                             label: score.map { "\(Int($0.rounded()))" } ?? "—",
+                             animate: ringsAnimate,
+                             accessibilityLabel: String(localized: "Sleep performance"),
+                             accessibilityValue: score == nil ? String(localized: "No data") : nil)
+                }
+                if let asleep, need > 0 {
+                    needBar(asleep: asleep, need: need)
+                } else if !displayed.hasStages {
+                    Text("No stage data recorded for this night.").noopFont(.footnote)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    SourceCaption(verbatim: redesignSourceText(night, scorePresent: score != nil))
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        if let reason = mainSleepReasonText(night) {
+                            Button { showMainSleepWhy.toggle() } label: {
+                                Label("Why this sleep?", systemImage: "info.circle")
+                                    .noopFont(.footnote, color: false)
+                                    .foregroundStyle(NoopTheme.sleep)
+                                    .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.noopPress)
+                            .accessibilityLabel(Text("Why this is your main sleep"))
+                            .popover(isPresented: $showMainSleepWhy, arrowEdge: .bottom) {
+                                whyPopover(text: reason, napSuffix: false)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        if let target = night.editTarget {
+                            Button { openWakeEdit(night) } label: {
+                                Image(systemName: target.userEdited ? "pencil.circle.fill" : "pencil.circle")
+                                    .noopFont(.sectionTitle, color: false)
+                                    .foregroundStyle(NoopTheme.sleep)
+                                    .frame(minWidth: NoopTheme.Layout.minTouchTarget,
+                                           minHeight: NoopTheme.Layout.minTouchTarget)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.noopPress)
+                            .accessibilityLabel(target.userEdited ? Text("Edit sleep times (edited)") : Text("Edit sleep times"))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Asleep against need as text plus a bar. No percentage: the "Hours vs needed" figure is the
+    /// percentage, and printing a second one here could disagree with it.
+    private func needBar(asleep: Double, need: Double) -> some View {
+        let fraction = CGFloat(min(1, max(0, asleep / need)))
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            HStack {
+                Text("Sleep need").noopFont(.footnote)
+                Spacer(minLength: NoopTheme.Layout.s)
+                Text(verbatim: "\(durationText(asleep)) / \(durationText(need))")
+                    .noopFont(.footnote)
+                    .monospacedDigit()
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(NoopTheme.track)
+                    Capsule().fill(NoopTheme.sleep).frame(width: geo.size.width * fraction)
+                }
+            }
+            .frame(height: SleepRedesignMetrics.needBarHeight)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The provenance line for the displayed night, from the same merge-winner and imported-score facts
+    /// `nightSource` / `heroSource` use: a WHOOP-imported night says so, and if its score was not part of
+    /// the export (NOOP's composite fills it) that is named too.
+    private func redesignSourceText(_ night: Night, scorePresent: Bool) -> String {
+        let wakeDay = Self.wakeDayKey(night)
+        if let imported = repo.importedSleep[wakeDay] {
+            if scorePresent, imported.performancePct == nil {
+                return String(localized: "WHOOP import · score computed on iPhone")
+            }
+            return String(localized: "WHOOP import")
+        }
+        if repo.activeDeviceIsOura { return String(localized: "Oura") }
+        return String(localized: "Computed on iPhone")
+    }
+
+    private var redesignAlarmsRow: some View {
+        Button { router.openAlarms() } label: {
+            NoopGlassCard(flush: true) {
+                NoopListRow("Alarms", systemImage: "alarm.fill", color: NoopTheme.sleep, showsDivider: false)
+            }
+        }
+        .buttonStyle(.noopPress)
+    }
+
+    // MARK: Sections
+
+    /// The arrangeable sections in the user's saved order. Stages and Quality are redesigned; the other
+    /// cards are the shared views the classic screen and Today host.
+    @ViewBuilder
+    private func redesignSection(_ section: SleepSection, _ model: SleepModel,
+                                 _ displayed: SleepDisplayedNight, index: Int) -> some View {
+        switch section {
+        case .sleepMarks:
+            redesignBlock(index) { SleepMarkCard() }
+        case .stages:
+            NoopSectionHeader("Stages").noopEntrance(index: index)
+            redesignBlock(index) { redesignStagesCard(displayed) }
+            if displayed.hasStages { redesignStageNotes(displayed.night) }
+            NoopSectionHeader("Naps", linkTitle: "Add nap") { addNap = AddNapSeed(forNight: displayed.night) }
+                .noopEntrance(index: index)
+            redesignBlock(index) { redesignNaps(displayed.night) }
+        case .bodyClock:
+            redesignBlock(index) { bodyClockDial(model) }
+        case .nightDetail:
+            NoopSectionHeader("Quality").noopEntrance(index: index)
+            redesignBlock(index) { redesignQuality(model, displayed) }
+        case .sleepDebt:
+            redesignBlock(index) { SleepDebtLedgerCard(model: model) }
+        case .stagesVsTypical:
+            redesignBlock(index) { StagesVsTypicalCard(model: model) }
+        case .asleepDuration:
+            redesignBlock(index) { durationTrend(model) }
+        }
+    }
+
+    // MARK: Stages
+
+    private func redesignStagesCard(_ displayed: SleepDisplayedNight) -> some View {
+        let night = displayed.night
+        let s = night.stages
+        let isPersisted = (night.realSegments?.count ?? 0) >= 2
+        let stageCaption = repo.activeDeviceIsOura
+            ? String(localized: "raw on-device stages")
+            : String(localized: "stages approximate (on-device)")
+        let smoothed = Hypnogram.displaySmoothed(displayed.intervals.sorted { $0.start < $1.start },
+                                                 minDuration: SleepRedesignMetrics.stageSmoothingSeconds)
+        let origin = smoothed.first?.start ?? 0
+        let span = max(1, (smoothed.map(\.end).max() ?? 1) - origin)
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                if !displayed.hasStages {
+                    Text("No stage data recorded for this night.")
+                        .noopFont(.footnote)
+                        .frame(maxWidth: .infinity, minHeight: SleepRedesignMetrics.chartHeight / 2)
+                } else if smoothed.count >= 2 {
+                    SleepStepChart(intervals: smoothed, selectedStage: selectedStage, animate: !reduceMotion)
+                        .frame(height: SleepRedesignMetrics.chartHeight)
+                        .accessibilityLabel(Text("Stages"))
+                        .accessibilityValue(Text(verbatim: stagesSpokenSummary(s)))
+                    HStack {
+                        Text(verbatim: Self.stageAxisFormatter.string(from: night.onsetDate.addingTimeInterval(origin)))
+                        Spacer()
+                        Text(verbatim: Self.stageAxisFormatter.string(from: night.onsetDate.addingTimeInterval(origin + span / 2)))
+                        Spacer()
+                        Text(verbatim: Self.stageAxisFormatter.string(from: night.onsetDate.addingTimeInterval(origin + span)))
+                    }
+                    .noopFont(.caption)
+                    .padding(.leading, SleepRedesignMetrics.laneLabelWidth)
+                    .accessibilityHidden(true)
+                    if isPersisted { SourceCaption(verbatim: stageCaption) }
+                    SleepHeartTrace(nightHR: nightHR, night: night, intervals: smoothed, origin: origin,
+                                    span: span, selectedStage: selectedStage)
+                    motionStrip(night)
+                } else {
+                    stageProportionBar(s)
+                }
+                if displayed.hasStages {
+                    Rectangle().fill(NoopTheme.separator).frame(height: 1)
+                    redesignStageRows(s)
+                    Text("Dotted mark is your 30-night typical.").noopFont(.caption)
+                    stageInsight(s)
+                }
+            }
+        }
+        // Sleeping heart rate for THIS night, reloaded only when the displayed night changes (the classic
+        // stage card's load, unchanged).
+        .task(id: displayed.hasStages ? night.session.startTs : nil) {
+            guard displayed.hasStages else { return }
+            nightHR = await repo.hrBuckets(from: night.session.startTs, to: night.session.endTs,
+                                           bucketSeconds: 60)
+        }
+        // Browsing to another night clears the stage highlight, as on the classic hero.
+        .onChange(of: nightOffset) { _, _ in selectedStage = nil }
+    }
+
+    /// The staging caveats the classic stage card shows, under the same conditions.
+    @ViewBuilder
+    private func redesignStageNotes(_ night: Night) -> some View {
+        if stageStagingIsLowConfidence(night) { redesignBlock(0) { stageLowConfidenceNote } }
+        if stageShowsIncompleteNote(night) { redesignBlock(0) { stageIncompleteNote } }
+        if let coverage = stageCoverage(night), coverage < HypnogramCoverage.minCoverage {
+            redesignBlock(0) { stagePartialNote(coverage) }
+        }
+        if repo.activeDeviceIsOura { redesignBlock(0) { ouraRawStagesNote } }
+    }
+
+    static func redesignStageColor(_ stage: SleepStage) -> Color {
+        switch stage {
+        case .awake: return NoopTheme.stageAwake
+        case .rem:   return NoopTheme.stageREM
+        case .light: return NoopTheme.stageLight
+        case .deep:  return NoopTheme.stageDeep
+        }
+    }
+
+    private static let redesignStageOrder: [SleepStage] = [.awake, .rem, .light, .deep]
+
+    /// One spoken line for the stage chart: every stage's duration and share, in chart order.
+    private func stagesSpokenSummary(_ s: Stages) -> String {
+        Self.redesignStageOrder.map { stage in
+            String(localized: "\(stage.label): \(durationText(stageMinutes(stage, in: s))), \(stageSharePercent(stage, s)) percent of the night")
+        }.joined(separator: ", ")
+    }
+
+    /// Proportional stage bar for a night with stage totals but no timeline (imported minutes only).
+    private func stageProportionBar(_ s: Stages) -> some View {
+        let total = max(1, s.total)
+        return GeometryReader { geo in
+            HStack(spacing: SleepRedesignMetrics.segmentGap) {
+                ForEach([SleepStage.deep, .light, .rem, .awake], id: \.self) { stage in
+                    Rectangle()
+                        .fill(Self.redesignStageColor(stage))
+                        .frame(width: max(0, geo.size.width * CGFloat(stageMinutes(stage, in: s) / total)
+                                         - SleepRedesignMetrics.segmentGap))
+                }
+            }
+        }
+        .frame(height: SleepRedesignMetrics.fallbackBarHeight)
+        .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Stages"))
+        .accessibilityValue(Text(verbatim: stagesSpokenSummary(s)))
+    }
+
+    /// Awake / REM / Light / Deep rows: duration as a bar on a shared minutes scale, a dotted mark at the
+    /// 30-night typical (`stageTypical` mean), the duration and the night's share. Tapping a row
+    /// highlights that stage on the chart and fills in the typical-range line below.
+    private func redesignStageRows(_ s: Stages) -> some View {
+        let typicals: [SleepStage: Double] = Dictionary(uniqueKeysWithValues:
+            Self.redesignStageOrder.compactMap { stage in stageTypical(stage).map { (stage, $0.mean) } })
+        let scaleMax = max(1, (Self.redesignStageOrder.map { stageMinutes($0, in: s) } + Array(typicals.values)).max() ?? 1)
+        return VStack(spacing: 0) {
+            ForEach(Self.redesignStageOrder, id: \.self) { stage in
+                redesignStageRow(stage, minutes: stageMinutes(stage, in: s),
+                                 percent: stageSharePercent(stage, s),
+                                 typical: typicals[stage], scaleMax: scaleMax)
+            }
+        }
+    }
+
+    private func redesignStageRow(_ stage: SleepStage, minutes: Double, percent: Int,
+                                  typical: Double?, scaleMax: Double) -> some View {
+        let color = Self.redesignStageColor(stage)
+        let isSelected = selectedStage == stage
+        let dimmed = selectedStage != nil && !isSelected
+        return HStack(spacing: NoopTheme.Layout.m) {
+            Text(stage.label)
+                .noopFont(.rowTitle, color: false)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: SleepRedesignMetrics.stageNameWidth, alignment: .leading)
+            GeometryReader { geo in
+                let midY = geo.size.height / 2
+                ZStack(alignment: .leading) {
+                    Capsule().fill(NoopTheme.track)
+                        .frame(height: SleepRedesignMetrics.stageBarHeight)
+                    Capsule().fill(color)
+                        .frame(width: geo.size.width * CGFloat(min(1, minutes / scaleMax)),
+                               height: SleepRedesignMetrics.stageBarHeight)
+                    if let typical {
+                        let x = geo.size.width * CGFloat(min(1, typical / scaleMax))
+                        Path { p in
+                            p.move(to: CGPoint(x: x, y: 0))
+                            p.addLine(to: CGPoint(x: x, y: geo.size.height))
+                        }
+                        .stroke(NoopTheme.textSecondary,
+                                style: StrokeStyle(lineWidth: SleepRedesignMetrics.typicalMarkLine,
+                                                   dash: [SleepRedesignMetrics.typicalMarkLine,
+                                                          SleepRedesignMetrics.typicalMarkLine]))
+                    }
+                }
+                .frame(height: geo.size.height)
+                .position(x: geo.size.width / 2, y: midY)
+            }
+            .frame(height: SleepRedesignMetrics.typicalMarkHeight)
+            Text(verbatim: durationText(minutes))
+                .noopFont(.rowTitle)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: SleepRedesignMetrics.stageDurationWidth, alignment: .trailing)
+            Text(verbatim: "\(percent)%")
+                .noopFont(.footnote)
+                .monospacedDigit()
+                .frame(width: SleepRedesignMetrics.stagePercentWidth, alignment: .trailing)
+        }
+        .padding(.vertical, NoopTheme.Layout.s)
+        .opacity(dimmed ? SleepRedesignMetrics.rowDimmedOpacity : 1)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(NoopTheme.Motion.resolved(NoopTheme.Motion.dotPop, reduceMotion: reduceMotion)) {
+                selectedStage = isSelected ? nil : stage
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(stage.label): \(durationText(minutes)), \(percent) percent of the night"))
+        .accessibilityHint(Text("Highlights this stage on the sleep chart"))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    // MARK: Naps
+
+    /// The day's blocks outside the bridged main-night group, exactly the classic `napSection` split
+    /// (#508 / #518 / #555), with the same per-nap explainer and editor.
+    private func redesignNaps(_ night: Night) -> some View {
+        let groupStarts = night.mainGroupStarts
+        let naps = night.sourceBlocks
+            .filter { !groupStarts.contains($0.startTs) }
+            .sorted { $0.effectiveStartTs < $1.effectiveStartTs }
+        let mainMin = night.stages.total
+        let napMin = naps.reduce(0.0) { $0 + Double($1.endTs - $1.effectiveStartTs) / 60.0 }
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                if naps.isEmpty {
+                    Text("No naps recorded for this day.").noopFont(.footnote)
+                } else {
+                    StatGrid([
+                        StatGridItem("Main sleep", value: durationText(mainMin)),
+                        StatGridItem("Nap(s)", value: durationText(napMin)),
+                        StatGridItem("Total", value: durationText(mainMin + napMin)),
+                    ], columns: 3)
+                    ForEach(naps, id: \.startTs) { nap in
+                        Rectangle().fill(NoopTheme.separator).frame(height: 1)
+                        redesignNapRow(nap)
+                    }
+                }
+            }
+        }
+    }
+
+    private func redesignNapRow(_ nap: CachedSleepSession) -> some View {
+        HStack(spacing: NoopTheme.Layout.m) {
+            DomainIcon(systemImage: "powersleep", color: NoopTheme.sleep, size: DomainIcon.smallSize)
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                Text(verbatim: napWindowText(nap)).noopFont(.listTitle)
+                Text(verbatim: durationText(Double(nap.endTs - nap.effectiveStartTs) / 60.0)).noopFont(.footnote)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: NoopTheme.Layout.s)
+            Button { napWhyStartTs = (napWhyStartTs == nap.startTs) ? nil : nap.startTs } label: {
+                Image(systemName: "info.circle")
+                    .noopFont(.navTitle, color: false)
+                    .foregroundStyle(NoopTheme.sleep)
+                    .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.noopPress)
+            .accessibilityLabel(Text("Why this is logged as a nap"))
+            .popover(isPresented: Binding(
+                get: { napWhyStartTs == nap.startTs },
+                set: { if !$0 { napWhyStartTs = nil } }), arrowEdge: .bottom) {
+                whyPopover(text: "", napSuffix: true)
+            }
+            Button {
+                wakeEdit = WakeEdit(detectedStartTs: nap.startTs,
+                                    bedTs: nap.effectiveStartTs,
+                                    wakeTs: nap.endTs,
+                                    stagesJSON: nap.stagesJSON,
+                                    userEdited: true)   // a nap row is always manually added → no tombstone on delete
+            } label: {
+                Image(systemName: nap.userEdited ? "pencil.circle.fill" : "pencil.circle")
+                    .noopFont(.navTitle, color: false)
+                    .foregroundStyle(NoopTheme.sleep)
+                    .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.noopPress)
+            .accessibilityLabel(nap.userEdited ? Text("Edit nap times (edited)") : Text("Edit nap times"))
+        }
+    }
+
+    // MARK: Quality
+
+    /// Quality tiles. Efficiency, restorative, respiratory rate and disturbances belong to the displayed
+    /// night (the same values the stage card and the night's stored day row carry). Consistency and sleep
+    /// debt are rolling figures that only exist for the latest night, so while browsing an older night
+    /// they say so rather than posing as that night's.
+    private func redesignQuality(_ model: SleepModel, _ displayed: SleepDisplayedNight) -> some View {
+        let night = displayed.night
+        let wakeDay = Self.wakeDayKey(night)
+        let row = repo.days.last(where: { $0.day == wakeDay })
+        let efficiency = displayed.hasStages ? efficiencyPct(night) : nil
+        let restorative = displayed.hasStages ? night.stages.deep + night.stages.rem : nil
+        let resp = row?.respRateBpm
+        let disturbances = row?.disturbances
+        let consistency = model.consistency
+        let debt = model.sleepDebt
+        let browsing = nightOffset != 0
+        let latestNote = String(localized: "Latest, not this night")
+        let columns = [GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap),
+                       GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap)]
+        return LazyVGrid(columns: columns, alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
+            qualityTile("Efficiency", value: efficiency.map { "\(Int($0.rounded()))" }, unit: "%",
+                        caption: vsTypicalCaption(efficiency, model.efficiency.typical, suffix: "%"))
+            qualityTile("Restorative", value: restorative.map { durationText($0) }, unit: nil,
+                        caption: restorativeTypical().map { String(localized: "typically \(durationText($0))") })
+            qualityTile("Consistency", value: consistency.latest.map { "\(Int($0.rounded()))" }, unit: "%",
+                        caption: browsing ? latestNote
+                            : (SleepModel.carriedMetricCaption(latestDay: consistency.latestDay, latest: consistency.latest)
+                               ?? vsTypicalCaption(consistency.latest, consistency.typical, suffix: "%")))
+            qualityTile("Sleep debt", value: debt.latest.map { durationText($0) }, unit: nil,
+                        caption: browsing ? latestNote : nightDetailDebtCaption(debt.latest),
+                        captionColor: browsing ? NoopTheme.textTertiary : debtCaptionColor(debt.latest))
+            qualityTile("Respiratory", value: resp.map { String(format: "%.1f", $0) },
+                        unit: String(localized: "rpm"),
+                        caption: vsTypicalCaption(resp, model.respiratory.typical, suffix: " rpm", decimals: 1))
+            qualityTile("Disturbances", value: disturbances.map { "\($0)" }, unit: nil,
+                        caption: String(localized: "This night"))
+        }
+    }
+
+    private func qualityTile(_ label: LocalizedStringKey, value: String?, unit: String?, caption: String?,
+                             captionColor: Color = NoopTheme.textTertiary) -> some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+            Text(label).noopFont(.footnote)
+            HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
+                Text(verbatim: value ?? "—")
+                    .noopFont(.statNumber, color: false)
+                    .foregroundStyle(value == nil ? NoopTheme.textTertiary : NoopTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                if value != nil, let unit {
+                    Text(verbatim: unit).noopFont(.unit)
+                }
+            }
+            if let caption {
+                Text(verbatim: caption)
+                    .noopFont(.caption, color: false)
+                    .foregroundStyle(captionColor)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(NoopTheme.Layout.l)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .noopGlassBackground(cornerRadius: NoopTheme.Layout.tileRadius)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "+3% vs typical" — the Night detail caption wording, nil when either side is missing.
+    private func vsTypicalCaption(_ value: Double?, _ typical: Double?, suffix: String, decimals: Int = 0) -> String? {
+        guard let value, let typical, typical != 0 else { return nil }
+        let diff = value - typical
+        let sign = diff >= 0 ? "+" : "−"
+        let mag = abs(diff)
+        let num = decimals == 0 ? "\(Int(mag.rounded()))" : String(format: "%.\(decimals)f", mag)
+        return String(localized: "\(sign)\(num)\(suffix) vs typical")
+    }
+
+    /// The Night detail debt bands (`nightDetailDebtColor`) in redesign colours.
+    private func debtCaptionColor(_ debt: Double?) -> Color {
+        guard let debt else { return NoopTheme.textTertiary }
+        switch debt {
+        case ..<SleepDebt.onTargetBandMin: return NoopTheme.recovery
+        case ..<60: return NoopTheme.recoveryMid
+        default: return NoopTheme.recoveryLow
+        }
+    }
+}
+
+/// The night's stages as one connected step line across four lanes (Awake, REM, Light, Deep): a stage
+/// colour run at each lane and a short gradient riser at every change, so the night reads as one line
+/// rather than blocks. No horizontal gridlines; the lanes are faint fills. Selecting a stage recedes the
+/// others. Draws left to right once on appearance (instant under Reduce Motion).
+private struct SleepStepChart: View {
+    let intervals: [SleepInterval]
+    let selectedStage: SleepStage?
+    let animate: Bool
+    @State private var reveal: CGFloat = 0
+
+    private static let lanes: [SleepStage] = [.awake, .rem, .light, .deep]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: SleepRedesignMetrics.laneGap) {
+                ForEach(Self.lanes, id: \.self) { stage in
+                    Text(stage.label)
+                        .noopFont(.caption, color: false)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(NoopTheme.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                }
+            }
+            .frame(width: SleepRedesignMetrics.laneLabelWidth)
+            .accessibilityHidden(true)
+            Canvas { ctx, size in draw(in: &ctx, size: size) }
+                .mask(alignment: .leading) {
+                    GeometryReader { geo in
+                        Rectangle().frame(width: geo.size.width * reveal, height: geo.size.height)
+                    }
+                }
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .ignore)
+        .onAppear {
+            guard reveal < 1 else { return }
+            if animate {
+                withAnimation(NoopTheme.Motion.chartDraw) { reveal = 1 }
+            } else {
+                reveal = 1
+            }
+        }
+    }
+
+    private func draw(in ctx: inout GraphicsContext, size: CGSize) {
+        let gap = SleepRedesignMetrics.laneGap
+        let count = CGFloat(Self.lanes.count)
+        let laneH = max(1, (size.height - gap * (count - 1)) / count)
+        func laneY(_ stage: SleepStage) -> CGFloat {
+            CGFloat(Self.lanes.firstIndex(of: stage) ?? 0) * (laneH + gap) + laneH / 2
+        }
+        for i in 0..<Self.lanes.count {
+            let lane = CGRect(x: 0, y: CGFloat(i) * (laneH + gap), width: size.width, height: laneH)
+            ctx.fill(Path(roundedRect: lane, cornerRadius: SleepRedesignMetrics.laneRadius),
+                     with: .color(NoopTheme.track.opacity(SleepRedesignMetrics.laneOpacity)))
+        }
+        guard let first = intervals.first else { return }
+        let origin = first.start
+        let span = max(1, (intervals.map(\.end).max() ?? origin + 1) - origin)
+        func x(_ t: TimeInterval) -> CGFloat { CGFloat((t - origin) / span) * size.width }
+        func color(_ stage: SleepStage) -> Color {
+            let shown = selectedStage == nil || selectedStage == stage
+            return SleepView.redesignStageColor(stage).opacity(shown ? 1 : SleepRedesignMetrics.dimmedOpacity)
+        }
+        for (a, b) in zip(intervals, intervals.dropFirst()) where a.stage != b.stage {
+            let xb = x(b.start)
+            let top = CGPoint(x: xb, y: laneY(a.stage))
+            let bottom = CGPoint(x: xb, y: laneY(b.stage))
+            var riser = Path()
+            riser.move(to: top)
+            riser.addLine(to: bottom)
+            ctx.stroke(riser,
+                       with: .linearGradient(Gradient(colors: [color(a.stage), color(b.stage)]),
+                                             startPoint: top, endPoint: bottom),
+                       style: StrokeStyle(lineWidth: SleepRedesignMetrics.riserLine, lineCap: .round))
+        }
+        for iv in intervals {
+            let y = laneY(iv.stage)
+            var run = Path()
+            run.move(to: CGPoint(x: x(iv.start), y: y))
+            run.addLine(to: CGPoint(x: max(x(iv.end), x(iv.start) + 1), y: y))
+            ctx.stroke(run, with: .color(color(iv.stage)),
+                       style: StrokeStyle(lineWidth: SleepRedesignMetrics.stepLine, lineCap: .round))
+        }
+    }
+}
+
+/// Sleeping heart rate on the stage chart's timeline, without gridlines: a thin trace that breaks across
+/// data gaps and draws weak-optical buckets dashed (the `SleepHRChart` rules), the selected stage's
+/// columns washed in its colour, and the night's lowest–highest bucket as a caption.
+private struct SleepHeartTrace: View {
+    let nightHR: [HRBucket]
+    let night: Night
+    let intervals: [SleepInterval]
+    let origin: TimeInterval
+    let span: TimeInterval
+    let selectedStage: SleepStage?
+
+    var body: some View {
+        let start = night.onsetDate.timeIntervalSince1970
+        let buckets = nightHR.filter {
+            let rel = TimeInterval($0.ts) - start
+            return rel >= origin - 60 && rel <= origin + span + 60
+        }
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+            if buckets.count >= 2, let lo = buckets.map(\.bpm).min(), let hi = buckets.map(\.bpm).max() {
+                let range = String(Int(lo.rounded())) + "–" + String(Int(hi.rounded())) + " "
+                HStack {
+                    Text("Heart rate").noopFont(.footnote)
+                    Spacer()
+                    (Text(verbatim: range) + Text("bpm"))
+                        .noopFont(.footnote)
+                        .monospacedDigit()
+                }
+                Canvas { ctx, size in
+                    draw(in: &ctx, size: size, buckets: buckets, start: start, lo: lo - 5, hi: hi + 5)
+                }
+                .frame(height: SleepRedesignMetrics.heartHeight)
+                .padding(.leading, SleepRedesignMetrics.laneLabelWidth)
+                .accessibilityHidden(true)
+            } else {
+                Text("No heart-rate detail for this night").noopFont(.footnote)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("Sleeping heart rate through the night"))
+    }
+
+    private func draw(in ctx: inout GraphicsContext, size: CGSize, buckets: [HRBucket],
+                      start: TimeInterval, lo: Double, hi: Double) {
+        func point(_ b: HRBucket) -> CGPoint {
+            let rel = TimeInterval(b.ts) - start
+            return CGPoint(x: CGFloat((rel - origin) / span) * size.width,
+                           y: size.height * (1 - CGFloat((b.bpm - lo) / max(1, hi - lo))))
+        }
+        if let sel = selectedStage {
+            let wash = SleepView.redesignStageColor(sel).opacity(SleepRedesignMetrics.heartWashOpacity)
+            for iv in intervals where iv.stage == sel {
+                let x0 = CGFloat((iv.start - origin) / span) * size.width
+                let w = max(1, CGFloat((iv.end - iv.start) / span) * size.width)
+                ctx.fill(Path(CGRect(x: x0, y: 0, width: w, height: size.height)), with: .color(wash))
+            }
+        }
+        var strong = Path()
+        var weak = Path()
+        var prev: (ts: Int, pt: CGPoint, strong: Bool)?
+        for b in buckets {
+            let p = point(b)
+            let isStrong = b.conf >= SleepRedesignMetrics.heartWeakConfidence
+            if let pr = prev, b.ts - pr.ts <= SleepRedesignMetrics.heartGapSeconds {
+                if isStrong {
+                    if !pr.strong { strong.move(to: pr.pt) }
+                    strong.addLine(to: p)
+                } else {
+                    if pr.strong { weak.move(to: pr.pt) }
+                    weak.addLine(to: p)
+                }
+            } else {
+                if isStrong { strong.move(to: p) } else { weak.move(to: p) }
+            }
+            prev = (b.ts, p, isStrong)
+        }
+        ctx.stroke(strong, with: .color(NoopTheme.heart),
+                   style: StrokeStyle(lineWidth: SleepRedesignMetrics.heartLine, lineJoin: .round))
+        ctx.stroke(weak, with: .color(NoopTheme.heart.opacity(SleepRedesignMetrics.rowDimmedOpacity)),
+                   style: StrokeStyle(lineWidth: SleepRedesignMetrics.heartLine, lineJoin: .round,
+                                      dash: [2, 3]))
+    }
+}
+#endif
 
 /// Original atmospheric night hero — photographic moonlit lake plus lightweight static depth layers.
 /// Drawn as ScreenScaffold.topBackground (fixed under the status bar / overscroll); bottom fades into

@@ -481,6 +481,13 @@ struct MetricExplorerView: View {
     /// hint in the header, never gating the rows: the catalog is static, so every row's label/icon/unit
     /// must paint immediately even before any series read returns (#199).
     @State private var probing = true
+    #if os(iOS)
+    /// The iPhone redesign (A2 "All metrics"); off falls back to the classic Explore list below.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    /// The redesign's search filter over the catalog titles and categories.
+    @State private var searchQuery = ""
+    #endif
 
     var body: some View {
         #if os(macOS)
@@ -491,8 +498,14 @@ struct MetricExplorerView: View {
         // iOS: Explore is pushed INSIDE the More tab's NavigationStack. A nested NavigationStack made
         // tapping a metric bounce straight back to the More list (#199) — so use the ambient stack; the
         // rows push their detail with a direct closure-based NavigationLink (#38).
-        exploreScaffold
-            .task(id: repo.refreshSeq) { await probeEmptiness(refreshSeq: repo.refreshSeq) }
+        Group {
+            if redesignEnabled {
+                redesignExplore
+            } else {
+                exploreScaffold
+            }
+        }
+        .task(id: repo.refreshSeq) { await probeEmptiness(refreshSeq: repo.refreshSeq) }
         #endif
     }
 
@@ -754,7 +767,11 @@ struct MetricDetailView: View {
     }
     private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
     private var skinTempPreferred: SkinTempDisplay.Kind {
-        SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute
+        #if os(iOS)
+        // The redesign shows skin temperature only relative to the wearer's baseline.
+        if redesignEnabled { return .deviation }
+        #endif
+        return SkinTempDisplay.Kind(rawValue: skinTempDisplayRaw) ?? .absolute
     }
     private func fmt(_ v: Double) -> String {
         if isStepsDetail { return MetricDetailSteps.valueLabel(v, resolution: .daily) }
@@ -797,6 +814,13 @@ struct MetricDetailView: View {
     @State private var correlationCache: [CorrRow] = []
     /// The (metricID, range) the cache was built for; nil means "not yet computed".
     @State private var correlationKey: String? = nil
+    #if os(iOS)
+    /// The iPhone redesign (A3 "Metric detail"); off falls back to the classic dossier below.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    /// The redesign chart's tapped point (x = seconds since 1970 of the reading's day).
+    @State private var selectedChartX: Double?
+    #endif
     private var loadTaskID: String {
         MetricDetailSteps.loadIdentity(metricID: metric.id, refreshSequence: repo.refreshSeq,
                                        skinTemperatureStyle: skinTempDisplayRaw, range: range)
@@ -955,6 +979,18 @@ struct MetricDetailView: View {
     // MARK: Body
 
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignDetail
+        } else {
+            classicDetail
+        }
+        #else
+        classicDetail
+        #endif
+    }
+
+    private var classicDetail: some View {
         // Compute the heavy window derivations ONCE per body eval, then hand them to
         // the subviews — instead of every subview re-deriving `effectiveRange` /
         // `windowed` (each of which re-parses + re-filters the full history).
@@ -1191,6 +1227,17 @@ struct MetricDetailView: View {
                 case .absolute:   leadsAbsolute = anyAbsolute
                 case .deviation:  leadsAbsolute = !anyDeviation && anyAbsolute
                 }
+                #if os(iOS)
+                if redesignEnabled && leadsAbsolute {
+                    // The redesign never shows an absolute skin temperature: with no baseline difference on
+                    // any night there is nothing relative to plot, so the screen says so instead.
+                    series = []
+                    sourceByDay = [:]
+                    skinTempNote = String(localized: "No baseline difference yet. NOOP needs about 4 worn nights to learn your skin-temperature baseline.")
+                    loaded = true
+                    return
+                }
+                #endif
                 if leadsAbsolute {
                     // An absolute-led series takes EVERY absolute reading, whichever column holds it.
                     // `skinTempC` is the on-device computed absolute; `skinTempDevC` may hold a CSV-imported
@@ -1668,20 +1715,7 @@ struct MetricDetailView: View {
     /// the source words. Swift twin of Android's `VitalReadingsTable`.
     @ViewBuilder
     private func readingsTable(windowed: [(day: String, value: Double)]) -> some View {
-        let readings = windowed.map {
-            VitalReading(day: $0.day, value: $0.value,
-                         source: sourceByDay[$0.day]
-                             ?? (metric.key == "skin_temp" ? FusionSource.localCache.rawValue : metric.source))
-        }
-        // The unit is passed EMPTY on purpose (#1942). `vitalReadingRows` appends its `unit` to whatever
-        // the formatter returns, and every `MetricDescriptor.format` overload already ends in the unit —
-        // the CONVERTED one, at that. Passing `metric.unit` here rendered "33 % %", and worse than a
-        // repeat for the three convertible families, whose stored label contradicts the displayed one:
-        // "182.0 lb kg", "Δ0.5 °F °C", "12.5 /21 /100". The Android twin appends the same way and is
-        // correct because every one of its call sites passes a UNIT-LESS closure; iOS has no unit-less
-        // formatter that also converts, so the unit comes from `fmt` and the parameter stays empty.
-        let rows = vitalReadingRows(readings: readings, unit: "",
-                                    strapDeviceId: repo.deviceId, format: fmt)
+        let rows = readingRows(windowed: windowed)
         if !rows.isEmpty {
             NoopCard {
                 VStack(alignment: .leading, spacing: NoopMetrics.gap) {
@@ -1723,6 +1757,25 @@ struct MetricDetailView: View {
                 }
             }
         }
+    }
+
+    /// The readings-table rows for a window, NEWEST FIRST, shared by the classic table and the iPhone
+    /// redesign so both name the same source for the same day.
+    private func readingRows(windowed: [(day: String, value: Double)]) -> [VitalReadingRow] {
+        let readings = windowed.map {
+            VitalReading(day: $0.day, value: $0.value,
+                         source: sourceByDay[$0.day]
+                             ?? (metric.key == "skin_temp" ? FusionSource.localCache.rawValue : metric.source))
+        }
+        // The unit is passed EMPTY on purpose (#1942). `vitalReadingRows` appends its `unit` to whatever
+        // the formatter returns, and every `MetricDescriptor.format` overload already ends in the unit —
+        // the CONVERTED one, at that. Passing `metric.unit` here rendered "33 % %", and worse than a
+        // repeat for the three convertible families, whose stored label contradicts the displayed one:
+        // "182.0 lb kg", "Δ0.5 °F °C", "12.5 /21 /100". The Android twin appends the same way and is
+        // correct because every one of its call sites passes a UNIT-LESS closure; iOS has no unit-less
+        // formatter that also converts, so the unit comes from `fmt` and the parameter stays empty.
+        return vitalReadingRows(readings: readings, unit: "",
+                                strapDeviceId: repo.deviceId, format: fmt)
     }
 
     /// The tint for a resolved provenance label — gold for Whoop, cyan for Apple Health, purple for Health
@@ -1863,6 +1916,594 @@ struct MetricDetailView: View {
         return base.opacity(0.55 + 0.45 * min(abs(r), 1.0))
     }
 }
+
+#if os(iOS)
+// MARK: - iPhone redesign (A2 All metrics, A3 Metric detail)
+//
+// Presentation only. Both screens keep every read, gate and computed value of the classic views above
+// (the empty-metric probe, the range windows and their #943 locking, the steps buckets, the skin-temp and
+// SpO₂ branches, provenance per reading, the correlation scan); only the surfaces change, to the
+// `StrandDesign` redesign tokens and components.
+
+/// Geometry from the round 3 A2/A3 boards that has no `NoopTheme` token.
+private enum MetricRedesignLayout {
+    static let chartHeight: CGFloat = 200
+    static let textGap: CGFloat = 2
+    /// A metric with no series at all is dimmed in the list (A2's "Weight · Not connected" row).
+    static let emptyRowOpacity: Double = 0.55
+}
+
+/// The redesign colour for a catalog metric: its domain token (§3.2), by key first, then by category.
+private func redesignMetricColor(_ m: MetricDescriptor) -> Color {
+    switch m.key {
+    case "recovery": return NoopTheme.recovery
+    case "strain", "hr_zones13_min", "hr_zones45_min", "hr_zones_all_min", "intensity_min": return NoopTheme.strain
+    case "hrv", "vo2max", "vo2max_est", "fitness_age": return NoopTheme.hrv
+    case "rhr", "avg_hr", "max_hr": return NoopTheme.heart
+    case "resp_rate", "spo2": return NoopTheme.breath
+    case "skin_temp": return NoopTheme.temp
+    case "steps", "steps_est", "strength_min", "energy_kcal", "active_kcal",
+         "calories_in", "protein_g", "carbs_g", "fat_g":
+        return NoopTheme.lift
+    case "stress": return NoopTheme.stress
+    case "mood": return NoopTheme.coach
+    default:
+        switch m.category {
+        case "Rest": return NoopTheme.sleep
+        case "Charge": return NoopTheme.recovery
+        case "Effort": return NoopTheme.strain
+        case "Heart": return NoopTheme.heart
+        case "Health": return NoopTheme.hrv
+        case "Nutrition": return NoopTheme.lift
+        case "Mind": return NoopTheme.coach
+        default: return NoopTheme.textSecondary
+        }
+    }
+}
+
+/// Splits a formatted reading ("62 ms") into its number and trailing unit so the unit can be set smaller
+/// (§3.3). A string whose last word contains a digit, or has no space, is returned whole.
+private func redesignSplitValue(_ formatted: String) -> (value: String, unit: String?) {
+    guard let space = formatted.range(of: " ", options: .backwards) else { return (formatted, nil) }
+    let tail = String(formatted[space.upperBound...])
+    guard !tail.isEmpty, tail.rangeOfCharacter(from: .decimalDigits) == nil else { return (formatted, nil) }
+    return (String(formatted[..<space.lowerBound]), tail)
+}
+
+/// A day caption for the redesign charts, in the calendar-day (UTC) zone the series day keys use.
+private func redesignDayLabel(_ date: Date, template: String) -> String {
+    let f = DateFormatter()
+    f.locale = AppLanguage.activeLocale
+    f.timeZone = TimeZone(identifier: "UTC")
+    f.setLocalizedDateFormatFromTemplate(template)
+    return f.string(from: date)
+}
+
+/// A hairline between rows inside a redesign list card.
+private struct MetricRedesignDivider: View {
+    var body: some View {
+        Rectangle().fill(NoopTheme.separator).frame(height: 1).accessibilityHidden(true)
+    }
+}
+
+extension MetricExplorerView {
+    /// A2 "All metrics": the catalog grouped by category, each row with its source caption.
+    var redesignExplore: some View {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let groups: [(category: String, metrics: [MetricDescriptor])] = MetricCatalog.categories.map { category in
+            (category, MetricCatalog.inCategory(category).filter { metric in
+                query.isEmpty
+                    || metric.title.localizedStandardContains(query)
+                    || MetricCatalog.categoryDisplayName(metric.category).localizedStandardContains(query)
+            })
+        }.filter { !$0.metrics.isEmpty }
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Every signal, with where it comes from")
+                    .noopFont(.footnote)
+                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                if probing {
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        ProgressView().controlSize(.small)
+                        Text("Scanning your data…").noopFont(.caption)
+                    }
+                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                    .padding(.top, NoopTheme.Layout.s)
+                }
+                if query.isEmpty {
+                    // The headline tap-through (#575): a full-day, full-resolution, zoomable timeline.
+                    NavigationLink {
+                        FullDayChartView()
+                    } label: {
+                        NoopGlassCard {
+                            HStack(spacing: NoopTheme.Layout.m) {
+                                DomainIcon(systemImage: "waveform.path.ecg", color: NoopTheme.heart)
+                                VStack(alignment: .leading, spacing: MetricRedesignLayout.textGap) {
+                                    Text("Deep Timeline").noopFont(.rowTitle)
+                                    Text("Every second of your day, zoomable.").noopFont(.footnote)
+                                }
+                                Spacer(minLength: NoopTheme.Layout.s)
+                                Image(systemName: "chevron.right")
+                                    .noopFont(.footnote, color: false)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(NoopTheme.textTertiary)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.noopPress)
+                    .accessibilityLabel("Deep Timeline, every second of your day, zoomable")
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.l)
+                    .noopEntrance(index: 0)
+                }
+                ForEach(Array(groups.enumerated()), id: \.element.category) { index, group in
+                    // Localized at the render site only; `category` stays the raw English identifier.
+                    NoopSectionHeader("\(MetricCatalog.categoryDisplayName(group.category))")
+                    NoopGlassCard(flush: true) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(group.metrics.enumerated()), id: \.element.id) { idx, metric in
+                                // Closure-based push, as in the classic list (#38: a value push double-pushed).
+                                NavigationLink {
+                                    MetricDetailView(metric: metric)
+                                } label: {
+                                    RedesignCatalogRow(metric: metric,
+                                                       isEmpty: emptyByID[metric.id] ?? false,
+                                                       showsDivider: idx > 0)
+                                }
+                                .buttonStyle(.noopPress)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .noopEntrance(index: index + 1)
+                }
+                if groups.isEmpty {
+                    Text("No metrics match your search.")
+                        .noopFont(.body)
+                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.top, NoopTheme.Layout.xl)
+                }
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .searchable(text: $searchQuery, prompt: Text("Search metrics"))
+        .noopAmbientBackground(
+            AmbientPreset.allMetrics.blobs(intensity: AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced))
+        .navigationTitle(Text("All metrics"))
+        .navigationBarTitleDisplayMode(.large)
+        .refreshable { await repo.refresh() }
+    }
+}
+
+/// One A2 catalog row: the metric's domain icon, title, source caption and unit. A metric with no series
+/// shows "—" in place of its unit and is dimmed, so absent data cannot read as a measured value.
+/// (Named apart from the classic list's private `MetricRow` and the package's `NoopMetricRow`.)
+private struct RedesignCatalogRow: View {
+    let metric: MetricDescriptor
+    let isEmpty: Bool
+    let showsDivider: Bool
+
+    @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
+    @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
+    @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
+    private var unitLabel: String {
+        let system = UnitSystem(rawValue: unitSystemRaw) ?? .metric
+        let temp = UnitPrefs.resolveTemperature(system: system, override: temperatureRaw)
+        let effort = UnitPrefs.resolveEffortScale(effortScaleRaw)
+        return metric.displayUnit(system: system, temperature: temp, effortScale: effort)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if showsDivider { MetricRedesignDivider() }
+            HStack(spacing: NoopTheme.Layout.m) {
+                DomainIcon(systemImage: metric.icon,
+                           color: isEmpty ? NoopTheme.textSecondary : redesignMetricColor(metric),
+                           size: DomainIcon.smallSize)
+                VStack(alignment: .leading, spacing: MetricRedesignLayout.textGap) {
+                    Text(verbatim: metric.title).noopFont(.rowTitle)
+                    SourceCaption(verbatim: metric.sourceLabel)
+                }
+                Spacer(minLength: NoopTheme.Layout.s)
+                if isEmpty {
+                    Text(verbatim: "—").noopFont(.rowNumber, color: false).foregroundStyle(NoopTheme.textTertiary)
+                } else if !unitLabel.isEmpty {
+                    Text(verbatim: unitLabel).noopFont(.footnote)
+                }
+                Image(systemName: "chevron.right")
+                    .noopFont(.footnote, color: false)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(NoopTheme.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, NoopTheme.Layout.m)
+            .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+            .opacity(isEmpty ? MetricRedesignLayout.emptyRowOpacity : 1)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        // Whole-string key per variant, the same keys the classic row speaks.
+        .accessibilityLabel(isEmpty
+            ? "\(metric.title), \(unitLabel.isEmpty ? MetricCatalog.categoryDisplayName(metric.category) : unitLabel), no data"
+            : "\(metric.title), \(unitLabel.isEmpty ? MetricCatalog.categoryDisplayName(metric.category) : unitLabel)")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+extension MetricDetailView {
+    /// A3's range segments. The mockup's D (a single day) has no `ExploreRange`, so it is omitted; W / M /
+    /// 6M / Y map to the existing week / month / half / year windows, and ALL keeps the everything view.
+    static let redesignRanges: [ExploreRange] = [.week, .month, .half, .year, .all]
+
+    /// The segment to highlight for a resolved range: itself when offered, else the longest offered finite
+    /// window no longer than it (a locked or unoffered range never highlights a longer segment).
+    static func redesignPill(for resolved: ExploreRange) -> ExploreRange {
+        if redesignRanges.contains(resolved) { return resolved }
+        return redesignRanges
+            .filter { $0.days != nil && $0.rawValue <= resolved.rawValue }
+            .max { $0.rawValue < $1.rawValue } ?? .week
+    }
+
+    private var redesignRangeBinding: Binding<ExploreRange> {
+        Binding(get: { Self.redesignPill(for: coercedSelection) }, set: { range = $0 })
+    }
+
+    private var redesignAccent: Color { redesignMetricColor(metric) }
+
+    /// A3 "Metric detail": the generic template for any catalog metric.
+    var redesignDetail: some View {
+        // The same window derivations as the classic body, once per evaluation.
+        let effRange = effectiveRange
+        let rawWin = slice(for: effRange)
+        let win = presentedSeries(for: effRange)
+        let fellBack = effRange != range
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                SegmentedPills(Self.redesignRanges, selection: redesignRangeBinding) { Text(verbatim: $0.label) }
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.m)
+                if !loaded {
+                    NoopGlassCard { Color.clear.frame(height: MetricRedesignLayout.chartHeight) }
+                        .noopSkeleton(true)
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.xl)
+                } else if win.isEmpty {
+                    redesignEmptyState
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.xl)
+                } else {
+                    redesignSummary(effectiveRange: effRange, windowed: win, windowFellBack: fellBack)
+                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.top, NoopTheme.Layout.xl)
+                        .noopEntrance(index: 0)
+                    redesignChartCard(effectiveRange: effRange, windowed: win)
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.l)
+                        .noopEntrance(index: 1)
+                    if let note = skinTempNote {
+                        metricRedesignNote(note)
+                            .padding(.horizontal, NoopTheme.Layout.gutter)
+                            .padding(.top, NoopTheme.Layout.cardGap)
+                    }
+                    redesignStatsCard(effectiveRange: effRange, windowed: win)
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.cardGap)
+                        .noopEntrance(index: 2)
+                    redesignAbout
+                    // Steps chart summaries are bucketed; the provenance rows stay one per observed day.
+                    redesignReadings(windowed: isStepsDetail ? rawWin : win)
+                    redesignCorrelations
+                }
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .noopAmbientBackground(
+            AmbientPreset.metricDetail.blobs(intensity: AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced))
+        .navigationTitle(metric.title)
+        .task(id: loadTaskID) { await load() }
+        .onChange(of: range) { _, _ in
+            selectedChartX = nil
+            recomputeCorrelations()
+        }
+    }
+
+    // MARK: Redesign sections
+
+    @ViewBuilder private var redesignEmptyState: some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                if let note = skinTempNote {
+                    Text(verbatim: note).noopFont(.body).fixedSize(horizontal: false, vertical: true)
+                } else if metric.key == "fitness_age" {
+                    // Computed on-device, so the import copy would be wrong here: the same countdown the
+                    // Health tab shows, from the shared engine, plus the immediate recompute.
+                    Text(verbatim: fitnessReadyLeadCopy(rhrDays: repo.days.suffix(7).compactMap { $0.restingHr }.count,
+                                                        hasAge: profile.age > 0, hasSex: !profile.sex.isEmpty))
+                        .noopFont(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if refreshing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button {
+                            guard !refreshing else { return }
+                            refreshing = true
+                            Task {
+                                _ = await intelligence.recomputeFitnessAgeOnly()
+                                await load()
+                                refreshing = false
+                            }
+                        } label: {
+                            Label("Refresh Fitness Age", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(NoopSecondaryButton())
+                    }
+                } else {
+                    Text("Import your history first. A WHOOP export in Data Sources fills every metric you can explore here in about a minute.")
+                        .noopFont(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func redesignSummary(effectiveRange: ExploreRange,
+                                 windowed: [(day: String, value: Double)],
+                                 windowFellBack: Bool) -> some View {
+        let stat = ComparisonEngine.stat(windowed.map(\.value))
+        let average = redesignSplitValue(fmt(stat.mean))
+        let caption = rangeCaption(effectiveRange: effectiveRange, windowed: windowed, windowFellBack: windowFellBack)
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+            Text("Average").noopFont(.footnote)
+            HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
+                Text(verbatim: average.value).noopFont(.bigNumber)
+                if let unit = average.unit {
+                    Text(verbatim: unit).noopFont(.sectionTitle, color: false).foregroundStyle(NoopTheme.textSecondary)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .accessibilityElement(children: .combine)
+            if let span = redesignSpan(windowed) {
+                Text(verbatim: span).noopFont(.footnote)
+            }
+            Text(verbatim: caption)
+                .noopFont(.caption, color: false)
+                .foregroundStyle(windowFellBack ? NoopTheme.recoveryMid : NoopTheme.textTertiary)
+            if hasLockedRanges {
+                Text("Longer ranges unlock as more history builds.").noopFont(.caption)
+            }
+        }
+    }
+
+    /// "30 Sep – 29 Oct": the first and last day the window actually holds (windows are anchored on the
+    /// latest reading, not on today, so this is what keeps a stale window honest).
+    private func redesignSpan(_ windowed: [(day: String, value: Double)]) -> String? {
+        guard let first = windowed.first.flatMap({ parseDay($0.day) }),
+              let last = windowed.last.flatMap({ parseDay($0.day) }) else { return nil }
+        let a = redesignDayLabel(first, template: "dMMM")
+        let b = redesignDayLabel(last, template: "dMMMy")
+        return first == last ? b : "\(a) – \(b)"
+    }
+
+    /// The plotted points. VO₂max is split wherever its estimator changed (#1662); one line cannot show a
+    /// break, so the redesign plots only the current method's run and says so, rather than joining runs
+    /// that were not produced alike.
+    private func redesignChartPoints(_ windowed: [(day: String, value: Double)]) -> [NoopChartPoint] {
+        var rows = windowed
+        if metric.key == "vo2max_est" {
+            let ids = vo2MaxTrendSegmentIds(days: windowed.map(\.day), sourceByDay: sourceByDay)
+            if let lastID = ids.last, Set(ids).count > 1 {
+                rows = zip(windowed, ids).filter { $0.1 == lastID }.map(\.0)
+            }
+        }
+        return rows.compactMap { row in parseDay(row.day).map { NoopChartPoint(date: $0, y: row.value) } }
+    }
+
+    /// Up to four evenly spaced day captions under the chart.
+    private func redesignXLabels(_ points: [NoopChartPoint]) -> [String] {
+        guard let first = points.first else { return [] }
+        guard points.count > 1 else { return [redesignDayLabel(first.date, template: "dMMM")] }
+        let picks = min(4, points.count)
+        return (0..<picks).map { i in
+            let index = Int((Double(i) / Double(picks - 1) * Double(points.count - 1)).rounded())
+            return redesignDayLabel(points[index].date, template: "dMMM")
+        }
+    }
+
+    private func redesignChartCard(effectiveRange: ExploreRange,
+                                   windowed: [(day: String, value: Double)]) -> some View {
+        let points = redesignChartPoints(windowed)
+        let labels = redesignXLabels(points)
+        let stepsResolution = MetricDetailSteps.resolution(for: effectiveRange)
+        let steps = isStepsDetail
+        let format: (Double) -> String = { value in
+            steps ? MetricDetailSteps.valueLabel(value, resolution: stepsResolution) : fmt(value)
+        }
+        // The same line-or-bar choice as the classic chart: steps are always bars; everything else follows
+        // the chart-style setting Trends reads.
+        let bars = MetricDetailSteps.showsBars(metricKey: metric.key, preferredStyleRaw: trendChartStyleRaw)
+        let splitVo2 = metric.key == "vo2max_est"
+            && vo2MaxTrendHasBreak(days: windowed.map(\.day), sourceByDay: sourceByDay)
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                Group {
+                    if bars {
+                        NoopBarChart(values: points.map { Optional($0.y) }, color: redesignAccent,
+                                     xLabels: labels,
+                                     accessibilityLabel: Text(verbatim: metric.title),
+                                     valueFormat: format)
+                    } else {
+                        NoopLineChart(points: points, color: redesignAccent, xLabels: labels,
+                                      selection: $selectedChartX,
+                                      selectionLabel: { point in
+                                          "\(redesignDayLabel(point.date, template: "EEEd")) · \(format(point.y))"
+                                      },
+                                      accessibilityLabel: Text(verbatim: metric.title),
+                                      valueFormat: format)
+                    }
+                }
+                .frame(height: MetricRedesignLayout.chartHeight)
+                if splitVo2 {
+                    Text("Only the current estimation method is charted. Earlier readings used a different method.")
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // The personal baseline the classic chart drew as a rule. The redesign draws no horizontal
+                // lines, so the same trusted value is stated instead.
+                if let baseline = personalBaseline {
+                    Text("Your baseline: \(fmt(baseline))").noopFont(.footnote)
+                }
+            }
+        }
+    }
+
+    private func metricRedesignNote(_ note: String) -> some View {
+        NoopGlassCard {
+            HStack(alignment: .top, spacing: NoopTheme.Layout.s) {
+                Image(systemName: "info.circle")
+                    .noopFont(.footnote, color: false)
+                    .foregroundStyle(NoopTheme.textTertiary)
+                    .accessibilityHidden(true)
+                Text(verbatim: note).noopFont(.footnote).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func redesignStatsCard(effectiveRange: ExploreRange,
+                                   windowed: [(day: String, value: Double)]) -> some View {
+        let values = windowed.map(\.value)
+        let stat = ComparisonEngine.stat(values)
+        let cmp = ComparisonEngine.compare(
+            current: values,
+            previous: previousWindow(effectiveRange: effectiveRange, windowed: windowed).map(\.value))
+        let hasDelta = cmp.current.n > 0 && cmp.previous.n > 0
+        // The classic "Δ vs prev" figure: the percentage change when there is one, else the signed delta.
+        let trend: String? = hasDelta
+            ? (cmp.pctChange.map { "\($0 >= 0 ? "+" : "")\(String(format: "%.1f", $0))%" } ?? signed(cmp.delta))
+            : nil
+        let latestPoint = latest(in: windowed)
+        let latestValue = latestPoint.map { redesignSplitValue(fmt($0.value)) }
+        let low = redesignSplitValue(fmt(stat.min))
+        let high = redesignSplitValue(fmt(stat.max))
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                StatGrid([
+                    StatGridItem("Latest", value: latestValue?.value, unit: latestValue?.unit),
+                    StatGridItem("Trend", value: trend,
+                                 unit: hasDelta ? String(localized: "vs prev \(effectiveRange.name)") : nil),
+                    StatGridItem("Lowest", value: low.value, unit: low.unit),
+                    StatGridItem("Highest", value: high.value, unit: high.unit),
+                ])
+                if let caption = redesignLatestCaption(windowed: windowed, effectiveRange: effectiveRange) {
+                    SourceCaption(verbatim: caption)
+                }
+            }
+        }
+    }
+
+    /// "Latest reading · 29 Oct 2026 · Whoop": when the latest value is from and which source supplied it,
+    /// from the same projection the readings list uses.
+    private func redesignLatestCaption(windowed: [(day: String, value: Double)],
+                                       effectiveRange: ExploreRange) -> String? {
+        guard let point = latest(in: windowed),
+              let date = latestCaption(windowed: windowed, effectiveRange: effectiveRange) else { return nil }
+        let source = readingRows(windowed: [point]).first?.source
+        return ([String(localized: "Latest reading"), date] + (source.map { [$0] } ?? [])).joined(separator: " · ")
+    }
+
+    @ViewBuilder private var redesignAbout: some View {
+        let text = MetricCatalog.howMeasured(key: metric.key, source: metric.source) ?? metric.description
+        NoopSectionHeader("About \(metric.title)")
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                if let text {
+                    Text(verbatim: text).noopFont(.bodySmall).fixedSize(horizontal: false, vertical: true)
+                }
+                SourceCaption(verbatim: "\(metric.sourceLabel) · \(MetricCatalog.categoryDisplayName(metric.category))")
+            }
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+    }
+
+    @ViewBuilder
+    private func redesignReadings(windowed: [(day: String, value: Double)]) -> some View {
+        let rows = readingRows(windowed: windowed)
+        if !rows.isEmpty {
+            NoopSectionHeader("Readings")
+            NoopGlassCard(flush: true) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
+                        VStack(spacing: 0) {
+                            if idx > 0 { MetricRedesignDivider() }
+                            HStack(spacing: NoopTheme.Layout.m) {
+                                VStack(alignment: .leading, spacing: MetricRedesignLayout.textGap) {
+                                    Text(verbatim: row.time).noopFont(.listTitle)
+                                    SourceCaption(verbatim: row.source)
+                                }
+                                Spacer(minLength: NoopTheme.Layout.s)
+                                Text(verbatim: row.value).noopFont(.rowTitle).monospacedDigit()
+                            }
+                            .padding(.vertical, NoopTheme.Layout.m)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(row.time), \(row.value), \(row.source)")
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        }
+    }
+
+    @ViewBuilder private var redesignCorrelations: some View {
+        let rows = correlationCache
+        NoopSectionHeader("What correlates")
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                Text("Pearson r over the visible window · |r| ≥ 0.30, n ≥ 10").noopFont(.caption)
+                if !correlationsLoaded {
+                    // The scan lands after the rest of the screen; until then, say so rather than "nothing".
+                    HStack(spacing: NoopTheme.Layout.s) {
+                        ProgressView().controlSize(.small)
+                        Text("Scanning the catalog…").noopFont(.footnote)
+                    }
+                } else if rows.isEmpty {
+                    Text("Nothing in the catalog moves clearly with \(metric.title.lowercased()) over this window. Widen the range to surface relationships.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
+                            if idx > 0 { MetricRedesignDivider() }
+                            HStack(spacing: NoopTheme.Layout.m) {
+                                DomainIcon(systemImage: row.metric.icon, color: redesignMetricColor(row.metric),
+                                           size: DomainIcon.smallSize)
+                                VStack(alignment: .leading, spacing: MetricRedesignLayout.textGap) {
+                                    Text(verbatim: row.metric.title).noopFont(.rowTitle)
+                                    Text("\(MetricCatalog.categoryDisplayName(row.metric.category)) · n = \(row.n)")
+                                        .noopFont(.caption)
+                                }
+                                Spacer(minLength: NoopTheme.Layout.s)
+                                Text(verbatim: "\(row.r >= 0 ? "+" : "−")\(String(format: "%.2f", abs(row.r)))")
+                                    .noopFont(.rowTitle, color: false)
+                                    .monospacedDigit()
+                                    .foregroundStyle(row.r >= 0 ? NoopTheme.recovery : NoopTheme.recoveryLow)
+                            }
+                            .padding(.vertical, NoopTheme.Layout.s)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(row.metric.title), correlation \(String(format: "%.2f", row.r)), \(row.n) days")
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+    }
+}
+#endif
 
 // MARK: - Preview
 
