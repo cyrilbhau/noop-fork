@@ -3,8 +3,8 @@ import SwiftUI
 import StrandDesign
 
 /// iOS navigation shell. macOS uses a `NavigationSplitView` sidebar (`RootView`); on iPhone the shell is a
-/// native `TabView` with **Today · Sleep · Training · Health**, plus **Coach** (on iOS 26 the system's
-/// separate circular search-role tab; on iOS 17–25 an ordinary fifth tab). Everything the old "More" tab
+/// native `TabView` with **Today · Sleep · Training · Health**, plus **Coach** (the system's prominent
+/// tab on iOS 27+, search-role tab on iOS 26, ordinary fifth tab on iOS 17–25). Everything the old "More" tab
 /// listed now lives in the **Profile** sheet, opened from the avatar at the top-right of each tab
 /// (redesign Phase 2, `docs/personal/REDESIGN-IMPLEMENTATION.md`).
 struct RootTabView: View {
@@ -151,6 +151,17 @@ struct RootTabView: View {
 
     // MARK: - Tab container
 
+    /// iOS 27 separates prominent visual treatment from the search role. Coach is a destination rather
+    /// than search, so explicitly request that treatment there; iOS 26 uses its original search-role API.
+    /// Xcode 27 ships Swift 6.4 and this API. Older SDK builds retain the iOS 26 fallback.
+    @available(iOS 26.0, *)
+    private var coachTabRole: TabRole {
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) { return .prominent }
+        #endif
+        return .search
+    }
+
     /// The native tab bar. The availability check is fixed for the life of the process, so it picks one
     /// branch once and never flips view identity (the #519 lesson documented on `noopTabBarAutoHide`).
     ///
@@ -164,10 +175,10 @@ struct RootTabView: View {
                 Tab("Sleep", systemImage: "bed.double", value: TabTag.sleep) { sleepStack }
                 Tab("Training", systemImage: "dumbbell", value: TabTag.training) { trainingStack }
                 Tab("Health", systemImage: "heart", value: TabTag.health) { healthStack }
-                // The search role is what makes iOS 26 draw Coach as the separate circle beside the bar.
+                // Ask the system for Coach's separate tab treatment using the API for this OS version.
                 // Conditional on the master switch, exactly as the pre-26 tab below.
                 if coachEnabled {
-                    Tab("Coach", systemImage: "sparkles", value: TabTag.coach, role: .search) { coachStack }
+                    Tab("Coach", systemImage: "sparkles", value: TabTag.coach, role: coachTabRole) { coachStack }
                 }
             }
         } else {
