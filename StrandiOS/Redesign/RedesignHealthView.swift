@@ -16,6 +16,7 @@ struct RedesignHealthView: View {
     @EnvironmentObject private var router: NavRouter
     @Environment(\.scrollToTopSignal) private var scrollToTopSignal
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
@@ -238,7 +239,10 @@ struct RedesignHealthView: View {
                         if index > 0 {
                             Rectangle().fill(NoopTheme.separator).frame(height: 1).accessibilityHidden(true)
                         }
-                        HStack(spacing: NoopTheme.Layout.m) {
+                        let layout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+                            : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.m))
+                        layout {
                             VStack(alignment: .leading, spacing: HealthLayout.textGap) {
                                 Text(verbatim: signal.name)
                                     .noopFont(.footnote, color: false)
@@ -247,10 +251,10 @@ struct RedesignHealthView: View {
                                 Text(verbatim: signal.stateWord)
                                     .noopFont(.bodySmall, color: false)
                                     .foregroundStyle(NoopTheme.textPrimary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            .frame(width: HealthLayout.laneLabelWidth, alignment: .leading)
+                            .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : HealthLayout.laneLabelWidth,
+                                   alignment: .leading)
                             NoopLineChart(points: signal.points, color: signal.color, compact: true,
                                           accessibilityLabel: Text(verbatim: signal.name))
                                 .frame(height: HealthLayout.laneChartHeight)
@@ -266,8 +270,8 @@ struct RedesignHealthView: View {
     // MARK: - Vitals tiles
 
     private func tiles(_ signals: HealthVitalSignals) -> some View {
-        let columns = [GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap),
-                       GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap)]
+        let columns = Array(repeating: GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap),
+                            count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
         return LazyVGrid(columns: columns, spacing: NoopTheme.Layout.cardGap) {
             ForEach(signals.lanes) { signal in
                 NavigationLink(value: TabRoute.metric(signal.metricKey)) {
@@ -298,7 +302,7 @@ struct RedesignHealthView: View {
                 .minimumScaleFactor(0.6)
                 Text(verbatim: signal.caption)
                     .noopFont(.caption)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding([.top, .horizontal], NoopTheme.Layout.l)
@@ -386,7 +390,10 @@ struct RedesignHealthView: View {
     private var fitnessCard: some View {
         NoopGlassCard {
             VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
-                HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.m))
+                    : AnyLayout(HStackLayout(alignment: .top, spacing: NoopTheme.Layout.m))
+                layout {
                     VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
                         Text("Fitness Age").noopFont(.footnote)
                         healthYearsValue(fitness.fitnessAge.map { "\(fitnessAgeBoundSymbol($0))\(Int($0.rounded()))" },

@@ -20,6 +20,7 @@ struct RedesignTodayView: View {
     /// state, never the 1 Hz heart rate, so observing it does not re-render Today every second.
     @EnvironmentObject private var ble: BLEManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openProfile) private var openProfile
     @Environment(\.scrollToTopSignal) private var scrollToTopSignal
 
@@ -172,7 +173,10 @@ struct RedesignTodayView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.m))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: NoopTheme.Layout.m))
+        return layout {
             Button { showDayPicker = true } label: {
                 VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
                     Text(verbatim: dayTitle)
@@ -264,7 +268,10 @@ struct RedesignTodayView: View {
     private var ringsCard: some View {
         NoopGlassCard {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: NoopTheme.Layout.xs) {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(spacing: NoopTheme.Layout.l))
+                    : AnyLayout(HStackLayout(alignment: .top, spacing: NoopTheme.Layout.xs))
+                layout {
                     sleepRing
                     recoveryRing
                     strainRing
@@ -364,21 +371,26 @@ struct RedesignTodayView: View {
     private func ringColumn<Route: Hashable>(route: Route, ring: NoopRing, title: String, caption: String?,
                             captionColor: Color) -> some View {
         NavigationLink(value: route) {
-            VStack(spacing: NoopTheme.Layout.xs) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(HStackLayout(spacing: NoopTheme.Layout.m))
+                : AnyLayout(VStackLayout(spacing: NoopTheme.Layout.xs))
+            layout {
                 ring
                     .padding(.bottom, NoopTheme.Layout.xs)
-                Text(verbatim: title)
-                    .noopFont(.rowTitle)
-                    .multilineTextAlignment(.center)
-                    .accessibilityHidden(true)
-                if let caption {
-                    Text(verbatim: caption)
-                        .noopFont(.caption, color: false)
-                        .foregroundStyle(captionColor)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .center,
+                       spacing: NoopTheme.Layout.xs) {
+                    Text(verbatim: title)
+                        .noopFont(.rowTitle)
                         .accessibilityHidden(true)
+                    if let caption {
+                        Text(verbatim: caption)
+                            .noopFont(.caption, color: false)
+                            .foregroundStyle(captionColor)
+                            .accessibilityHidden(true)
+                    }
                 }
+                .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .center)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
@@ -994,6 +1006,7 @@ private struct LiveHeartRateCard: View {
 
     @EnvironmentObject private var live: LiveState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var beat = false
 
     private var liveBpm: Int? {
@@ -1003,7 +1016,10 @@ private struct LiveHeartRateCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
-            HStack(alignment: .bottom) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.m))
+                : AnyLayout(HStackLayout(alignment: .bottom))
+            layout {
                 VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
                     HStack(spacing: NoopTheme.Layout.s) {
                         Image(systemName: "heart.fill")
@@ -1026,9 +1042,10 @@ private struct LiveHeartRateCard: View {
                         .noopFont(.caption)
                     }
                 }
-                Spacer(minLength: NoopTheme.Layout.m)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: NoopTheme.Layout.m) }
                 if let lo = values.min(), let hi = values.max() {
-                    VStack(alignment: .trailing, spacing: NoopTheme.Layout.xs) {
+                    VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing,
+                           spacing: NoopTheme.Layout.xs) {
                         Text("Range").noopFont(.footnote)
                         Text(verbatim: Self.rangeText(lo, hi))
                             .noopFont(.rowTitle)

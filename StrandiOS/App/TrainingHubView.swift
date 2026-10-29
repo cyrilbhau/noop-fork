@@ -17,6 +17,7 @@ struct TrainingHubView: View {
     @EnvironmentObject private var liftSession: LiftSessionController
     @Environment(\.scrollToTopSignal) private var scrollToTopSignal
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
     @AppStorage(UnitPrefs.distanceSystemKey) private var distanceSystemRaw = ""
@@ -64,7 +65,10 @@ struct TrainingHubView: View {
                     Color.clear.frame(height: 0).id(Self.topAnchorID)
                     header
                         .padding(.horizontal, NoopTheme.Layout.gutter)
-                    HStack(spacing: NoopTheme.Layout.cardGap) {
+                    let summaryLayout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(spacing: NoopTheme.Layout.cardGap))
+                        : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.cardGap))
+                    summaryLayout {
                         sessionsTile
                         strainTile
                     }
@@ -256,12 +260,18 @@ struct TrainingHubView: View {
         let span = "\(first.formatted(monthStyle)) – \(Date().formatted(monthStyle))"
         return NoopGlassCard {
             VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
-                HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                let calendarLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.l))
+                    : AnyLayout(HStackLayout(alignment: .top, spacing: NoopTheme.Layout.m))
+                calendarLayout {
                     ForEach(months, id: \.self) { month in
                         monthGrid(month, kinds: kinds)
                     }
                 }
-                HStack(alignment: .bottom) {
+                let legendLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+                    : AnyLayout(HStackLayout(alignment: .bottom))
+                legendLayout {
                     VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
                         Text("Consistency").noopFont(.rowTitle)
                         Text(verbatim: count == 1
@@ -432,12 +442,17 @@ struct TrainingHubView: View {
     }
 
     private func sessionRow(_ session: TrainingSession) -> some View {
-        HStack(spacing: NoopTheme.Layout.m) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+            : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.m))
+        return layout {
             DomainIcon(systemImage: session.symbol, color: session.tint)
             VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
                 // Sport and program names are data, never catalogue keys.
-                Text(verbatim: session.title).noopFont(.rowTitle).lineLimit(1)
-                Text(verbatim: subtitle(session)).noopFont(.footnote).lineLimit(1)
+                Text(verbatim: session.title).noopFont(.rowTitle)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                Text(verbatim: subtitle(session)).noopFont(.footnote)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 TrainingSourceLine(provenance: session.provenance)
                     .padding(.top, NoopTheme.Layout.xs / 2)
             }

@@ -13,6 +13,7 @@ struct RecoveryDetailView: View {
 
     @EnvironmentObject private var repo: Repository
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
     @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
@@ -208,7 +209,10 @@ struct RecoveryDetailView: View {
     }
 
     private func bandCounts(_ counts: [NoopTheme.RecoveryBand: Int]) -> some View {
-        HStack(spacing: NoopTheme.Layout.m) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+            : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.m))
+        return layout {
             bandCount(counts[.high] ?? 0, color: NoopTheme.recovery, label: String(localized: "\(counts[.high] ?? 0) green"))
             bandCount(counts[.mid] ?? 0, color: NoopTheme.recoveryMid, label: String(localized: "\(counts[.mid] ?? 0) yellow"))
             bandCount(counts[.low] ?? 0, color: NoopTheme.recoveryLow, label: String(localized: "\(counts[.low] ?? 0) red"))
@@ -238,6 +242,7 @@ private enum RecoveryLayout {
 /// One "What shaped it" row: glyph for the term's effect, title in its domain colour, value, the range
 /// sub-line with the signed points, and the range indicator.
 private struct RecoveryFactorRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let factor: RecoveryFactor
     let showsDivider: Bool
 
@@ -321,19 +326,27 @@ private struct RecoveryFactorRow: View {
                     .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
-                HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
-                    Image(systemName: glyph.name)
-                        .noopFont(.footnote, color: false)
-                        .foregroundStyle(glyph.color)
-                        .frame(width: RecoveryLayout.glyphColumn - NoopTheme.Layout.s, alignment: .leading)
-                        .accessibilityHidden(true)
-                    Text(title)
-                        .noopFont(.rowTitle, color: false)
-                        .foregroundStyle(color)
-                    Image(systemName: "chevron.right")
-                        .noopFont(.caption)
-                        .accessibilityHidden(true)
-                    Spacer(minLength: NoopTheme.Layout.s)
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+                    : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s))
+                layout {
+                    HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                        Image(systemName: glyph.name)
+                            .noopFont(.footnote, color: false)
+                            .foregroundStyle(glyph.color)
+                            .fixedSize()
+                            .frame(width: dynamicTypeSize.isAccessibilitySize ? nil
+                                   : RecoveryLayout.glyphColumn - NoopTheme.Layout.s, alignment: .leading)
+                            .accessibilityHidden(true)
+                        Text(title)
+                            .noopFont(.rowTitle, color: false)
+                            .foregroundStyle(color)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Image(systemName: "chevron.right")
+                            .noopFont(.caption)
+                            .accessibilityHidden(true)
+                    }
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: NoopTheme.Layout.s) }
                     HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs / 2) {
                         Text(verbatim: valueText ?? "—")
                             .noopFont(.rowTitle, color: false)

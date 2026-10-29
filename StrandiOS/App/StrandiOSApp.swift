@@ -38,6 +38,7 @@ struct StrandiOSApp: App {
     @StateObject private var liftSession: LiftSessionController
     @Environment(\.scenePhase) private var scenePhase
     /// Chart data-colour style (Titanium / Classic throwback). Re-colours gauges + charts.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
     @AppStorage(ChartStyle.storageKey) private var chartStyleRaw = ChartStyle.titanium.rawValue
     /// Chrome accent colour (mint / WHOOP blue / custom). Chrome only — never the data colour worlds.
     @AppStorage(AccentColor.storageKey) private var accentRaw = AccentColor.mint.rawValue
@@ -241,10 +242,9 @@ struct StrandiOSApp: App {
                 .environment(\.locale, AppLanguage.activeLocale)
                 .chartStyle(chartStyleRaw)
                 .noopAccent(accentRaw, customHex: accentCustomHex)
-                // Dynamic Type now scales the prose/label roles (StrandFont). Cap the upper end so the
-                // fixed-geometry tiles/gauges stay legible at the largest accessibility sizes rather than
-                // clipping; the common Larger-Text range still scales fully.
-                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                // The redesign adapts through AX5. Keep the previous cap for classic screens only;
+                // capping the root at AX1 also capped simulator accessibility captures.
+                .dynamicTypeSize(...(redesignEnabled ? DynamicTypeSize.accessibility5 : .accessibility1))
                 // `hr` is the value being written: this runs in willSet, when `live.heartRate` still holds the old one.
                 .onReceive(model.live.$heartRate) { hr in
                     // The gym banner's own cheap path: no presentation is built here, and a heart rate moves

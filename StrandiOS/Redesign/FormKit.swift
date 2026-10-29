@@ -133,6 +133,7 @@ struct FormKitDivider: View {
 /// A row with a title, an optional detail line and a trailing control (a toggle, a menu picker, a value).
 /// `showsDivider` draws the hairline ABOVE the row; pass false for the first row in a card.
 struct FormKitControlRow<Control: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private let title: Text
     private let detail: Text?
     private let titleColor: Color
@@ -167,7 +168,10 @@ struct FormKitControlRow<Control: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             if showsDivider { FormKitDivider() }
-            HStack(spacing: NoopTheme.Layout.m) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+                : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.m))
+            layout {
                 VStack(alignment: .leading, spacing: FormKitLayout.detailGap) {
                     title
                         .noopFont(.listTitle, color: false)

@@ -260,6 +260,7 @@ struct SettingsView: View {
     @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #endif
 
     /// Whether the iPhone redesign is drawing this screen. Always false on macOS.
@@ -398,11 +399,25 @@ struct SettingsView: View {
                 FormKitToggleRow("Colour from your scores",
                                  detail: "The glow follows Sleep, Recovery and Strain",
                                  isOn: $ambientFromScores, showsDivider: false)
-                SegmentedPills(AmbientIntensity.allCases, selection: ambientIntensityBinding) { option in
-                    switch option {
-                    case .subtle: return Text("Subtle")
-                    case .balanced: return Text("Balanced")
-                    case .vivid: return Text("Vivid")
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        FormKitControlRow("Intensity", showsDivider: false) {
+                            Picker("Intensity", selection: ambientIntensityBinding) {
+                                Text("Subtle").tag(AmbientIntensity.subtle)
+                                Text("Balanced").tag(AmbientIntensity.balanced)
+                                Text("Vivid").tag(AmbientIntensity.vivid)
+                            }
+                            .pickerStyle(.menu)
+                            .tint(NoopTheme.textPrimary)
+                        }
+                    } else {
+                        SegmentedPills(AmbientIntensity.allCases, selection: ambientIntensityBinding) { option in
+                            switch option {
+                            case .subtle: return Text("Subtle")
+                            case .balanced: return Text("Balanced")
+                            case .vivid: return Text("Vivid")
+                            }
+                        }
                     }
                 }
                 .disabled(!ambientFromScores)
@@ -3616,15 +3631,20 @@ struct FormRow<Control: View>: View {
     @ViewBuilder var control: () -> Control
     #if os(iOS)
     @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #endif
 
     var body: some View {
         #if os(iOS)
         if redesignEnabled {
             // The redesign's list row: the `.lrow` title type, at least a 44 pt touch target.
-            HStack(alignment: .center, spacing: NoopTheme.Layout.m) {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: NoopTheme.Layout.m))
+            layout {
                 Text(label)
                     .noopFont(.listTitle)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 control()
                     .layoutPriority(1)

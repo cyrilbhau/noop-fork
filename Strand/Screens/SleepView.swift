@@ -38,6 +38,7 @@ struct SleepView: View {
     // their OWN `@EnvironmentObject var live`/`appModel` in a small leaf below (mirrors the Today
     // leaf-scoping pattern and HealthView.swift:17-22), so a tick refreshes only that leaf.
     @EnvironmentObject var intelligence: IntelligenceEngine
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Memoized snapshot of every expensive derivation (latest Night with its intervals
     /// resolved once, the seven metric series, the trend points, the typical means). Rebuilt
@@ -2617,7 +2618,10 @@ extension SleepView {
                           String(localized: "\(durationText(inBed)) in bed")].joined(separator: " · ")
         return NoopGlassCard {
             VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
-                HStack(alignment: .top, spacing: NoopTheme.Layout.m) {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.m))
+                    : AnyLayout(HStackLayout(alignment: .top, spacing: NoopTheme.Layout.m))
+                layout {
                     VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
                         Text("Asleep")
                             .noopFont(.footnote, color: false)
@@ -2632,7 +2636,7 @@ extension SleepView {
                             .noopFont(.footnote)
                     }
                     .accessibilityElement(children: .combine)
-                    Spacer(minLength: NoopTheme.Layout.s)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: NoopTheme.Layout.s) }
                     NoopRing(value: score.map { $0 / 100 }, color: NoopTheme.sleep,
                              lineWidth: SleepRedesignMetrics.heroRingLine,
                              diameter: SleepRedesignMetrics.heroRing,
@@ -2687,9 +2691,12 @@ extension SleepView {
     private func needBar(asleep: Double, need: Double) -> some View {
         let fraction = CGFloat(min(1, max(0, asleep / need)))
         return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
-            HStack {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.xs))
+                : AnyLayout(HStackLayout())
+            layout {
                 Text("Sleep need").noopFont(.footnote)
-                Spacer(minLength: NoopTheme.Layout.s)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: NoopTheme.Layout.s) }
                 Text(verbatim: "\(durationText(asleep)) / \(durationText(need))")
                     .noopFont(.footnote)
                     .monospacedDigit()
@@ -2891,13 +2898,16 @@ extension SleepView {
         let color = Self.redesignStageColor(stage)
         let isSelected = selectedStage == stage
         let dimmed = selectedStage != nil && !isSelected
-        return HStack(spacing: NoopTheme.Layout.m) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+            : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.m))
+        return layout {
             Text(stage.label)
                 .noopFont(.rowTitle, color: false)
                 .foregroundStyle(color)
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .minimumScaleFactor(0.7)
-                .frame(width: SleepRedesignMetrics.stageNameWidth, alignment: .leading)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : SleepRedesignMetrics.stageNameWidth, alignment: .leading)
             GeometryReader { geo in
                 let midY = geo.size.height / 2
                 ZStack(alignment: .leading) {
@@ -2925,13 +2935,13 @@ extension SleepView {
             Text(verbatim: durationText(minutes))
                 .noopFont(.rowTitle)
                 .monospacedDigit()
-                .lineLimit(1)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 .minimumScaleFactor(0.7)
-                .frame(width: SleepRedesignMetrics.stageDurationWidth, alignment: .trailing)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : SleepRedesignMetrics.stageDurationWidth, alignment: .trailing)
             Text(verbatim: "\(percent)%")
                 .noopFont(.footnote)
                 .monospacedDigit()
-                .frame(width: SleepRedesignMetrics.stagePercentWidth, alignment: .trailing)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : SleepRedesignMetrics.stagePercentWidth, alignment: .trailing)
         }
         .padding(.vertical, NoopTheme.Layout.s)
         .opacity(dimmed ? SleepRedesignMetrics.rowDimmedOpacity : 1)
@@ -3036,8 +3046,8 @@ extension SleepView {
         let debt = model.sleepDebt
         let browsing = nightOffset != 0
         let latestNote = String(localized: "Latest, not this night")
-        let columns = [GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap),
-                       GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap)]
+        let columns = Array(repeating: GridItem(.flexible(), spacing: NoopTheme.Layout.cardGap),
+                            count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
         return LazyVGrid(columns: columns, alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
             qualityTile("Efficiency", value: efficiency.map { "\(Int($0.rounded()))" }, unit: "%",
                         caption: vsTypicalCaption(efficiency, model.efficiency.typical, suffix: "%"))
@@ -3076,7 +3086,7 @@ extension SleepView {
                 Text(verbatim: caption)
                     .noopFont(.caption, color: false)
                     .foregroundStyle(captionColor)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
