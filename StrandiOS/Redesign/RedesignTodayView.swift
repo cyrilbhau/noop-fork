@@ -48,9 +48,12 @@ struct RedesignTodayView: View {
 
     @State private var showDayPicker = false
     @State private var customizationDestination: TodayCustomizationDestination?
-    /// Whether the ACTIVE strap is positively a WHOOP 4.0 (registry evidence via the canonical resolver).
-    /// Drives the honest "not measured" Blood Oxygen row; unknown stays false.
-    @State private var activeIsWhoop4 = false
+    /// Gate percentages until registry evidence has resolved the current device, including strap switches.
+    @State private var activeStrapFamily: (deviceId: String, isWhoop4: Bool)?
+    private var activeIsWhoop4: Bool? {
+        guard let activeStrapFamily, activeStrapFamily.deviceId == repo.deviceId else { return nil }
+        return activeStrapFamily.isWhoop4
+    }
 
     private static let topAnchorID = "redesignToday.top"
 
@@ -129,7 +132,12 @@ struct RedesignTodayView: View {
             DashboardCardPrefs.migrateLegacyStepsAverage()
             await load()
         }
-        .task(id: repo.deviceId) { await resolveActiveFamily() }
+        .task(id: "\(repo.refreshSeq)-\(repo.deviceId)") {
+            let deviceId = repo.deviceId
+            let isWhoop4 = await Self.activeStrapIsWhoop4(repo: repo)
+            guard !Task.isCancelled else { return }
+            activeStrapFamily = (deviceId, isWhoop4)
+        }
         .sheet(item: $customizationDestination) { destination in
             TodayCustomizationSheet(
                 initialDestination: destination,
@@ -610,9 +618,12 @@ struct RedesignTodayView: View {
         case .bloodOxygen:
             // WHOOP 4.0 does not measure blood oxygen offline: an honest empty row, never a number
             // (and never the unverified strap estimate).
-            if activeIsWhoop4 {
+            if activeIsWhoop4 != false {
+                let caption = activeIsWhoop4 == true
+                    ? String(localized: "Not measured on WHOOP 4.0")
+                    : String(localized: "Not measured offline")
                 return MetricRowContent(title: "Blood oxygen", color: NoopTheme.textTertiary,
-                                        subtitle: String(localized: "Not measured on WHOOP 4.0"),
+                                        subtitle: caption,
                                         value: nil, unit: nil, sparkKey: nil, route: nil)
             }
             let own = displayDay?.spo2Pct
@@ -802,13 +813,14 @@ struct RedesignTodayView: View {
         await load()
     }
 
-    /// Registry evidence for the active strap's family, through the canonical resolver. Unknown stays
-    /// false, so the Blood Oxygen row only says "not measured" for a positively identified 4.0.
-    private func resolveActiveFamily() async {
-        guard let store = await repo.storeHandle() else { activeIsWhoop4 = false; return }
+    /// One registry-evidence lookup for Today and Health. Unknown stays false, so neither screen claims
+    /// a hardware generation without positive evidence. This gate affects presentation only.
+    @MainActor static func activeStrapIsWhoop4(repo: Repository) async -> Bool {
+        let deviceId = repo.deviceId
+        guard let store = await repo.storeHandle() else { return false }
         let device = (try? DeviceRegistryStore(dbQueue: store.registryWriter).all())?
-            .first(where: { $0.id == repo.deviceId })
-        activeIsWhoop4 = DeviceFamily.confirmedRegistryFamily(model: device?.model, brand: device?.brand) == .whoop4
+            .first(where: { $0.id == deviceId })
+        return DeviceFamily.confirmedRegistryFamily(model: device?.model, brand: device?.brand) == .whoop4
     }
 
     // MARK: - Formatting

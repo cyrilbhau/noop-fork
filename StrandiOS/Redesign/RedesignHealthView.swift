@@ -7,8 +7,8 @@ import WhoopStore
 /// the vital-sign readings resolve through `HealthVitalsInputs` / `BodyVitalSigns` (the same funnel the
 /// classic Health Monitor's grid uses), Fitness Age through `FitnessAgeSnapshot`, and the illness heads-up
 /// from `AppModel`. Skin temperature is shown only as the difference from the wearer's baseline: an
-/// absolute reading is never put on this screen. Blood oxygen shows a value only when the existing logic
-/// resolves one (an import, Apple Health, or the default-off strap estimate); otherwise it is an empty row.
+/// absolute reading is never put on this screen. Like Today, a positively identified WHOOP 4.0 shows
+/// blood oxygen as not measured. Other or unknown devices retain the existing source-labelled readout.
 /// The classic sections this screen does not restate stay one tap away in "More health".
 struct RedesignHealthView: View {
     @EnvironmentObject private var repo: Repository
@@ -25,9 +25,16 @@ struct RedesignHealthView: View {
     @State private var inputs = HealthVitalsInputs()
     @State private var fitness = FitnessAgeSnapshot()
     @State private var loaded = false
+    @State private var activeStrapFamily: (deviceId: String, isWhoop4: Bool)?
     @State private var showsRangeNote = false
     @State private var showAllMetrics = false
     @State private var showFitnessDetail = false
+
+    /// nil until the shared lookup resolves this device; a strap switch cannot expose the previous gate.
+    private var activeIsWhoop4: Bool? {
+        guard let activeStrapFamily, activeStrapFamily.deviceId == repo.deviceId else { return nil }
+        return activeStrapFamily.isWhoop4
+    }
 
     private static let topAnchorID = "health-top"
     private static let vitalsAnchorID = "health-vitals"
@@ -99,7 +106,11 @@ struct RedesignHealthView: View {
         .noopAmbientBackground(
             AmbientPreset.health.blobs(intensity: AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced))
         .refreshable { await repo.refresh() }
-        .task(id: "\(repo.refreshSeq)-\(PuffinExperiment.spo2CandidateDisplayEnabled)") {
+        .task(id: "\(repo.refreshSeq)-\(repo.deviceId)-\(PuffinExperiment.spo2CandidateDisplayEnabled)") {
+            let deviceId = repo.deviceId
+            let isWhoop4 = await RedesignTodayView.activeStrapIsWhoop4(repo: repo)
+            guard !Task.isCancelled else { return }
+            activeStrapFamily = (deviceId, isWhoop4)
             inputs = await HealthVitalsInputs.load(repo: repo)
             fitness = await FitnessAgeSnapshot.load(repo: repo)
             loaded = true
@@ -327,7 +338,10 @@ struct RedesignHealthView: View {
 
     @ViewBuilder
     private func bloodOxygenRow(_ reading: BodyVitalReading?) -> some View {
-        if let reading, let value = reading.value {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: NoopTheme.Layout.s))
+            : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.m))
+        if activeIsWhoop4 == false, let reading, let value = reading.value {
             // A value exists only through the existing logic: an import, Apple Health, or the default-off
             // strap estimate (the source is the computed row only for that estimate, so it is labelled).
             let isEstimate = reading.source == .noopComputed
@@ -336,7 +350,7 @@ struct RedesignHealthView: View {
             let estimateTag = String(localized: "strap estimate (unverified)")
             NavigationLink(value: TabRoute.metric("spo2")) {
                 NoopGlassCard {
-                    HStack(spacing: NoopTheme.Layout.m) {
+                    layout {
                         VStack(alignment: .leading, spacing: HealthLayout.textGap) {
                             Text("Blood oxygen").noopFont(.rowTitle, color: false).foregroundStyle(NoopTheme.breath)
                             Text(verbatim: isEstimate
@@ -345,7 +359,7 @@ struct RedesignHealthView: View {
                                 .noopFont(.footnote)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        Spacer(minLength: NoopTheme.Layout.s)
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: NoopTheme.Layout.s) }
                         HStack(alignment: .firstTextBaseline, spacing: HealthLayout.textGap) {
                             Text(verbatim: reading.format(value)).noopFont(.rowNumber)
                             Text(verbatim: reading.unit).noopFont(.unit)
@@ -355,15 +369,25 @@ struct RedesignHealthView: View {
             }
             .buttonStyle(.noopPress)
         } else {
-            HStack(spacing: NoopTheme.Layout.m) {
+            layout {
                 VStack(alignment: .leading, spacing: HealthLayout.textGap) {
                     Text("Blood oxygen").noopFont(.rowTitle, color: false).foregroundStyle(NoopTheme.textSecondary)
-                    Text("Not measured offline").noopFont(.footnote, color: false).foregroundStyle(NoopTheme.textTertiary)
-                    if let reading {
+                    Group {
+                        if activeIsWhoop4 == true {
+                            Text("Not measured on WHOOP 4.0")
+                        } else {
+                            Text("Not measured offline")
+                        }
+                    }
+                    .noopFont(.footnote, color: false)
+                    .foregroundStyle(NoopTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    if activeIsWhoop4 == false, let reading {
                         Text(verbatim: reading.missingCaption).noopFont(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Spacer(minLength: NoopTheme.Layout.s)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: NoopTheme.Layout.s) }
                 Text(verbatim: "—").noopFont(.rowNumber, color: false).foregroundStyle(NoopTheme.textTertiary)
             }
             .padding(.vertical, NoopTheme.Layout.rowVerticalPadding)
