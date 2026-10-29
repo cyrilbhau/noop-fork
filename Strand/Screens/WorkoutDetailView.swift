@@ -72,7 +72,34 @@ struct WorkoutDetailView: View {
     @State private var importedLift: LiftSessionRow?
     @State private var showingLift = false
 
+    #if os(iOS)
+    /// The iPhone redesign (B1) replaces the classic layout unless the user chose the classic look.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    #endif
+
     var body: some View {
+        Group {
+            #if os(iOS)
+            if redesignEnabled { redesignContent } else { classicContent }
+            #else
+            classicContent
+            #endif
+        }
+        .toolbar {
+            // A Done affordance for the sheet on both platforms (iOS gets the grabber too).
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") { dismiss() }
+            }
+        }
+        .task { await load() }
+        .sheet(isPresented: $showingLift) {
+            if let importedLift { LiftSessionDetailSheet(session: importedLift) { await repo.refresh(); await load() } }
+        }
+    }
+
+    /// The classic (macOS, and iPhone with the redesign off) layout.
+    private var classicContent: some View {
         ScreenScaffold(title: "\(WorkoutSource.displaySport(row.sport))",
                        subtitle: "\(dateLabel(row.startTs))",
                        // PERF: chart/map-heavy column (a MapKit route map, the session HR curve, the
@@ -98,16 +125,6 @@ struct WorkoutDetailView: View {
             if let strain = row.strain {
                 effortCard(strain: strain)
             }
-        }
-        .toolbar {
-            // A Done affordance for the sheet on both platforms (iOS gets the grabber too).
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Done") { dismiss() }
-            }
-        }
-        .task { await load() }
-        .sheet(isPresented: $showingLift) {
-            if let importedLift { LiftSessionDetailSheet(session: importedLift) { await repo.refresh(); await load() } }
         }
     }
 
@@ -651,6 +668,263 @@ struct WorkoutDetailView: View {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.maximumFractionDigits = 0; return f
     }()
 }
+
+// MARK: - iPhone redesign (B1)
+//
+// `design/round3/training.html` B1: header with source badge, stat grid, the heart-rate line coloured by
+// the user's zones, zone bars and heart-rate recovery. Reads only the state `load()` already fills; the
+// route map and its exports stay where a route exists, and Apple Health rows say what they lack.
+
+#if os(iOS)
+extension WorkoutDetailView {
+    var redesignContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                rdHeader
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.s)
+                    .noopEntrance(index: 0)
+                rdStats
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.l)
+                    .noopEntrance(index: 1)
+                if importedLift != nil {
+                    Button { showingLift = true } label: {
+                        Label("Exercises and sets", systemImage: "dumbbell.fill")
+                    }
+                    .buttonStyle(NoopSecondaryButton())
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.cardGap)
+                }
+                rdRoute
+                rdHeartRate
+                    .noopSkeleton(!loaded)
+                    .noopEntrance(index: 2)
+                rdZones
+                    .noopEntrance(index: 3)
+                rdHeartRateRecovery
+                if WorkoutSource.classify(row.source) == .apple {
+                    Text("Route and splits are not in Apple Health workout summaries.")
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.top, NoopTheme.Layout.m)
+                }
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .trainingAmbient(.workoutDetail, intensityRaw: ambientIntensityRaw)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    private var rdProvenance: TrainingProvenance {
+        if let importedLift { return TrainingProvenance.forLift(importedLift) }
+        return TrainingProvenance.forWorkout(row)
+    }
+
+    private var rdIsLift: Bool {
+        TrainingSession(workout: row, lift: importedLift, sets: []).isLift
+    }
+
+    private var rdHeader: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+            HStack(spacing: NoopTheme.Layout.m) {
+                DomainIcon(systemImage: rdIsLift ? "dumbbell.fill" : sportSymbol(row.sport),
+                           color: rdIsLift ? NoopTheme.lift : NoopTheme.strain,
+                           size: TrainingLayout.headerIcon)
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
+                    // The sport is data, never a catalogue key.
+                    Text(verbatim: WorkoutSource.displaySport(row.sport))
+                        .noopFont(.screenHeadline)
+                        .lineLimit(2)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(verbatim: rdDateLine).noopFont(.footnote)
+                }
+            }
+            TrainingBadge(text: rdProvenance.label,
+                          tint: rdProvenance.hasFullSets ? NoopTheme.lift : NoopTheme.textSecondary,
+                          fill: rdProvenance.hasFullSets ? nil : Color.white.opacity(TrainingLayout.mutedFill))
+        }
+    }
+
+    /// "Mon, 27 Oct · 6:12–6:43 AM", in the user's clock format.
+    private var rdDateLine: String {
+        let start = Date(timeIntervalSince1970: TimeInterval(row.startTs))
+        let day = start.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+        return "\(day) · \(timeRangeLabel(row.startTs, row.endTs))"
+    }
+
+    private var rdStats: some View {
+        var items: [StatGridItem] = [
+            StatGridItem("Duration", value: rdDuration),
+        ]
+        if let m = row.distanceM, m > 0 {
+            items.append(StatGridItem("Distance", value: distanceLabel(m)))
+            items.append(StatGridItem("Pace", value: paceLabel == "–" ? nil : paceLabel))
+        }
+        items.append(StatGridItem("Strain", value: row.strain.map { UnitFormatter.effortDisplay($0, scale: effortScale) }))
+        items.append(StatGridItem("Avg HR", value: row.avgHr.map { "\($0)" }, unit: "bpm"))
+        items.append(StatGridItem("Max HR", value: row.maxHr.map { "\($0)" }, unit: "bpm"))
+        items.append(StatGridItem("Energy", value: row.energyKcal.map { grouped($0) }, unit: "kcal"))
+        if WorkoutCatalog.isOnFoot(row.sport) {
+            // The caption names where the count came from, as the classic tile does.
+            items.append(StatGridItem("Steps", value: steps.map { grouped(Double($0.count)) },
+                                      unit: steps.map { $0.fromStrap ? String(localized: "strap")
+                                                                     : String(localized: "phone") }))
+        }
+        return NoopGlassCard { StatGrid(items, columns: 3) }
+    }
+
+    /// "31:04" style elapsed duration, nil when the row has none.
+    private var rdDuration: String? {
+        guard let s = row.durationS ?? (row.endTs > row.startTs ? Double(row.endTs - row.startTs) : nil),
+              s > 0 else { return nil }
+        return ActiveWorkoutClock.clock(Int(s.rounded()))
+    }
+
+    @ViewBuilder private var rdRoute: some View {
+        if route.count >= 2 {
+            TrainingSectionTitle(title: "Route", trailing: String(localized: routeOriginLabelText))
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                WorkoutRouteMap(points: route)
+                    .frame(height: TrainingLayout.chartHeight + NoopTheme.Layout.xl * 3)
+                    .clipShape(RoundedRectangle(cornerRadius: NoopTheme.Layout.cardRadius, style: .continuous))
+                    .accessibilityLabel(routeAccessibilityLabel)
+                Text(routeDescription)
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { showRouteExport = true } label: {
+                    Label("Export route", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(NoopSecondaryButton())
+                .confirmationDialog("Export route", isPresented: $showRouteExport, titleVisibility: .visible) {
+                    Button("GPX — Strava, Garmin, most apps") { exportRoute(.gpx) }
+                    Button("FIT — Garmin Connect") { exportRoute(.fit) }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Save this route as a standard file you can import into Strava, Garmin Connect, and other apps.")
+                }
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        }
+    }
+
+    /// The same honesty rule as `routeOriginLabel`, as a plain string for the section caption.
+    private var routeOriginLabelText: String.LocalizationValue {
+        switch WorkoutSource.classify(row.source) {
+        case .apple, .whoop, .lifting, .activityFile: return "Imported"
+        case .detected, .manual: return "Recorded on device"
+        }
+    }
+
+    @ViewBuilder private var rdHeartRate: some View {
+        if hrPoints.count > 1 {
+            let values = hrPoints.map(\.value)
+            let peak = row.maxHr ?? Int((values.max() ?? 0).rounded())
+            TrainingSectionTitle(title: "Heart rate", trailing: String(localized: "Peak \(peak) bpm"))
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                NoopGlassCard {
+                    NoopLineChart(
+                        points: hrPoints.map { NoopChartPoint(date: $0.date, y: $0.value) },
+                        color: NoopTheme.heart,
+                        zones: true,
+                        zoneBounds: rdZoneBounds,
+                        showsLatestDot: false,
+                        xLabels: rdElapsedLabels,
+                        accessibilityLabel: Text("Heart rate during \(WorkoutSource.displaySport(row.sport))"),
+                        valueFormat: { String(localized: "\(Int($0.rounded())) bpm") }
+                    )
+                    .frame(height: TrainingLayout.chartHeight)
+                }
+                if avgHrEditedDisclosure(traceMean: values.reduce(0, +) / Double(values.count)) {
+                    Text("The average above was edited. The graph, zones and Effort stay from the recorded session.")
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, NoopTheme.Layout.xs)
+                }
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        } else if loaded {
+            TrainingSectionTitle(title: "Heart rate")
+            NoopGlassCard {
+                Text("No heart-rate samples were recorded over this session's window.")
+                    .noopFont(.bodySmall, color: false)
+                    .foregroundStyle(NoopTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        }
+    }
+
+    /// Bottom of zone 1 to the top of zone 5 in the user's zone set, so the line's colour is its zone.
+    private var rdZoneBounds: ClosedRange<Double>? {
+        let set = profile.hrZoneSet
+        guard let low = set.zones.map(\.lower).min(), set.maxHR > low else { return nil }
+        return low...set.maxHR
+    }
+
+    /// Four elapsed-time captions across the session: 0:00, a third, two thirds, the end.
+    private var rdElapsedLabels: [String] {
+        let span = max(0, row.endTs - row.startTs)
+        guard span > 0 else { return [] }
+        return [0, 1, 2, 3].map { ActiveWorkoutClock.clock(span * $0 / 3) }
+    }
+
+    @ViewBuilder private var rdZones: some View {
+        if let z = zoneMinutes, z.count == 5, z.reduce(0, +) > 0 {
+            TrainingSectionTitle(title: "Zones",
+                                 trailing: zonesFromImport ? String(localized: "Whoop import")
+                                                           : String(localized: "From strap HR"))
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                NoopGlassCard {
+                    ZoneBars(names: (1...5).map { "Z\($0)" },
+                             values: z,
+                             trailingLabels: z.map { String(localized: "\(Int($0.rounded())) min") },
+                             scale: .total)
+                }
+                Text(zonesFromImport
+                     ? "WHOOP's imported per-zone split for this session."
+                     : "Time in each %HRmax zone, derived from the strap's heart rate over this window (approximate).")
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, NoopTheme.Layout.xs)
+            }
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+        }
+    }
+
+    /// Heart-rate recovery, only when `HeartRateRecovery` measured it. NOOP keeps no usual HRR to compare
+    /// against, so the ring carries the 1-minute drop on a bare track rather than a fill toward a target.
+    @ViewBuilder private var rdHeartRateRecovery: some View {
+        if let recovery = heartRateRecovery, recovery.hasMeasurement {
+            let first = recovery.after1Minute
+            HStack(spacing: NoopTheme.Layout.m) {
+                NoopRing(value: 0, color: NoopTheme.recovery, lineWidth: TrainingLayout.hrrRingLine,
+                         diameter: TrainingLayout.hrrRing, label: first.map { "\($0)" } ?? "—", animate: false,
+                         accessibilityLabel: String(localized: "Heart rate recovery"),
+                         accessibilityValue: first.map { String(localized: "\($0) bpm") } ?? String(localized: "No data"))
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
+                    Text("Heart rate recovery").noopFont(.rowTitle)
+                    Text(verbatim: rdRecoveryLine(recovery)).noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(NoopTheme.Layout.cardPadding)
+            .noopGlassBackground()
+            .padding(.horizontal, NoopTheme.Layout.gutter)
+            .padding(.top, NoopTheme.Layout.cardGap)
+        }
+    }
+
+    /// "Change after 1 min 28 · 2 min 41 · 5 min — bpm, from 171 at the end."
+    private func rdRecoveryLine(_ r: HeartRateRecovery.Result) -> String {
+        func v(_ x: Int?) -> String { x.map { "\($0)" } ?? "—" }
+        return String(localized: "Drop after 1 min \(v(r.after1Minute)) · 2 min \(v(r.after2Minutes)) · 5 min \(v(r.after5Minutes)) bpm, from \(r.endHR) at the end")
+    }
+}
+#endif
 
 // MARK: - Route map (#524)
 //

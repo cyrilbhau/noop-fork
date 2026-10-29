@@ -42,7 +42,40 @@ struct SmartAlarmView: View {
     /// Calendar weekday numbers laid out Monday-first (Mon…Sun → 2,3,4,5,6,7,1), matching AutomationsView.
     private static let weekdayOrder = [2, 3, 4, 5, 6, 7, 1]
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    /// What the last arm actually did, as `BLEManager.recordAlarmArm` writes it (read here, never written):
+    /// the fire time it sent, whether the link was up so the write really went out, and when.
+    @AppStorage("alarm.lastArmSentEpoch") private var lastArmSentEpoch = 0
+    @AppStorage("alarm.lastArmConnected") private var lastArmConnected = false
+    @AppStorage("alarm.lastArmAt") private var lastArmAt: Double = 0
+    #endif
+
     var body: some View {
+        alarmScreen
+        .alert(String(localized: "Notifications are off"), isPresented: $showNotifDeniedAlert) {
+            Button(String(localized: "Open Settings")) { Self.openNotificationSettings() }
+            Button(String(localized: "Not now"), role: .cancel) {}
+        } message: {
+            Text("Turn on notifications for NOOP in Settings to get your wind-down reminder.")
+        }
+    }
+
+    /// The redesigned screen on iPhone (mockup C1) with the redesign on; the classic one otherwise and on macOS.
+    @ViewBuilder private var alarmScreen: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            redesignAlarmScreen
+        } else {
+            classicAlarmScreen
+        }
+        #else
+        classicAlarmScreen
+        #endif
+    }
+
+    private var classicAlarmScreen: some View {
         // #766: retitled to "Alarms" because it now holds BOTH the strap's silent wake-alarm and the
         // evening wind-down reminder, so naming it "Wind-Down" undersold it. One surface, clearly labelled.
         ScreenScaffold(title: "Alarms",
@@ -54,12 +87,6 @@ struct SmartAlarmView: View {
                 honestyCard
                 windDownCard
             }
-        }
-        .alert(String(localized: "Notifications are off"), isPresented: $showNotifDeniedAlert) {
-            Button(String(localized: "Open Settings")) { Self.openNotificationSettings() }
-            Button(String(localized: "Not now"), role: .cancel) {}
-        } message: {
-            Text("Turn on notifications for NOOP in Settings to get your wind-down reminder.")
         }
     }
 
@@ -237,9 +264,7 @@ struct SmartAlarmView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
-                    Toggle("", isOn: $behavior.smartAlarmEnabled)
-                        .labelsHidden().toggleStyle(.switch).tint(StrandPalette.accent)
-                        .accessibilityLabel("Wake me with a strap buzz")
+                    strapAlarmToggle
                 }
                 .frame(minHeight: 42)
 
@@ -248,12 +273,7 @@ struct SmartAlarmView: View {
                     HStack {
                         Text("Wake at").font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
                         Spacer()
-                        DatePicker("", selection: alarmTimeBinding, displayedComponents: .hourAndMinute)
-                            .labelsHidden().datePickerStyle(.compact)
-                            // Distinct from the wind-down picker's label below. Both were "Wake time",
-                            // so VoiceOver announced the alarm and the reminder's timing input by the
-                            // same name, on the same screen, with different values.
-                            .accessibilityLabel("Strap alarm wake time")
+                        strapAlarmTimePicker
                     }
                     .frame(minHeight: 42)
                     // The per-day overrides that re-time THIS alarm (#1864) are edited under the
@@ -320,9 +340,7 @@ struct SmartAlarmView: View {
                     }
                 }
             }
-            .onChangeCompat(of: behavior.smartAlarmEnabled) { _ in model.applySmartAlarm() }
-            .onChangeCompat(of: behavior.smartAlarmMinutes) { _ in model.applySmartAlarm() }
-            .onChangeCompat(of: behavior.smartAlarmWeekdays) { _ in model.applySmartAlarm() }
+            .modifier(StrapAlarmRearm(model: model, behavior: behavior))
         }
     }
 
@@ -353,19 +371,7 @@ struct SmartAlarmView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
-                    Toggle("", isOn: $windDownOn)
-                        .labelsHidden().toggleStyle(.switch).tint(StrandPalette.accent)
-                        .accessibilityLabel("Remind me to wind down")
-                        .onChangeCompat(of: windDownOn) { on in
-                            WindDownNudge.setEnabled(on) { outcome in
-                                // Denied at the OS level: the reminder can never fire, so reflect reality
-                                // (revert the switch) and surface the path to Settings.
-                                if outcome == .denied {
-                                    windDownOn = false
-                                    showNotifDeniedAlert = true
-                                }
-                            }
-                        }
+                    windDownToggle
                 }
                 .frame(minHeight: 42)
 
@@ -390,9 +396,7 @@ struct SmartAlarmView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
-                        DatePicker("", selection: wakeBinding, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                            .accessibilityLabel("Your usual wake time")
+                        usualWakePicker
                     }
                     Text("You'll be reminded around \(timeLabel(WindDownNudge.nudgeMinuteOfDay())).")
                         .font(StrandFont.footnote)
@@ -411,6 +415,78 @@ struct SmartAlarmView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Controls shared by the classic and redesigned layouts
+    //
+    // Each control exists once, so its accessibility label and its side effect cannot drift between the
+    // two layouts (only one of which is ever on screen).
+
+    /// Switch tint: the redesign's Recovery green on iPhone with the redesign on, the accent otherwise.
+    private var alarmToggleTint: Color {
+        #if os(iOS)
+        redesignEnabled ? NoopTheme.recovery : StrandPalette.accent
+        #else
+        StrandPalette.accent
+        #endif
+    }
+
+    private var strapAlarmToggle: some View {
+        Toggle("", isOn: $behavior.smartAlarmEnabled)
+            .labelsHidden().toggleStyle(.switch).tint(alarmToggleTint)
+            .accessibilityLabel("Wake me with a strap buzz")
+    }
+
+    private var strapAlarmTimePicker: some View {
+        DatePicker("", selection: alarmTimeBinding, displayedComponents: .hourAndMinute)
+            .labelsHidden().datePickerStyle(.compact)
+            // Distinct from the wind-down picker's label below. Both were "Wake time",
+            // so VoiceOver announced the alarm and the reminder's timing input by the
+            // same name, on the same screen, with different values.
+            .accessibilityLabel("Strap alarm wake time")
+    }
+
+    private var windDownToggle: some View {
+        Toggle("", isOn: $windDownOn)
+            .labelsHidden().toggleStyle(.switch).tint(alarmToggleTint)
+            .accessibilityLabel("Remind me to wind down")
+            .onChangeCompat(of: windDownOn) { on in windDownChanged(on) }
+    }
+
+    private var usualWakePicker: some View {
+        DatePicker("", selection: wakeBinding, displayedComponents: .hourAndMinute)
+            .labelsHidden()
+            .accessibilityLabel("Your usual wake time")
+    }
+
+    private var perDayToggle: some View {
+        Toggle("", isOn: $perDayOn)
+            .labelsHidden().toggleStyle(.switch).tint(alarmToggleTint)
+            .accessibilityLabel("Different wake time per day")
+            .onChangeCompat(of: perDayOn) { on in perDayChanged(on) }
+    }
+
+    /// The wind-down switch moved: schedule or cancel the reminder. Denied at the OS level means the
+    /// reminder can never fire, so reflect reality (revert the switch) and surface the path to Settings.
+    private func windDownChanged(_ on: Bool) {
+        WindDownNudge.setEnabled(on) { outcome in
+            if outcome == .denied {
+                windDownOn = false
+                showNotifDeniedAlert = true
+            }
+        }
+    }
+
+    /// The per-day switch moved. Turning the section OFF clears every override (so the nudge reverts to
+    /// the single time); turning it ON just reveals the editor, and no override is created until the user
+    /// sets one.
+    private func perDayChanged(_ on: Bool) {
+        guard !on else { return }
+        for weekday in 1...7 { WindDownNudge.setWakeOverride(weekday: weekday, minutes: nil) }
+        overrides = [:]
+        // #1864: re-arm the strap alarm + backup notification so they drop the per-day
+        // times and revert to the single default, matching the wind-down nudge's revert.
+        model.applySmartAlarm()
     }
 
     // PR#554 — per-day wake overrides. A toggle reveals a per-weekday wake-time editor; with it off (or no
@@ -432,20 +508,7 @@ struct SmartAlarmView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Toggle("", isOn: $perDayOn)
-                .labelsHidden().toggleStyle(.switch).tint(StrandPalette.accent)
-                .accessibilityLabel("Different wake time per day")
-                .onChangeCompat(of: perDayOn) { on in
-                    // Turning the section OFF clears every override (so the nudge reverts to the single time);
-                    // turning it ON just reveals the editor — no override is created until the user sets one.
-                    if !on {
-                        for weekday in 1...7 { WindDownNudge.setWakeOverride(weekday: weekday, minutes: nil) }
-                        overrides = [:]
-                        // #1864: re-arm the strap alarm + backup notification so they drop the per-day
-                        // times and revert to the single default, matching the wind-down nudge's revert.
-                        model.applySmartAlarm()
-                    }
-                }
+            perDayToggle
         }
         .frame(minHeight: 42)
 
@@ -695,9 +758,9 @@ struct SmartAlarmView: View {
                     let selected = Self.alarmWeekdayIsSelected(dow, in: behavior.smartAlarmWeekdays)
                     Text(Self.alarmWeekdayInitial(dow))
                         .font(StrandFont.caption)
-                        .foregroundStyle(selected ? StrandPalette.surfaceBase : StrandPalette.textSecondary)
+                        .foregroundStyle(selected ? weekdayChipInk : StrandPalette.textSecondary)
                         .frame(width: 30, height: 30)
-                        .background(selected ? StrandPalette.accent : StrandPalette.surfaceInset, in: Circle())
+                        .background(selected ? weekdayChipFill : weekdayChipIdleFill, in: Circle())
                         .contentShape(Circle())
                         .onTapGesture { behavior.smartAlarmWeekdays = Self.alarmToggledWeekday(dow, in: behavior.smartAlarmWeekdays) }
                         .accessibilityLabel(Self.weekdayName(dow))
@@ -709,6 +772,32 @@ struct SmartAlarmView: View {
                 .foregroundStyle(StrandPalette.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Weekday chip colours: the redesign's white-on-black selection on iPhone with the redesign on,
+    /// the accent chip otherwise.
+    private var weekdayChipFill: Color {
+        #if os(iOS)
+        redesignEnabled ? NoopTheme.textPrimary : StrandPalette.accent
+        #else
+        StrandPalette.accent
+        #endif
+    }
+
+    private var weekdayChipInk: Color {
+        #if os(iOS)
+        redesignEnabled ? NoopTheme.canvas : StrandPalette.surfaceBase
+        #else
+        StrandPalette.surfaceBase
+        #endif
+    }
+
+    private var weekdayChipIdleFill: Color {
+        #if os(iOS)
+        redesignEnabled ? NoopTheme.control : StrandPalette.surfaceInset
+        #else
+        StrandPalette.surfaceInset
+        #endif
     }
 
     /// Bridges the strap alarm's minutes-since-midnight store to a DatePicker's Date.
@@ -779,5 +868,19 @@ struct SmartAlarmView: View {
         case 7: return String(localized: "Sat")
         default: return "?"
         }
+    }
+}
+
+/// Re-arms the strap alarm whenever its switch, time or weekdays change. One modifier so the classic and
+/// redesigned cards wire the identical side effect.
+private struct StrapAlarmRearm: ViewModifier {
+    let model: AppModel
+    @ObservedObject var behavior: BehaviorStore
+
+    func body(content: Content) -> some View {
+        content
+            .onChangeCompat(of: behavior.smartAlarmEnabled) { _ in model.applySmartAlarm() }
+            .onChangeCompat(of: behavior.smartAlarmMinutes) { _ in model.applySmartAlarm() }
+            .onChangeCompat(of: behavior.smartAlarmWeekdays) { _ in model.applySmartAlarm() }
     }
 }

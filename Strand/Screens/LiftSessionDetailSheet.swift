@@ -44,7 +44,37 @@ struct LiftSessionDetailSheet: View {
         return max(0, end - session.startTs)
     }
 
+    #if os(iOS)
+    /// The iPhone redesign (B3) replaces the classic layout unless the user chose the classic look.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
+    #endif
+
     var body: some View {
+        Group {
+            #if os(iOS)
+            if redesignEnabled { redesignContent } else { classicContent }
+            #else
+            classicContent
+            #endif
+        }
+        #if os(iOS)
+        .presentationDragIndicator(.visible)
+        #else
+        .frame(width: 560, height: 780)
+        #endif
+        .task { await load() }
+        .sheet(isPresented: $editing) {
+            LiftSessionEditSheet(session: storedSession, sets: sets) {
+                await load()
+                await onChanged()
+            }
+        }
+    }
+
+    /// The classic layout (macOS, and iPhone with the redesign off).
+    private var classicContent: some View {
         ScreenScaffold(title: "Session", subtitle: subtitle) {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                 if !loaded {
@@ -66,19 +96,7 @@ struct LiftSessionDetailSheet: View {
                 }
             }
         }
-        #if os(iOS)
-        .presentationDragIndicator(.visible)
-        #else
-        .frame(width: 560, height: 780)
-        #endif
         .background(StrandPalette.surfaceBase)
-        .task { await load() }
-        .sheet(isPresented: $editing) {
-            LiftSessionEditSheet(session: storedSession, sets: sets) {
-                await load()
-                await onChanged()
-            }
-        }
     }
 
     /// The session as stored now, with any corrected RPE.
@@ -473,3 +491,297 @@ struct LiftSessionDetailSheet: View {
         loaded = true
     }
 }
+
+// MARK: - iPhone redesign (B3)
+//
+// `design/round3/training.html` B3, over this sheet's own state and actions. Every figure is the classic
+// screen's: the same performed sets, `LiftMetrics` arithmetic, per-set RPE and rest, notes, sets per
+// muscle, RPE profile, Edit sets and the confirmed delete. Weights are shown exactly as logged; a dumbbell
+// exercise says so, because a logged dumbbell weight is never doubled into a combined load.
+
+#if os(iOS)
+extension LiftSessionDetailSheet {
+    var redesignContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                rdHeader
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.xl)
+                    .noopEntrance(index: 0)
+                if !loaded {
+                    NoopGlassCard { Text("Reading the session…").noopFont(.footnote) }
+                        .noopSkeleton(true)
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.l)
+                } else {
+                    rdFigures
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .padding(.top, NoopTheme.Layout.l)
+                        .noopEntrance(index: 1)
+                    TrainingSectionTitle(title: "Exercises", trailing: String(localized: "As logged"))
+                    rdExercises
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                        .noopEntrance(index: 2)
+                    if let note = session.note, !note.isEmpty {
+                        TrainingSectionTitle(title: "Notes")
+                        NoopGlassCard {
+                            Text(verbatim: note).noopFont(.bodySmall).textSelection(.enabled)
+                        }
+                        .padding(.horizontal, NoopTheme.Layout.gutter)
+                    }
+                    if !performed.isEmpty {
+                        rdMuscles
+                        rdRpe
+                    }
+                    Text("Lifting figures are worked out from the sets above. Effort stays measured from heart rate and is never derived from weights and reps.")
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.top, NoopTheme.Layout.l)
+                    VStack(spacing: NoopTheme.Layout.cardGap) {
+                        Button { editing = true } label: { Label("Edit sets", systemImage: "pencil") }
+                            .buttonStyle(NoopSecondaryButton())
+                        rdDelete
+                    }
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.l)
+                }
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .trainingAmbient(.liftSession, intensityRaw: ambientIntensityRaw)
+    }
+
+    private var rdEffortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
+
+    private var rdHeader: some View {
+        let date = Date(timeIntervalSince1970: TimeInterval(session.startTs))
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+            // The program or imported title is data.
+            Text(verbatim: session.programName.flatMap { $0.isEmpty ? nil : $0 } ?? String(localized: "Session"))
+                .noopFont(.largeTitle)
+                .lineLimit(2)
+                .accessibilityAddTraits(.isHeader)
+            Text(verbatim: date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute()))
+                .noopFont(.footnote)
+            TrainingSourceLine(provenance: TrainingProvenance.forLift(session))
+                .padding(.top, NoopTheme.Layout.xs)
+        }
+    }
+
+    private var rdFigures: some View {
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                StatGrid([
+                    StatGridItem("Time", value: TrainingFormat.duration(durationSec > 0 ? Double(durationSec) : nil)),
+                    StatGridItem("Working sets", value: performed.isEmpty ? nil : "\(workingSetCount)"),
+                    StatGridItem("Volume", value: LiftMetrics.volumeLoadKg(performed).map {
+                        LiftFormat.weight($0, system: unitSystem)
+                    }),
+                    StatGridItem("Strain", value: workout?.strain.map { UnitFormatter.effortDisplay($0, scale: rdEffortScale) }),
+                ], columns: 2)
+                TrainingDivider()
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Session load").noopFont(.footnote)
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    Text(verbatim: sessionLoadText).noopFont(.rowTitle).monospacedDigit()
+                    Text(verbatim: sessionLoadCaption).noopFont(.caption)
+                }
+                Text("Volume compares only when you repeat this program. Strain is measured from heart rate.")
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: Exercises
+
+    @ViewBuilder private var rdExercises: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
+            if performed.isEmpty {
+                NoopGlassCard {
+                    Text("No sets were performed. Discarded sets stay under Edit sets as zeros you can fill in.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            ForEach(LiftMetrics.perExercise(performed), id: \.exercise) { summary in
+                rdExerciseCard(summary)
+            }
+            if session.deviceId == PersonalLiftingImport.deviceId {
+                ForEach(sets.filter { !LiftMetrics.isPerformed(reps: $0.reps) }, id: \.id) { set in
+                    NoopGlassCard {
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                            Text(verbatim: set.exercise).noopFont(.rowTitle)
+                            Text("\(set.setIndex): \(set.weightKg.map { LiftFormat.trim($0) + " kg" } ?? "—") × \(set.reps.map(String.init) ?? "—")")
+                                .noopFont(.footnote)
+                            if let note = set.note { Text(verbatim: note).noopFont(.caption) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func rdExerciseCard(_ summary: LiftMetrics.ExerciseSummary) -> some View {
+        let rows = performed.filter { $0.exercise == summary.exercise }.sorted { $0.ord < $1.ord }
+        let isDumbbell = summary.exercise.range(of: "dumbbell", options: .caseInsensitive) != nil
+        return NoopGlassCard {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
+                    Text(verbatim: summary.exercise).noopFont(.listTitle)
+                    if let first = rows.first {
+                        Text(verbatim: LiftMuscleSummary.line(primary: first.primaryMuscle,
+                                                              secondaries: first.secondaryMuscles))
+                            .noopFont(.caption)
+                    }
+                    if isDumbbell {
+                        Text("Weight as logged, per dumbbell if that is how it was entered. Never doubled.")
+                            .noopFont(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.bottom, NoopTheme.Layout.s)
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 { TrainingDivider() }
+                    rdSetLine(row)
+                }
+                TrainingDivider()
+                HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.m) {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
+                        Text("Best set").noopFont(.caption)
+                        Text(verbatim: bestSetText(summary)).noopFont(.rowTitle).monospacedDigit()
+                        if let e1rm = summary.bestEstimatedOneRepMaxKg {
+                            Text(verbatim: String(localized: "≈ \(LiftFormat.weight(e1rm, system: unitSystem)) estimated 1RM"))
+                                .noopFont(.caption)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    VStack(alignment: .trailing, spacing: NoopTheme.Layout.xs / 2) {
+                        Text("Volume").noopFont(.caption)
+                        Text(verbatim: LiftFormat.weight(summary.volumeKg, system: unitSystem))
+                            .noopFont(.rowTitle).monospacedDigit()
+                        if let delta = volumeDeltaText(summary) {
+                            Text(verbatim: delta).noopFont(.caption, color: false)
+                                .foregroundStyle(rdDeltaColor(summary))
+                        }
+                    }
+                }
+                .padding(.top, NoopTheme.Layout.m)
+            }
+        }
+    }
+
+    private func rdSetLine(_ row: LiftSetRow) -> some View {
+        HStack(spacing: NoopTheme.Layout.m) {
+            Text(verbatim: row.isWarmup ? String(localized: "W") : "\(row.setIndex)")
+                .noopFont(.caption, color: false)
+                .foregroundStyle(row.isWarmup ? NoopTheme.textTertiary : NoopTheme.textSecondary)
+                .frame(width: TrainingLayout.setBadge, height: TrainingLayout.setBadge)
+                .background(RoundedRectangle(cornerRadius: TrainingLayout.setBadgeRadius, style: .continuous)
+                    .fill(Color.white.opacity(TrainingLayout.mutedFill)))
+            Text(verbatim: setValueText(row))
+                .noopFont(.bodySmall, color: false)
+                .monospacedDigit()
+                .foregroundStyle(row.isWarmup ? NoopTheme.textSecondary : NoopTheme.textPrimary)
+            Spacer(minLength: 0)
+            if row.isWarmup {
+                Text("Warm-up").noopFont(.caption)
+            }
+            if let rpe = row.rpe {
+                TrainingBadge(text: String(localized: "RPE \(LiftFormat.trim(rpe))"), tint: NoopTheme.lift)
+            }
+            if let rest = row.restSec {
+                Text(verbatim: LiftFormat.duration(rest)).noopFont(.caption)
+            }
+        }
+        .padding(.vertical, NoopTheme.Layout.s)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func rdDeltaColor(_ summary: LiftMetrics.ExerciseSummary) -> Color {
+        guard let now = summary.volumeKg, let before = previousVolume[summary.exercise], before > 0
+        else { return NoopTheme.textTertiary }
+        if now > before { return NoopTheme.recovery }
+        if now < before { return NoopTheme.textSecondary }
+        return NoopTheme.textTertiary
+    }
+
+    // MARK: Muscles and RPE
+
+    @ViewBuilder private var rdMuscles: some View {
+        let counts = LiftMetrics.muscleCounts(performed)
+        let ordered = LiftMuscle.ordered.filter { (counts.fractional[$0] ?? 0) > 0 }
+        TrainingSectionTitle(title: "Sets per muscle", trailing: String(localized: "This session · estimated"))
+        NoopGlassCard {
+            if ordered.isEmpty {
+                Text("None of these exercises has a muscle group yet. Add one on the exercise and every future session counts toward it.")
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                    ForEach(ordered, id: \.self) { muscle in
+                        HStack(spacing: NoopTheme.Layout.m) {
+                            Text(verbatim: muscle.displayName).noopFont(.bodySmall)
+                            Spacer(minLength: 0)
+                            Text(verbatim: LiftFormat.trim(counts.fractional[muscle] ?? 0))
+                                .noopFont(.rowTitle, color: false).monospacedDigit()
+                                .foregroundStyle(NoopTheme.lift)
+                            Text(verbatim: componentText(counts, muscle)).noopFont(.caption)
+                        }
+                    }
+                    Text("Counted from the muscles you assigned each exercise: direct sets count once, indirect ones count as a half — the method the reference figures were derived under. An estimate from your own labels, not something measured off your body.")
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+    }
+
+    @ViewBuilder private var rdRpe: some View {
+        let p = LiftMetrics.rpeProfile(performed)
+        TrainingSectionTitle(title: "How hard it felt", trailing: String(localized: "RPE"))
+        NoopGlassCard {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                HStack {
+                    Text("Mean RPE").noopFont(.bodySmall)
+                    Spacer(minLength: 0)
+                    Text(verbatim: p.mean.map { LiftFormat.trim($0) } ?? "—").noopFont(.rowTitle).monospacedDigit()
+                }
+                HStack {
+                    Text(verbatim: String(localized: "Sets at RPE \(LiftFormat.trim(p.threshold)) or above"))
+                        .noopFont(.bodySmall)
+                    Spacer(minLength: 0)
+                    Text(verbatim: "\(p.setsAtOrAboveThreshold)").noopFont(.rowTitle).monospacedDigit()
+                }
+                if p.unratedSets > 0 {
+                    Text(verbatim: String(localized: "\(p.unratedSets) working sets weren't rated, so the mean is drawn from \(p.ratedSets)."))
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.horizontal, NoopTheme.Layout.gutter)
+    }
+
+    /// The classic delete: confirmed, and it removes the paired workout too (see `deleteSection`).
+    private var rdDelete: some View {
+        Button(role: .destructive) { confirmingDelete = true } label: {
+            Label("Delete session", systemImage: "trash")
+                .noopFont(.button, color: false)
+                .foregroundStyle(NoopTheme.recoveryLow)
+                .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget)
+        }
+        .buttonStyle(.plain)
+        .disabled(deleting)
+        .confirmationDialog("Delete this session?",
+                            isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { Task { await deleteSession() } }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("\(performed.count) recorded sets will be removed, and so will the workout this session created. This cannot be undone.")
+        }
+    }
+}
+#endif

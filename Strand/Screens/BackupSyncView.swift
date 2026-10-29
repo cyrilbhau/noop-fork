@@ -26,7 +26,27 @@ struct BackupSyncView: View {
     @State private var pendingRestore: FolderBackup.Snapshot?
     @State private var confirmRestore = false
 
+    #if os(iOS)
+    /// The iPhone redesign switch (Settings). On by default; off restores the classic screen.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled {
+            backupLifecycle(redesignScreen)
+        } else {
+            backupLifecycle(classicScreen)
+        }
+        #else
+        backupLifecycle(classicScreen)
+        #endif
+    }
+
+    /// The classic screen (macOS, and iOS with the redesign switched off). Unchanged layout.
+    private var classicScreen: some View {
         ScreenScaffold(
             title: "Backup & Sync",
             subtitle: "Save a full backup to a folder you choose - point it at Google Drive, iCloud or Dropbox for off-device sync."
@@ -37,6 +57,11 @@ struct BackupSyncView: View {
                 restoreCard
             }
         }
+    }
+
+    /// Alerts, the snapshot picker and the restore confirmation, shared by both presentations.
+    private func backupLifecycle<Content: View>(_ content: Content) -> some View {
+        content
         // Result of a backup or a restore.
         .alert(alertTitle, isPresented: $showAlert) {
             Button("OK", role: .cancel) {}
@@ -62,6 +87,13 @@ struct BackupSyncView: View {
     }
 
     // MARK: - Cards
+
+    /// Auto is on but the last successful backup is stale (see `autoCard`). One predicate for both
+    /// presentations.
+    private var autoBackupIsStale: Bool {
+        auto && folderLabel != nil && lastMs > 0
+            && BackupSync.isBackupStale(lastBackupMs: lastMs, nowMs: Int(Date().timeIntervalSince1970 * 1000.0))
+    }
 
     private var folderCard: some View {
         StrandCard(padding: 20) {
@@ -144,9 +176,7 @@ struct BackupSyncView: View {
                 // Surface it so a silently-failing auto-backup is visible, not discovered only at restore.
                 // `lastMs > 0` excludes the never-backed-up state (the "No backup yet." line above owns that,
                 // and it would otherwise false-fire the moment auto is switched on, before the first backup).
-                if auto, folderLabel != nil, lastMs > 0,
-                   BackupSync.isBackupStale(lastBackupMs: lastMs,
-                                            nowMs: Int(Date().timeIntervalSince1970 * 1000.0)) {
+                if autoBackupIsStale {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(StrandPalette.statusWarning)
