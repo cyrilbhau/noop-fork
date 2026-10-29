@@ -132,7 +132,7 @@ struct RedesignTodayView: View {
         .refreshable { await pullToRefresh() }
         // Same trigger set as Liquid Today, so a refresh, a day change, a logged drink or a day-cycle
         // change re-reads exactly as it does there.
-        .task(id: "\(repo.refreshSeq)-\(selectedDayOffset)-\(repo.hydrationSeq)-\(hydrationEnabled)-\(dayCycleModeRaw)") {
+        .task(id: "\(repo.refreshSeq)-\(selectedDayOffset)-\(repo.hydrationSeq)-\(hydrationEnabled)-\(dayCycleModeRaw)-\(HostedCardLoadNeeds(raw: hostedCardsRaw).signature)") {
             DashboardCardPrefs.migrateLegacyStepsAverage()
             await load()
         }
