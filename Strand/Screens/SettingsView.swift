@@ -1291,6 +1291,9 @@ struct SettingsView: View {
                     }
                 }
                 #endif
+                // Classic and Liquid appearance controls do not affect the redesigned iPhone screens.
+                // Hide their presets alongside the individual controls without changing stored choices.
+                if !redesignActive {
                 rowDivider
                 // Theme presets — one-tap bundles coordinating accent + chart world + backdrop + card
                 // opacity. Derived (no stored value): tweaking any control below flips this to Custom.
@@ -1305,11 +1308,8 @@ struct SettingsView: View {
                     .tint(StrandPalette.accent)
                     .accessibilityLabel("Theme preset")
                 }
-                // On iPhone with the redesign on, Theme, Chart colours and Accent are hidden: the root is
-                // pinned dark and the redesigned screens draw from `NoopTheme`, so none of the three would
-                // change anything the wearer sees there. Their stored values are untouched, so turning the
-                // redesign off (Use classic Today) brings the controls back with the same choices.
-                if !redesignActive {
+                // The redesigned root is pinned dark and draws from `NoopTheme`. Turning the redesign
+                // off brings these controls back with the same choices.
                 rowDivider
                 FormRow(label: "Theme") {
                     Picker("Theme", selection: $appearanceRaw) {
@@ -1422,6 +1422,7 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                if !redesignActive {
                 rowDivider
                 // MARK: Day-cycle background — the time-of-day scene behind Today (#698). On by default.
                 // Off swaps it for the plain dark canvas for people who find the moving scene distracting.
@@ -1504,6 +1505,7 @@ struct SettingsView: View {
 
                 rowDivider
                 backgroundImageControls
+                }
             }
         }
     }
