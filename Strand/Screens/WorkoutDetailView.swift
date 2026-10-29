@@ -706,7 +706,7 @@ extension WorkoutDetailView {
                     Text("Route and splits are not in Apple Health workout summaries.")
                         .noopFont(.caption)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                         .padding(.top, NoopTheme.Layout.m)
                 }
             }

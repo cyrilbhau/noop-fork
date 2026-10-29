@@ -290,7 +290,7 @@ struct FormKitIconFace: View {
     }
 }
 
-/// Footnote copy under a card, padded to the section side.
+/// Footnote copy under a card, aligned with card content from a full-bleed parent.
 struct FormKitFootnote: View {
     private let text: Text
 
@@ -302,7 +302,7 @@ struct FormKitFootnote: View {
             .noopFont(.footnote)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, NoopTheme.Layout.sectionSide)
+            .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
             .padding(.top, NoopTheme.Layout.m)
     }
 }

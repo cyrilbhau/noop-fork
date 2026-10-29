@@ -530,7 +530,7 @@ extension JournalLogCard {
             Text("Answers feed What moves you. They stay on your \(Platform.deviceNoun).")
                 .noopFont(.footnote)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                 .padding(.top, NoopTheme.Layout.m)
         }
     }

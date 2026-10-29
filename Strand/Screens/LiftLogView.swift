@@ -433,7 +433,7 @@ extension LiftLogView {
                 Text("Lifting adds volume and set counts. It never changes your Effort, which stays measured from heart rate.")
                     .noopFont(.caption)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                    .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                     .padding(.top, NoopTheme.Layout.s)
 
                 TrainingSectionTitle(title: "Programs")

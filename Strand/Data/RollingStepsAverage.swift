@@ -30,6 +30,15 @@ struct RollingStepsAverage: Equatable {
         return .init(mean: byDay.isEmpty ? nil : byDay.values.reduce(0, +) / Double(byDay.count),
                      observedDays: byDay.count)
     }
+
+    /// One resolution for both Today presentations, with the selected calendar day as the window end.
+    @MainActor
+    static func load(repo: Repository, day: String) async -> Self? {
+        guard let start = startDay(ending: day) else { return nil }
+        let readings = await repo.resolvedSteps(from: start, to: day)
+        guard !Task.isCancelled else { return nil }
+        return calculate(readings: readings.values, ending: day)
+    }
 }
 
 extension Repository {
@@ -80,10 +89,9 @@ struct RollingStepsAverageCard: View {
         }
         .buttonStyle(.plain)
         .task(id: "\(day)|\(repo.refreshSeq)") {
-            guard let start = RollingStepsAverage.startDay(ending: day) else { return }
-            let readings = await repo.resolvedSteps(from: start, to: day)
+            let loaded = await RollingStepsAverage.load(repo: repo, day: day)
             guard !Task.isCancelled else { return }
-            result = RollingStepsAverage.calculate(readings: readings.values, ending: day)
+            result = loaded
             resultDay = day
         }
     }

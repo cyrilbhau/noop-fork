@@ -94,7 +94,7 @@ struct InsightsScreenHeader: View {
 }
 
 /// A sentence-case section title with an optional trailing caption, for titles built at run time (the
-/// design system's `NoopSectionHeader` takes a fixed key). Same 26 / 10 / 20 padding.
+/// design system's `NoopSectionHeader` takes a fixed key). Uses the same section padding tokens.
 struct InsightsSectionTitle: View {
     private let title: Text
     private let trailing: String?

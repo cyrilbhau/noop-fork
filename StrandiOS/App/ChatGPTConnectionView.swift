@@ -318,7 +318,7 @@ extension ChatGPTConnectionView {
                 Text("Connect an eligible Plus or Pro plan without an API key. Requests share your existing ChatGPT plan limits.")
                     .noopFont(.footnote)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                    .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                     .padding(.top, NoopTheme.Layout.m)
 
                 if session.profiles.count > 1 {
@@ -433,7 +433,7 @@ extension ChatGPTConnectionView {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                    .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                     .padding(.top, NoopTheme.Layout.l)
                 }
 

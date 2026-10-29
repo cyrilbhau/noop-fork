@@ -15,10 +15,12 @@ where Item: Identifiable & Equatable, Options: View {
     let configurationLabel: (Item) -> String?
     let onConfigure: (Item) -> Void
     let onReset: () -> Void
-    /// Whether the Shown list may go EMPTY. Default false — every visible item can be hidden EXCEPT the
-    /// last, so surfaces that need ≥1 item (Today sections, Key Metrics, Your Cards) can't be emptied. The
-    /// hosted-cards page (#today-hosted-cards) is opt-in, so it passes `true` to allow un-hosting the last.
+    /// Whether the Shown list offers removal of the final item; the legacy draft retains one item.
     var allowEmpty: Bool = false
+    var header: AnyView? = nil
+    var extraFooter: AnyView? = nil
+    var subtitleTint: ((Item) -> Color?)? = nil
+    var wrapsSubtitles: Bool = false
     /// Optional grouping key for the Hidden ("Available") list. When set (the hosted-cards page passes the
     /// card's origin, e.g. "Sleep" / "Trends"), the Available items are split into one titled Section per
     /// group so a user browses by origin instead of one flat list. nil (Today sections, Key Metrics, Your
@@ -29,6 +31,7 @@ where Item: Identifiable & Equatable, Options: View {
 
     var body: some View {
         List {
+            if let header { header }
             options()
 
             Section {
@@ -36,6 +39,8 @@ where Item: Identifiable & Equatable, Options: View {
                     EditableLayoutRow(
                         title: title(item),
                         subtitle: subtitle(item),
+                        subtitleTint: subtitleTint?(item),
+                        wrapsSubtitle: wrapsSubtitles,
                         icon: icon(item),
                         tint: tint(item),
                         configurationLabel: configurationLabel(item),
@@ -50,9 +55,18 @@ where Item: Identifiable & Equatable, Options: View {
                 Text(shownTitle)
                     .strandOverline()
             } footer: {
-                Text("Drag to reorder. Move an item to Hidden to remove it from Today without deleting it.")
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
+                if let extraFooter {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                        Text("Drag to reorder. Move an item to Hidden to remove it from Today without deleting it.")
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                        extraFooter
+                    }
+                } else {
+                    Text("Drag to reorder. Move an item to Hidden to remove it from Today without deleting it.")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
             }
 
             if draft.hidden.isEmpty {
@@ -123,6 +137,8 @@ where Item: Identifiable & Equatable, Options: View {
         EditableLayoutRow(
             title: title(item),
             subtitle: subtitle(item),
+            subtitleTint: subtitleTint?(item),
+            wrapsSubtitle: wrapsSubtitles,
             icon: icon(item),
             tint: tint(item),
             configurationLabel: configurationLabel(item),
@@ -165,8 +181,14 @@ where Item: Identifiable & Equatable, Options: View {
 }
 
 private struct EditableLayoutRow: View {
+    #if os(iOS)
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #endif
+
     let title: String
     let subtitle: String?
+    let subtitleTint: Color?
+    let wrapsSubtitle: Bool
     let icon: String
     let tint: Color
     let configurationLabel: String?
@@ -176,6 +198,18 @@ private struct EditableLayoutRow: View {
     let onVisibilityChange: () -> Void
 
     var body: some View {
+        #if os(iOS)
+        if wrapsSubtitle && dynamicTypeSize.isAccessibilitySize {
+            accessibilityRow
+        } else {
+            horizontalRow
+        }
+        #else
+        horizontalRow
+        #endif
+    }
+
+    private var horizontalRow: some View {
         HStack(spacing: NoopMetrics.space3) {
             RoundedRectangle(cornerRadius: NoopMetrics.space2, style: .continuous)
                 .fill(StrandPalette.surfaceInset)
@@ -194,8 +228,8 @@ private struct EditableLayoutRow: View {
                 if let subtitle {
                     Text(subtitle)
                         .font(StrandFont.caption)
-                        .foregroundStyle(StrandPalette.textTertiary)
-                        .lineLimit(1)
+                        .foregroundStyle(subtitleTint ?? StrandPalette.textTertiary)
+                        .lineLimit(wrapsSubtitle ? nil : 1)
                 }
             }
 
@@ -221,6 +255,55 @@ private struct EditableLayoutRow: View {
         .contentShape(Rectangle())
         .listRowBackground(NoopChromeSurface())
     }
+
+    #if os(iOS)
+    private var accessibilityRow: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                Text(title)
+                    .noopFont(.listTitle, color: false)
+                    .foregroundStyle(isVisible ? NoopTheme.textPrimary : NoopTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let subtitle {
+                    Text(subtitle)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(subtitleTint ?? NoopTheme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: NoopTheme.Layout.s) {
+                Image(systemName: icon)
+                    .noopFont(.footnote, color: false)
+                    .foregroundStyle(isVisible ? tint : NoopTheme.textTertiary)
+                    .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                    .accessibilityHidden(true)
+                Spacer(minLength: NoopTheme.Layout.s)
+                if let configurationLabel {
+                    Button(configurationLabel, action: onConfigure)
+                        .buttonStyle(.plain)
+                        .noopFont(.footnote, color: false)
+                        .foregroundStyle(NoopTheme.strain)
+                        .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+                        .accessibilityLabel(String(localized: "Edit \(title)"))
+                }
+                Button(action: onVisibilityChange) {
+                    Image(systemName: isVisible ? "minus.circle.fill" : "plus.circle.fill")
+                        .noopFont(.sectionTitle, color: false)
+                        .foregroundStyle(isVisible ? NoopTheme.textSecondary : NoopTheme.strain)
+                        .frame(minWidth: NoopTheme.Layout.minTouchTarget, minHeight: NoopTheme.Layout.minTouchTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isVisible && !canHide)
+                .accessibilityLabel(visibilityLabel)
+            }
+        }
+        .contentShape(Rectangle())
+        .listRowBackground(NoopChromeSurface())
+    }
+    #endif
 
     private var visibilityLabel: String {
         isVisible

@@ -102,8 +102,8 @@ public struct NoopTile<Content: View>: View {
 
 // MARK: - Section header
 
-/// A sentence-case section title with an optional trailing link ("See all ›"). Padding 26 top, 10 bottom,
-/// 20 sides, measured from the screen edge, so place it outside the screen gutter. Never uppercased, even
+/// A sentence-case section title with an optional trailing link ("See all ›"). Padding 28 top, 12 bottom,
+/// 16 sides, measured from the screen edge, so place it outside the screen gutter. Never uppercased, even
 /// inside a `List` section.
 public struct NoopSectionHeader: View {
     private let title: LocalizedStringKey

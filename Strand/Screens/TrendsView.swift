@@ -1097,7 +1097,7 @@ extension TrendsView {
                 VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
                     Text(title).noopFont(.rowTitle, color: false).foregroundStyle(color)
                     HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
-                        Text(verbatim: avg.map(format) ?? "—").noopFont(.statNumber)
+                        Text(verbatim: avg.map(format) ?? "—").noopFont(.tileNumber)
                         if avg != nil { Text(verbatim: unit).noopFont(.unit) }
                     }
                 }

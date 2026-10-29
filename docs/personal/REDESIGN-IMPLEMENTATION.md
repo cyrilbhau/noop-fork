@@ -150,8 +150,14 @@ Units are always smaller and secondary ("62 ms", "52 bpm", "68%").
 
 Screen gutter 16; gap between cards 12; card radius 22; tile radius 20; widget radius 24
 (the system clips, so match the container); card padding 18 (rows 14/18); section header padding
-26 top, 10 bottom, 20 sides. Round icon buttons are 40 pt. The tab bar and its hit areas stay
-native. The minimum touch target is 44 pt.
+28 top, 12 bottom, 16 sides (`sectionSide = gutter`). Captions inside the gutter column use
+`captionInset = cardPadding` (18), so their text aligns with card content at 34 pt from the screen
+edge; full-bleed captions add the gutter explicitly. Round icon buttons are 40 pt. The tab bar
+and its hit areas stay native. The minimum touch target is 44 pt.
+
+Your cards tiles use a 112 pt minimum height, `yourCardPadding = rowVerticalPadding` (14), and
+16 pt icons. Shortcut icons use a 28 pt tint chip at 0.18 opacity. They reuse the 20 pt tile radius
+and 12 pt card gap.
 
 ### 3.5 Motion tokens
 

@@ -47,6 +47,8 @@ enum DashboardCard: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var isShortcut: Bool { self == .coupled || self == .coach }
+
     /// The card's display label (the UPPERCASE WHOOP metric-row label is derived from this). Localized via
     /// the String Catalog so the dashboard rows read in the user's language (the `.uppercased()` the row
     /// applies then uppercases the LOCALIZED word, with the current locale's casing rules).

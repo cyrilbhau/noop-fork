@@ -2933,6 +2933,11 @@ final class TodayDayModel: ObservableObject {
     @Published var fitnessAge: Double?         // exploreSeries("fitness_age").last
     @Published var vo2max: Double?             // exploreSeries("vo2max_est").last (#1391)
     @Published var vitality: Double?           // exploreSeries("vitality").last
+    // Day-bounded presentation points for the redesign. Liquid's history-wide values above stay intact.
+    @Published var fitnessAgePoint: (day: String, value: Double)?
+    @Published var vo2maxPoint: (day: String, value: Double)?
+    @Published var vitalityPoint: (day: String, value: Double)?
+    @Published var stressTrend: [(day: String, value: Double)] = []
     /// Queue 11a: day-keyed "spo2_candidate" metricSeries (see `LiquidTodayView`'s Blood Oxygen tile).
     @Published var spo2CandidateByDay: [String: Double] = [:]
     @Published var stepsEst: Double?           // steps_est, day-keyed to the selected day (fallback)
@@ -2971,6 +2976,10 @@ final class TodayDayModel: ObservableObject {
     @Published var firstScorableRRDay: String?
     /// Flips true once the first load() completes.
     @Published var dataLoaded = false
+    /// The redesign reads one completed value snapshot; legacy Liquid fields retain their existing flow.
+    @Published private(set) var cardSnapshotState = TodayCardSnapshotState()
+    var cardSnapshot: TodayCardInputs? { cardSnapshotState.inputs }
+    var cardSnapshotDayKey: String? { cardSnapshot?.selectedDayKey }
 
     // MARK: Day navigation
 
@@ -2998,11 +3007,33 @@ final class TodayDayModel: ObservableObject {
     // MARK: Data
 
     func load(repo: Repository, profile: ProfileStore, inputs: TodayLoadInputs) async {
+        let requestedDayKey = selectedDayKey(repo: repo)
+        let requestedDayOffset = selectedDayOffset
+        let cardRequest = cardSnapshotState.begin(dayKey: requestedDayKey, dayOffset: requestedDayOffset)
+        // Capture the selected row and carries before suspension. Older loads may still update Liquid's
+        // caches, but none of those mutable caches supplies this invocation's redesigned card snapshot.
+        let requestedDays = repo.days
+        var requestedCards = TodayCardInputs()
+        requestedCards.isToday = requestedDayOffset == 0
+        requestedCards.selectedDayKey = requestedDayKey
+        requestedCards.displayDay = resolveDisplayDay(repo: repo)
+        let requestedCarryDay = requestedCards.displayDay?.day ?? requestedDayKey
+        if requestedCards.isToday {
+            requestedCards.hrvCarry = Repository.lastHrvDay(days: requestedDays, todayKey: requestedCarryDay)
+            requestedCards.restingHrCarry = Repository.lastRestingHrDay(days: requestedDays, todayKey: requestedCarryDay)
+            requestedCards.vitalsCarry = Repository.lastVitalsDay(days: requestedDays, todayKey: requestedCarryDay)
+            requestedCards.respCarry = Repository.lastRespDay(days: requestedDays, todayKey: requestedCarryDay)
+            requestedCards.skinTempCarry = Repository.lastSkinTempReadingDay(days: requestedDays, todayKey: requestedCarryDay)
+        }
         // #989: today's hydration total + goal. One metricSeries row + a UserDefaults read, same as classic
         // TodayView.reloadHydration(). Cleared when the feature is off so the card can't show a stale total.
         if inputs.hydrationEnabled() {
-            hydrationTotalML = await repo.hydrationTotal(day: Repository.localDayKey(Date()))
-            hydrationGoalML = repo.hydrationGoalML(profileSex: profile.sex)
+            let loadedHydrationTotal = await repo.hydrationTotal(day: Repository.localDayKey(Date()))
+            hydrationTotalML = loadedHydrationTotal
+            let loadedHydrationGoal = repo.hydrationGoalML(profileSex: profile.sex)
+            hydrationGoalML = loadedHydrationGoal
+            requestedCards.hydrationTotalML = loadedHydrationTotal
+            requestedCards.hydrationGoalML = loadedHydrationGoal
         } else {
             hydrationTotalML = nil
             hydrationGoalML = nil
@@ -3176,12 +3207,21 @@ final class TodayDayModel: ObservableObject {
                 .map { ($0.day, $0.value) },
             "weight": (await weightA).filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey(repo: repo) },
         ]
-        stress = await Task.detached(priority: .utility) {
-            StressModel(days: daysSnapshot, stored: storedStress)?.score
+        let stressReadings = await Task.detached(priority: .utility) {
+            let model = StressModel(days: daysSnapshot, stored: storedStress)
+            // Both the chart and score are on the same 0–3 axis. Preserve UTC chart-day identities.
+            return (score: model?.score, trend: model?.fullTrend.map {
+                (day: TodayCardResolver.utcDayKey($0.date), value: $0.value)
+            } ?? [])
         }.value
+        stress = stressReadings.score
+        stressTrend = stressReadings.trend
         fitnessAge = (await fitA).last?.value   // history-wide latest banked (not day-scoped)
         vo2max = (await vo2A).last?.value        // #1391: latest banked VO₂max estimate
         vitality = (await vitA).last?.value
+        fitnessAgePoint = TodayCardResolver.latestPoint(await fitA, onOrBefore: selectedDayKey(repo: repo))
+        vo2maxPoint = TodayCardResolver.latestPoint(await vo2A, onOrBefore: selectedDayKey(repo: repo))
+        vitalityPoint = TodayCardResolver.latestPoint(await vitA, onOrBefore: selectedDayKey(repo: repo))
         // Steps is a DAILY metric, so key it to the SELECTED day (like restScore above), not the history-wide
         // latest. Without this, swiping to a past day with no strap step count showed today's estimate (the
         // `.last` value) instead of that day's. Mirrors the classic Today's stepsEstByDay[selectedDayKey].
@@ -3273,6 +3313,28 @@ final class TodayDayModel: ObservableObject {
 
         // First load done — bring the hero gauges + sky to life now the launch churn has settled.
         if !dataLoaded { withAnimation(.easeIn(duration: 0.4)) { dataLoaded = true } }
+        // Build the remaining fields from this call's already-awaited results and its fixed day key.
+        // Re-awaiting an async-let consumes the same result; no additional repository reads occur here.
+        let requestedImportedSteps = appleRows.filter { $0.day == requestedDayKey }.compactMap { $0.steps }.max()
+        let requestedImportedKcal = appleRows.filter { $0.day == requestedDayKey }.compactMap { $0.activeKcal }.max()
+        let requestedEstimate = stepsByDay[requestedDayKey] ?? (requestedCards.isToday ? stepsSeries.last?.value : nil)
+        requestedCards.importedStepsDay = requestedImportedSteps
+        requestedCards.stepCount = requestedCards.displayDay?.steps.map(Double.init)
+            ?? requestedImportedSteps.map(Double.init) ?? requestedEstimate
+        requestedCards.stepsDetail = MetricCatalog.todayStepsMetric(
+            hasMeasuredSteps: requestedCards.displayDay?.steps != nil, hasImportedSteps: requestedImportedSteps != nil)
+        requestedCards.caloriesCount = requestedImportedKcal ?? requestedCards.displayDay?.activeKcalEst
+        requestedCards.hasImportedKcal = requestedImportedKcal != nil
+        requestedCards.caloriesDetail = MetricCatalog.todayCaloriesMetric(
+            hasImportedKcal: requestedImportedKcal != nil, hasOnDeviceKcal: requestedCards.displayDay?.activeKcalEst != nil)
+        requestedCards.stressToday = stressReadings.score
+        requestedCards.stressPoint = TodayCardResolver.latestPoint(stressReadings.trend, onOrBefore: requestedDayKey)
+        requestedCards.fitnessAgePoint = TodayCardResolver.latestPoint(await fitA, onOrBefore: requestedDayKey)
+        requestedCards.vo2maxPoint = TodayCardResolver.latestPoint(await vo2A, onOrBefore: requestedDayKey)
+        requestedCards.vitalityPoint = TodayCardResolver.latestPoint(await vitA, onOrBefore: requestedDayKey)
+        cardSnapshotState.complete(requestedCards, for: cardRequest,
+                                   selectedDayKey: selectedDayKey(repo: repo), selectedDayOffset: selectedDayOffset,
+                                   isCancelled: Task.isCancelled)
     }
 
     /// Re-read the indexed first-beat bounds on each load, so a new labelled sync clears the note.
@@ -3362,6 +3424,10 @@ final class TodayDayModel: ObservableObject {
         guard LiquidTodayView.EffortDisplay.showsZeroNote(strain: effortStrain(cachedDisplayDay),
                                                           isToday: selectedDayOffset == 0) else { return nil }
         return String(localized: "No cardio load yet. Effort builds once your heart rate climbs into your effort zone (around 50% of your heart-rate reserve). A calm day honestly reads near zero.")
+    }
+
+    func stressPoint(onOrBefore day: String) -> (day: String, value: Double)? {
+        TodayCardResolver.latestPoint(stressTrend, onOrBefore: day)
     }
 
     // Measured strap count ?: imported Apple Health count ?: motion estimate — the same precedence the

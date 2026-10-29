@@ -120,9 +120,22 @@ public enum NoopTheme {
         public static let cardPadding: CGFloat = 18
         public static let rowVerticalPadding: CGFloat = 14
         public static let rowHorizontalPadding: CGFloat = 18
-        public static let sectionTop: CGFloat = 26
-        public static let sectionBottom: CGFloat = 10
-        public static let sectionSide: CGFloat = 20
+        public static let sectionTop: CGFloat = 28
+        public static let sectionBottom: CGFloat = 12
+        /// Title inset from the screen edge; use outside the gutter column.
+        public static let sectionSide: CGFloat = gutter
+        /// Caption inset inside the gutter column, aligning text with card content. Full-bleed
+        /// captions add `gutter`; screen-edge titles use `sectionSide` instead.
+        public static let captionInset: CGFloat = cardPadding
+        /// Compact tiles in the redesigned Today Your cards section.
+        public static let yourCardMinHeight: CGFloat = 112
+        public static let yourCardPadding: CGFloat = rowVerticalPadding
+        public static let yourCardIcon: CGFloat = 16
+        /// Border shared by the dashboard metric and shortcut tiles.
+        public static let yourCardBorderWidth: CGFloat = 1
+        /// Tint chip distinguishing shortcut tiles from metric tiles.
+        public static let shortcutIconChip: CGFloat = 28
+        public static let shortcutIconOpacity: Double = 0.18
         public static let iconButton: CGFloat = 40
         public static let iconTile: CGFloat = 42
         public static let minTouchTarget: CGFloat = 44

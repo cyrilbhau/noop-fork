@@ -86,7 +86,7 @@ struct RecoveryDetailView: View {
                         .padding(.top, NoopTheme.Layout.xs)
                 }
             }
-            .padding(.horizontal, NoopTheme.Layout.sectionSide)
+            .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
             .noopSkeleton(loading)
         }
     }
@@ -201,8 +201,9 @@ struct RecoveryDetailView: View {
 
     private func averageLabel(_ average: Double?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
-            Text(verbatim: average.map { "\(ScoreDetailFormat.score($0, decimals: 0))%" } ?? "—")
-                .noopFont(.statNumber)
+            Text(verbatim: average.map { ScoreDetailFormat.score($0, decimals: 0) } ?? "—")
+                .noopFont(.tileNumber)
+            if average != nil { Text(verbatim: "%").noopFont(.unit) }
             Text("Avg").noopFont(.footnote)
         }
         .accessibilityElement(children: .combine)

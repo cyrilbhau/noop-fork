@@ -536,7 +536,7 @@ extension LiftSessionDetailSheet {
                     Text("Lifting figures are worked out from the sets above. Effort stays measured from heart rate and is never derived from weights and reps.")
                         .noopFont(.caption)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                         .padding(.top, NoopTheme.Layout.l)
                     VStack(spacing: NoopTheme.Layout.cardGap) {
                         Button { editing = true } label: { Label("Edit sets", systemImage: "pencil") }

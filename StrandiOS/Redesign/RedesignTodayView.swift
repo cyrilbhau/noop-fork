@@ -42,6 +42,7 @@ struct RedesignTodayView: View {
     @AppStorage(UnitPrefs.distanceSystemKey) private var distanceSystemRaw = ""
 
     // Redesign settings (Phase 1 keys).
+    @AppStorage("noop.coachEnabled") private var coachEnabled = true
     @AppStorage(NoopTheme.Keys.ringsFillOnLoad) private var ringsFillOnLoad = true
     @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
@@ -55,6 +56,8 @@ struct RedesignTodayView: View {
         guard let activeStrapFamily, activeStrapFamily.deviceId == repo.deviceId else { return nil }
         return activeStrapFamily.isWhoop4
     }
+
+    @State private var showCoachLauncher = false
 
     private static let topAnchorID = "redesignToday.top"
 
@@ -148,10 +151,12 @@ struct RedesignTodayView: View {
                 keyMetricsDetailed: $keyMetricsDetailed,
                 keyMetricsWindowDays: $keyMetricsWindowDays,
                 dashboardCardsRaw: $dashboardCardsRaw,
-                hostedCardsRaw: $hostedCardsRaw
+                hostedCardsRaw: $hostedCardsRaw,
+                redesign: true
             )
         }
         .sheet(isPresented: $showStepSources) { PersonalStepSourcesView(day: selectedDayKey) }
+        .sheet(isPresented: $showCoachLauncher) { CoachLauncherSheet() }
     }
 
     @ViewBuilder
@@ -172,10 +177,11 @@ struct RedesignTodayView: View {
             if isToday { MenstrualCycleHomeCard() }
         case .journal:
             if isToday { JournalReminderCard() }
-        case .synthesis, .liveSession, .recoveryVitals, .yourCards:
+        case .yourCards:
+            yourCardsSection.noopEntrance(index: index)
+        case .synthesis, .liveSession, .recoveryVitals:
             // Synthesis lives inside the rings card; the vitals are the key-metric rows. Live Session
-            // and "Your cards" are not part of the redesigned Today (their destinations stay reachable
-            // from Profile and the other tabs).
+            // remains reachable from Profile and the other tabs.
             EmptyView()
         }
     }
@@ -591,85 +597,14 @@ struct RedesignTodayView: View {
     }
 
     private func rowContent(_ metric: KeyMetric) -> MetricRowContent {
-        let carryDayKey = displayDay?.day ?? selectedDayKey
-        func carried(_ value: String, from row: DailyMetric?) -> String? {
-            guard let row else { return nil }
-            let caption = TodayView.carriedCaption(priorDayKey: row.day, todayKey: carryDayKey)
-            return String(localized: "Last: \(value) · \(caption)")
+        if let readout = TodayCardResolver.readout(metric, todayCardInputs),
+           let card = DashboardCard.allCases.first(where: { TodayCardResolver.keyMetricTwin(for: $0) == metric }) {
+            return MetricRowContent(
+                title: LocalizedStringKey(TodayCardResolver.cardTitle(card)), color: readout.tint.redesignColor,
+                subtitle: readout.caption, value: readout.value, unit: readout.unit,
+                sparkKey: readout.sparkKey, route: readout.route)
         }
         switch metric {
-        case .hrv:
-            let own = displayDay?.avgHrv
-            let carry = own == nil ? dayModel.cachedHrvDay : nil
-            return MetricRowContent(
-                title: "HRV", color: NoopTheme.hrv,
-                subtitle: carry?.avgHrv.flatMap { carried("\(Int($0.rounded())) ms", from: carry) },
-                value: own.map { String(Int($0.rounded())) }, unit: "ms", sparkKey: "hrv", route: .metric("hrv"))
-        case .restingHr:
-            let own = displayDay?.restingHr
-            let carry = own == nil ? dayModel.cachedRestingHrDay : nil
-            return MetricRowContent(
-                title: "Resting heart rate", color: NoopTheme.heart,
-                subtitle: carry?.restingHr.flatMap { carried("\($0) bpm", from: carry) },
-                value: own.map { String($0) }, unit: "bpm", sparkKey: "rhr", route: .metric("rhr"))
-        case .respiratory:
-            let own = displayDay?.respRateBpm
-            let carry = own == nil ? (dayModel.cachedVitalsDay?.respRateBpm != nil
-                                      ? dayModel.cachedVitalsDay : dayModel.cachedRespDay) : nil
-            return MetricRowContent(
-                title: "Respiratory rate", color: NoopTheme.breath,
-                subtitle: carry?.respRateBpm.flatMap { carried(Self.oneDecimal($0) + " rpm", from: carry) },
-                value: own.map(Self.oneDecimal), unit: "rpm", sparkKey: "resp_rate", route: .metric("resp_rate"))
-        case .bloodOxygen:
-            // WHOOP 4.0 does not measure blood oxygen offline: an honest empty row, never a number
-            // (and never the unverified strap estimate).
-            if activeIsWhoop4 != false {
-                let caption = activeIsWhoop4 == true
-                    ? String(localized: "Not measured on WHOOP 4.0")
-                    : String(localized: "Not measured offline")
-                return MetricRowContent(title: "Blood oxygen", color: NoopTheme.textTertiary,
-                                        subtitle: caption,
-                                        value: nil, unit: nil, sparkKey: nil, route: nil)
-            }
-            let own = displayDay?.spo2Pct
-            let carry = own == nil ? dayModel.cachedVitalsDay : nil
-            return MetricRowContent(
-                title: "Blood oxygen", color: NoopTheme.hrv,
-                subtitle: carry?.spo2Pct.flatMap { carried("\(Int($0.rounded()))%", from: carry) },
-                value: own.map { String(Int($0.rounded())) }, unit: "%", sparkKey: "spo2", route: .metric("spo2"))
-        case .skinTemp:
-            // Always relative to the personal baseline (the deviation), never an absolute reading.
-            let fahrenheit = temperatureUnit == .fahrenheit
-            let own = displayDay?.skinTempDevC
-            let carryRow = own == nil
-                ? [dayModel.cachedVitalsDay, dayModel.cachedSkinTempReadingDay].compactMap { $0 }
-                    .first { $0.skinTempDevC != nil }
-                : nil
-            let format = { (v: Double) in
-                SkinTempDisplay.formatReading(SkinTempDisplay.Reading(value: v, kind: .deviation),
-                                              fahrenheit: fahrenheit)
-            }
-            return MetricRowContent(
-                title: "Skin temperature", color: NoopTheme.temp,
-                subtitle: carryRow?.skinTempDevC.flatMap { carried(format($0), from: carryRow) }
-                    ?? String(localized: "Relative to baseline"),
-                value: own.map(format), unit: nil, sparkKey: "skin_temp", route: .metric("skin_temp"))
-        case .steps:
-            let detail = dayModel.stepsDetailMetric
-            let measured = displayDay?.steps != nil
-            let imported = !measured && dayModel.importedStepsDay != nil
-            let subtitle: String = dayModel.stepCount == nil ? String(localized: "No step data for this day")
-                : measured ? String(localized: "Strap")
-                : imported ? "Apple Health" : String(localized: "Estimated from strap")
-            let value = dayModel.stepCount.map { count -> String in
-                let text = count.formatted(.number.precision(.fractionLength(0)).locale(AppLanguage.activeLocale))
-                return (measured || imported) ? text : "~" + text
-            }
-            let key = detail?.key ?? "steps_est"
-            return MetricRowContent(
-                title: "Steps", color: NoopTheme.lift, subtitle: subtitle, value: value, unit: nil,
-                sparkKey: key,
-                route: .metricSourced(key: key, source: detail?.source ?? Repository.whoopSource))
         case .weight:
             let kg = dayModel.weightKg
             return MetricRowContent(
@@ -677,18 +612,63 @@ struct RedesignTodayView: View {
                 subtitle: kg == nil ? String(localized: "from profile") : String(localized: "latest"),
                 value: UnitFormatter.massFromKilograms(kg ?? profile.weightKg, system: unitSystem), unit: nil,
                 sparkKey: "weight", route: .metric("weight"))
-        case .calories:
-            let detail = dayModel.caloriesDetailMetric
-            let key = detail?.key ?? "energy_kcal"
-            return MetricRowContent(
-                title: "Calories", color: NoopTheme.temp, subtitle: nil,
-                value: dayModel.caloriesCount.map { String(Int($0.rounded())) }, unit: "kcal",
-                sparkKey: "energy_kcal",
-                route: .metricSourced(key: key, source: detail?.source ?? Repository.whoopSource))
-        case .charge, .effort, .rest:
-            // Filtered out above (the rings card shows them); kept exhaustive for the compiler.
+        default:
+            // Score rows retain their existing hero-only presentation; A4 is a separate follow-up.
             return MetricRowContent(title: "", color: NoopTheme.textTertiary, value: nil)
         }
+    }
+
+    // MARK: - Your cards
+
+    private var visibleKeyMetricRows: [KeyMetric]? {
+        sectionOrder.contains(.keyMetrics) ? keyMetricRows : nil
+    }
+
+    private var renderedDashboardCards: [DashboardCard] {
+        TodayCardResolver.renderList(raw: dashboardCardsRaw, hydrationEnabled: hydrationEnabled,
+                                     coachEnabled: coachEnabled, visibleKeyMetrics: visibleKeyMetricRows)
+    }
+
+    private var gatedDashboardCaption: String? {
+        guard renderedDashboardCards.isEmpty else { return nil }
+        let selected = TodayCardResolver.selection(raw: dashboardCardsRaw, visibleKeyMetrics: visibleKeyMetricRows)
+        let hydrationOff = selected.contains(.hydration) && !hydrationEnabled
+        let coachOff = selected.contains(.coach) && !coachEnabled
+        if hydrationOff && coachOff {
+            return String(localized: "Nothing to show while Hydration and Coach are off.")
+        }
+        if hydrationOff { return String(localized: "Nothing to show while Hydration is off.") }
+        if coachOff { return String(localized: "Nothing to show while Coach is off.") }
+        return nil
+    }
+
+    private var yourCardsSection: some View {
+        YourCardsSection(cards: renderedDashboardCards, inputs: dashboardInputs,
+                         isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+                         loading: loading || dayModel.cardSnapshotDayKey != selectedDayKey,
+                         refreshSequence: repo.refreshSeq, gatedCaption: gatedDashboardCaption,
+                         onEdit: { customizationDestination = .yourCards },
+                         onCoach: { showCoachLauncher = true },
+                         onStepSources: { showStepSources = true },
+                         loadStepsAverage: { day in await RollingStepsAverage.load(repo: repo, day: day) })
+    }
+
+    private var dashboardInputs: TodayCardInputs { todayCardInputs }
+
+    /// Both surfaces share an immutable, completed load; pending dates never borrow another day's data.
+    private var todayCardInputs: TodayCardInputs {
+        var inputs = dayModel.cardSnapshotDayKey == selectedDayKey ? dayModel.cardSnapshot : nil
+        if inputs == nil {
+            var pending = TodayCardInputs()
+            pending.isToday = isToday
+            pending.selectedDayKey = selectedDayKey
+            inputs = pending
+        }
+        var snapshot = inputs ?? TodayCardInputs()
+        snapshot.activeIsWhoop4 = activeIsWhoop4
+        snapshot.fahrenheit = temperatureUnit == .fahrenheit
+        snapshot.locale = AppLanguage.activeLocale
+        return snapshot
     }
 
     // MARK: - Activity

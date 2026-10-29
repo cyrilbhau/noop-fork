@@ -120,7 +120,7 @@ struct StrainDetailView: View {
                         .padding(.top, NoopTheme.Layout.xs)
                 }
             }
-            .padding(.horizontal, NoopTheme.Layout.sectionSide)
+            .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
             .noopSkeleton(loading)
         }
     }
@@ -255,7 +255,7 @@ struct StrainDetailView: View {
     private func averageLabel(_ average: Double?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
             Text(verbatim: average.map { ScoreDetailFormat.score($0, decimals: 1) } ?? "—")
-                .noopFont(.statNumber)
+                .noopFont(.tileNumber)
             Text("Avg").noopFont(.footnote)
         }
         .accessibilityElement(children: .combine)

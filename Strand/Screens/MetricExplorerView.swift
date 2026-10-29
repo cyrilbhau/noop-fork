@@ -2001,13 +2001,13 @@ extension MetricExplorerView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Every signal, with where it comes from")
                     .noopFont(.footnote)
-                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                    .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                 if probing {
                     HStack(spacing: NoopTheme.Layout.s) {
                         ProgressView().controlSize(.small)
                         Text("Scanning your data…").noopFont(.caption)
                     }
-                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                    .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                     .padding(.top, NoopTheme.Layout.s)
                 }
                 if query.isEmpty {
@@ -2062,7 +2062,7 @@ extension MetricExplorerView {
                 if groups.isEmpty {
                     Text("No metrics match your search.")
                         .noopFont(.body)
-                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                         .padding(.top, NoopTheme.Layout.xl)
                 }
             }
@@ -2176,7 +2176,7 @@ extension MetricDetailView {
                         .padding(.top, NoopTheme.Layout.xl)
                 } else {
                     redesignSummary(effectiveRange: effRange, windowed: win, windowFellBack: fellBack)
-                        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                        .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
                         .padding(.top, NoopTheme.Layout.xl)
                         .noopEntrance(index: 0)
                     redesignChartCard(effectiveRange: effRange, windowed: win)

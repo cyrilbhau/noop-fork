@@ -561,7 +561,7 @@ extension BackupSyncView {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, NoopTheme.Layout.sectionSide)
+        .padding(.horizontal, NoopTheme.Layout.gutter + NoopTheme.Layout.captionInset)
         .padding(.top, NoopTheme.Layout.m)
     }
 

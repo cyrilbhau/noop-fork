@@ -28,6 +28,7 @@ struct TodayCustomizationSheet: View {
     private let initialHostedDraft: EditableLayoutDraft<HostedCard>
     private let initialDetailed: Bool
     private let initialWindowDays: Int
+    private let redesign: Bool
 
     @Binding private var sectionOrderRaw: String
     @Binding private var hiddenSectionsRaw: String
@@ -51,6 +52,8 @@ struct TodayCustomizationSheet: View {
     @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
     @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @AppStorage(HydrationStore.enabledKey) private var hydrationEnabled = false
+    @AppStorage("noop.coachEnabled") private var coachEnabled = true
     @State private var ambientFromScoresDraft: Bool?
     @State private var ambientIntensityDraft: AmbientIntensity?
 
@@ -62,6 +65,18 @@ struct TodayCustomizationSheet: View {
             || (ambientIntensityDraft.map { $0 != storedAmbientIntensity } ?? false)
     }
     #endif
+
+    private var usesRedesignEditor: Bool {
+        #if os(iOS)
+        return redesign && redesignEnabled
+        #else
+        return false
+        #endif
+    }
+
+    private var visibleKeyMetrics: [KeyMetric]? {
+        TodayCardsEditorPresentation.visibleKeyMetrics(sections: sectionDraft, metrics: keyMetricDraft.visible)
+    }
 
     private var currentDestination: TodayCustomizationDestination {
         switch path.last {
@@ -98,7 +113,8 @@ struct TodayCustomizationSheet: View {
         keyMetricsDetailed: Binding<Bool>,
         keyMetricsWindowDays: Binding<Int>,
         dashboardCardsRaw: Binding<String>,
-        hostedCardsRaw: Binding<String>
+        hostedCardsRaw: Binding<String>,
+        redesign: Bool = false
     ) {
         _sectionOrderRaw = sectionOrderRaw
         _hiddenSectionsRaw = hiddenSectionsRaw
@@ -107,6 +123,12 @@ struct TodayCustomizationSheet: View {
         _keyMetricsWindowDays = keyMetricsWindowDays
         _dashboardCardsRaw = dashboardCardsRaw
         _hostedCardsRaw = hostedCardsRaw
+        #if os(iOS)
+        let usesRedesign = redesign
+        #else
+        let usesRedesign = false
+        #endif
+        self.redesign = usesRedesign
 
         let fullSectionOrder = TodayLayoutPrefs.decodeOrder(sectionOrderRaw.wrappedValue)
         let hiddenSectionSet = Set(TodayLayoutPrefs.decodeHidden(hiddenSectionsRaw.wrappedValue))
@@ -119,7 +141,9 @@ struct TodayCustomizationSheet: View {
             allItems: KeyMetric.defaultOrder
         )
         let cards = EditableLayoutDraft(
-            visible: DashboardCardPrefs.decodeEnabled(dashboardCardsRaw.wrappedValue),
+            visible: TodayCardsEditorPresentation.selection(
+                raw: dashboardCardsRaw.wrappedValue, redesign: usesRedesign,
+                sections: sections, metrics: metrics.visible),
             allItems: DashboardCard.canonicalOrder
         )
         let hosted = EditableLayoutDraft(
@@ -162,7 +186,8 @@ struct TodayCustomizationSheet: View {
                 hostedCardCount: hostedDraft.visible.count,
                 onConfigure: openConfiguration,
                 onReset: resetCurrentLayout,
-                backgroundSection: backgroundSection
+                backgroundSection: backgroundSection,
+                redesign: usesRedesignEditor
             )
             .toolbar {
                 customizationToolbar(showCancel: true)
@@ -182,7 +207,14 @@ struct TodayCustomizationSheet: View {
                 case .yourCards:
                     DashboardCardsCustomizationPage(
                         draft: $dashboardDraft,
-                        onReset: resetCurrentLayout
+                        onReset: resetCurrentLayout,
+                        redesign: usesRedesignEditor,
+                        visibleKeyMetrics: visibleKeyMetrics,
+                        hydrationEnabled: editorHydrationEnabled,
+                        coachEnabled: editorCoachEnabled,
+                        sectionDraft: sectionDraft,
+                        onShow: { sectionDraft.show(.yourCards) },
+                        onChangePosition: { path.removeLast() }
                     )
                         .toolbar {
                             customizationToolbar(showCancel: false)
@@ -237,7 +269,9 @@ struct TodayCustomizationSheet: View {
             windowDays = 14
         case .yourCards:
             dashboardDraft = EditableLayoutDraft(
-                visible: DashboardCard.defaultSelection,
+                visible: TodayCardsEditorPresentation.selection(
+                    raw: "", redesign: usesRedesignEditor,
+                    sections: sectionDraft, metrics: keyMetricDraft.visible),
                 allItems: DashboardCard.canonicalOrder
             )
         case .addedCards:
@@ -253,18 +287,37 @@ struct TodayCustomizationSheet: View {
     }
 
     private func save() {
-        sectionOrderRaw = TodayLayoutPrefs.encode(sectionDraft.visible + sectionDraft.hidden)
-        hiddenSectionsRaw = TodayLayoutPrefs.encodeHidden(sectionDraft.hidden)
-        keyMetricsRaw = KeyMetricPrefs.encode(keyMetricDraft.visible)
-        keyMetricsDetailed = detailed
-        keyMetricsWindowDays = windowDays
-        dashboardCardsRaw = DashboardCardPrefs.encode(dashboardDraft.visible)
-        hostedCardsRaw = HostedCardPrefs.encode(hostedDraft.visible)
+        let values = TodayCustomizationSaveValues(
+            sections: sectionDraft, metrics: keyMetricDraft.visible, detailed: detailed,
+            windowDays: windowDays, dashboardCards: dashboardDraft.visible, hostedCards: hostedDraft.visible)
+        sectionOrderRaw = values.sectionOrderRaw
+        hiddenSectionsRaw = values.hiddenSectionsRaw
+        keyMetricsRaw = values.keyMetricsRaw
+        keyMetricsDetailed = values.keyMetricsDetailed
+        keyMetricsWindowDays = values.keyMetricsWindowDays
+        dashboardCardsRaw = values.dashboardCardsRaw
+        hostedCardsRaw = values.hostedCardsRaw
         #if os(iOS)
         if let draft = ambientFromScoresDraft { ambientFromScores = draft }
         if let draft = ambientIntensityDraft { ambientIntensityRaw = draft.rawValue }
         #endif
         dismiss()
+    }
+
+    private var editorHydrationEnabled: Bool {
+        #if os(iOS)
+        return hydrationEnabled
+        #else
+        return false
+        #endif
+    }
+
+    private var editorCoachEnabled: Bool {
+        #if os(iOS)
+        return coachEnabled
+        #else
+        return true
+        #endif
     }
 
     /// A5's Background section (§3.7): only on iPhone with the redesign on, where the ambient field exists.
@@ -366,6 +419,7 @@ private struct TodaySectionsCustomizationPage: View {
     let onConfigure: (TodaySection) -> Void
     let onReset: () -> Void
     var backgroundSection: AnyView? = nil
+    var redesign: Bool = false
 
     var body: some View {
         EditableLayoutList(
@@ -378,7 +432,8 @@ private struct TodaySectionsCustomizationPage: View {
             tint: \.customizationTint,
             configurationLabel: configurationLabel,
             onConfigure: onConfigure,
-            onReset: onReset
+            onReset: onReset,
+            wrapsSubtitles: redesign
         ) {
             if let backgroundSection { backgroundSection }
         }
@@ -393,10 +448,17 @@ private struct TodaySectionsCustomizationPage: View {
         case .liveSession:
             return String(localized: "Requires Live Sessions to be enabled in Settings.")
         case .keyMetrics:
+            if redesign { return String(localized: "\(keyMetricCount) shown · readings with a trend line") }
             return String(localized: "\(keyMetricCount) metrics shown")
         case .yourCards:
+            if redesign { return String(localized: "\(dashboardCardCount) shown · metrics and shortcuts you pick") }
             return String(localized: "\(dashboardCardCount) cards shown")
         case .addedCards:
+            if redesign {
+                return hostedCardCount == 0
+                    ? String(localized: "None added yet · full cards from Sleep, Trends and Stress")
+                    : String(localized: "\(hostedCardCount) added · full cards from Sleep, Trends and Stress")
+            }
             return hostedCardCount == 0
                 ? String(localized: "None added yet")
                 : String(localized: "\(hostedCardCount) added")
@@ -461,25 +523,107 @@ private struct KeyMetricsCustomizationPage: View {
 private struct DashboardCardsCustomizationPage: View {
     @Binding var draft: EditableLayoutDraft<DashboardCard>
     let onReset: () -> Void
+    var redesign: Bool = false
+    var visibleKeyMetrics: [KeyMetric]? = nil
+    var hydrationEnabled: Bool = false
+    var coachEnabled: Bool = true
+    var sectionDraft = EditableLayoutDraft(visible: TodaySection.defaultOrder, allItems: TodaySection.defaultOrder)
+    var onShow: () -> Void = {}
+    var onChangePosition: () -> Void = {}
 
     var body: some View {
         EditableLayoutList(
             draft: $draft,
             shownTitle: String(localized: "Shown"),
             hiddenTitle: String(localized: "Hidden"),
-            title: \.title,
-            subtitle: \.subtitle,
+            title: { redesign ? TodayCardResolver.cardTitle($0) : $0.title },
+            subtitle: subtitle,
             icon: \.icon,
             tint: \.customizationTint,
             configurationLabel: { _ in nil },
             onConfigure: { _ in },
-            onReset: onReset
+            onReset: onReset,
+            header: hiddenSectionBanner,
+            extraFooter: positionFooter,
+            subtitleTint: gateTint,
+            wrapsSubtitles: redesign,
+            group: redesign ? { $0.isShortcut ? String(localized: "Shortcuts") : String(localized: "Metrics") } : nil
         ) {
             EmptyView()
         }
         .navigationTitle(String(localized: "Your cards"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+
+    private func note(for card: DashboardCard) -> TodayCardsEditorPresentation.Note {
+        TodayCardsEditorPresentation.note(for: card, visibleKeyMetrics: visibleKeyMetrics,
+                                          hydrationEnabled: hydrationEnabled, coachEnabled: coachEnabled)
+    }
+
+    private func subtitle(for card: DashboardCard) -> String? {
+        guard redesign else { return card.subtitle }
+        switch note(for: card) {
+        case .hydrationOff: return String(localized: "Hidden while Hydration is off")
+        case .coachOff: return String(localized: "Hidden while Coach is off")
+        case .duplicate: return String(localized: "Also in Key metrics")
+        case .coupledShortcut: return String(localized: "Shortcut · opens Coupled view")
+        case .coachShortcut: return String(localized: "Shortcut · opens Coach")
+        case .description: return card.subtitle
+        }
+    }
+
+    private func gateTint(for card: DashboardCard) -> Color? {
+        #if os(iOS)
+        return redesign && note(for: card).isGate ? NoopTheme.recoveryMid : nil
+        #else
+        return nil
+        #endif
+    }
+
+    private var hiddenSectionBanner: AnyView? {
+        #if os(iOS)
+        guard redesign, TodayCardsEditorPresentation.position(in: sectionDraft) == .hidden else { return nil }
+        return AnyView(Section {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                Text("Hidden on Today").noopFont(.listTitle)
+                Text("Your choices here are saved, but the section stays hidden until you show it.")
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Show", action: onShow)
+                    .noopFont(.pill, color: false)
+                    .foregroundStyle(NoopTheme.strain)
+                    .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+            }
+            .listRowBackground(NoopTheme.card)
+        })
+        #else
+        return nil
+        #endif
+    }
+
+    private var positionFooter: AnyView? {
+        #if os(iOS)
+        guard redesign else { return nil }
+        let position = TodayCardsEditorPresentation.position(in: sectionDraft)
+        return AnyView(VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+            Group {
+                switch position {
+                case .hidden: EmptyView()
+                case .first: Text("Shown first on Today.")
+                case .after(let section): Text("Shown on Today after \(section.title).")
+                }
+            }
+            .noopFont(.footnote)
+            .fixedSize(horizontal: false, vertical: true)
+            Button("Change position", action: onChangePosition)
+                .noopFont(.footnote, color: false)
+                .foregroundStyle(NoopTheme.strain)
+                .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+        })
+        #else
+        return nil
         #endif
     }
 }
@@ -503,7 +647,7 @@ private struct HostedCardsCustomizationPage: View {
             configurationLabel: { _ in nil },
             onConfigure: { _ in },
             onReset: onReset,
-            allowEmpty: true,   // hosting is opt-in: the last card can be un-hosted (Shown may be empty)
+            allowEmpty: true,   // hosted cards are opt-in; the legacy draft retains one item.
             group: { $0.origin }   // group the Available list by origin tab ("Sleep", "Trends")
         ) {
             EmptyView()
