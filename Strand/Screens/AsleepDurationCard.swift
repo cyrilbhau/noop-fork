@@ -48,7 +48,20 @@ struct AsleepDurationData {
 struct AsleepDurationCard: View {
     let data: AsleepDurationData
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @State private var selectedNight: Double?
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled { redesignedCard } else { classicCard }
+        #else
+        classicCard
+        #endif
+    }
+
+    @ViewBuilder private var classicCard: some View {
         let pts = data.points
         let avg = data.typicalTotalMin.map { $0 / 60.0 }
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
@@ -86,6 +99,48 @@ struct AsleepDurationCard: View {
             )
         }
     }
+
+    #if os(iOS)
+    private var redesignedCard: some View {
+        let pts = data.points
+        let avg = data.typicalTotalMin.map { $0 / 60.0 }
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Asleep duration")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    Text("Per night, trailing 30 days").noopFont(.footnote)
+                    if pts.count >= 2 {
+                        NoopLineChart(
+                            points: pts.map { NoopChartPoint(date: $0.date, y: $0.value) },
+                            color: NoopTheme.sleep,
+                            typicalRange: Self.trendRange(pts),
+                            xLabels: [pts.first, pts.last].compactMap { $0?.date.formatted(.dateTime.month(.abbreviated).day()) },
+                            selection: $selectedNight,
+                            selectionLabel: { String(format: "%.1f h", $0.y) },
+                            accessibilityLabel: Text("Hours asleep trend"),
+                            valueFormat: { String(format: "%.1f h", $0) }
+                        )
+                        .frame(height: NoopTheme.Layout.tileMinHeight)
+                    } else {
+                        Text("Not enough nights yet.")
+                            .noopFont(.bodySmall)
+                            .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.tileMinHeight)
+                    }
+                    StatGrid([
+                        StatGridItem("Avg", value: avg.map { String(format: "%.1f h", $0) }),
+                        StatGridItem("Min", value: pts.map(\.value).min().map { String(format: "%.1f h", $0) }),
+                        StatGridItem("Max", value: pts.map(\.value).max().map { String(format: "%.1f h", $0) }),
+                        StatGridItem("Nights", value: "\(pts.count)"),
+                        StatGridItem("Trend", value: Self.durationTrendChange(pts).map {
+                            let sign = $0 >= 0 ? "+" : "−"
+                            return "\(sign)\(String(format: "%.1f h", abs($0)))"
+                        }),
+                    ])
+                }
+            }
+        }
+    }
+    #endif
 
     /// A padded value range so the line isn't flat against the axis (verbatim of `SleepView.trendRange`).
     private static func trendRange(_ pts: [TrendPoint]) -> ClosedRange<Double> {

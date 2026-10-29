@@ -16,7 +16,19 @@ import WhoopStore
 struct StagesVsTypicalCard: View {
     let model: SleepModel
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled { redesignedCard } else { classicCard }
+        #else
+        classicCard
+        #endif
+    }
+
+    @ViewBuilder private var classicCard: some View {
         let s = model.night.stages
         // Per-stage typical means are computed ONCE in the model build (each a full pass
         // over repo.days) and read here.
@@ -33,6 +45,74 @@ struct StagesVsTypicalCard: View {
             }
         }
     }
+
+    #if os(iOS)
+    private var redesignedCard: some View {
+        let stages = model.night.stages
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Stages vs typical")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xl) {
+                    Text("Last night").noopFont(.footnote)
+                    redesignedStageRow(label: String(localized: "Deep"), last: stages.deep,
+                                       typical: model.typicalDeepMin, total: stages.total, color: NoopTheme.stageDeep)
+                    redesignedStageRow(label: String(localized: "REM"), last: stages.rem,
+                                       typical: model.typicalRemMin, total: stages.total, color: NoopTheme.stageREM)
+                    redesignedStageRow(label: String(localized: "Light"), last: stages.light,
+                                       typical: model.typicalLightMin, total: stages.total, color: NoopTheme.stageLight)
+                }
+            }
+        }
+    }
+
+    private func redesignedStageRow(label: String, last: Double, typical: Double?, total: Double, color: Color) -> some View {
+        let hasNight = total > 0
+        let scale = max(max(last, typical ?? 0) * 1.18, 1)
+        let share = hasNight ? Int((last / total * 100).rounded()) : nil
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.s) {
+                    Text(label).noopFont(.rowTitle)
+                    if let share { Text("\(share)%").noopFont(.footnote) }
+                    Spacer(minLength: NoopTheme.Layout.s)
+                    Text(hasNight ? durationText(last) : "—").noopFont(.rowNumber)
+                }
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text(label).noopFont(.rowTitle)
+                    Text(hasNight ? durationText(last) : "—").noopFont(.rowNumber)
+                    if let share { Text("\(share)%").noopFont(.footnote) }
+                }
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(NoopTheme.track)
+                    if hasNight {
+                        Capsule().fill(color.gradient)
+                            .frame(width: geo.size.width * min(max(last / scale, 0), 1))
+                    }
+                    if let typical, typical > 0 {
+                        Capsule().fill(NoopTheme.textSecondary)
+                            .frame(width: 2, height: NoopTheme.Layout.l)
+                            .position(x: geo.size.width * min(typical / scale, 1), y: NoopTheme.Layout.xs)
+                    }
+                }
+            }
+            .frame(height: NoopTheme.Layout.s)
+            .accessibilityHidden(true)
+            if let typical, typical > 0, hasNight {
+                let diff = last - typical
+                let sign = diff >= 0 ? "+" : "−"
+                Text(String(localized: "\(sign)\(durationText(abs(diff))) vs typ"))
+                    .noopFont(.footnote)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(hasNight
+            ? stageRowAccessibilityLabel(label: label, last: last, sharePct: share ?? 0, typical: typical)
+            : label))
+        .accessibilityValue(Text(verbatim: hasNight ? "" : "—"))
+    }
+    #endif
 
     /// One stage row, WHOOP sleep-detail style: a colour swatch + UPPERCASE stage + the share-of-night %
     /// (in the stage colour), then a bar that reads "solid = you, hatch = the context" — a diagonal-hatch

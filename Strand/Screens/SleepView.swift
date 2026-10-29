@@ -2552,10 +2552,21 @@ extension SleepView {
         }
     }
 
-    private func redesignWeekStrip(selectedDay: String?) -> some View {
-        HStack(spacing: NoopTheme.Layout.xs) {
-            ForEach(stripNights()) { night in
-                stripCell(night, selected: night.id == selectedDay)
+    @ViewBuilder private func redesignWeekStrip(selectedDay: String?) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            ScrollView(.horizontal) {
+                HStack(spacing: NoopTheme.Layout.s) {
+                    ForEach(stripNights()) { night in
+                        stripCell(night, selected: night.id == selectedDay)
+                            .frame(minWidth: NoopTheme.Layout.minTouchTarget * 2)
+                    }
+                }
+            }
+        } else {
+            HStack(spacing: NoopTheme.Layout.xs) {
+                ForEach(stripNights()) { night in
+                    stripCell(night, selected: night.id == selectedDay)
+                }
             }
         }
     }
@@ -3599,12 +3610,27 @@ struct SleepMarkCard: View {
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var live: LiveState
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     /// The most recent sleep-mark the user tapped, shown as a transient confirmation line under the
     /// two buttons. Drives the SwiftUI haptic landing too. LOGGING-ONLY: a mark never feeds the sleep
     /// detector — it's persisted to the metric series + strap log. (#461)
     @State private var lastMark: SleepMark?
 
     var body: some View {
+        Group {
+            #if os(iOS)
+            if redesignEnabled { redesignedCard } else { classicCard }
+            #else
+            classicCard
+            #endif
+        }
+        .strandHaptic(.success, trigger: lastMark?.tsMs ?? 0)
+    }
+
+    private var classicCard: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Sleep marks", overline: "Tap to log")
             NoopCard(tint: StrandPalette.restColor) {
@@ -3634,10 +3660,39 @@ struct SleepMarkCard: View {
                 }
             }
         }
-        // A success haptic lands when a new mark is captured (value-driven, not per-tap), matching the
-        // app's sparse tactile vocabulary. No-op on macOS.
-        .strandHaptic(.success, trigger: lastMark?.tsMs ?? 0)
     }
+
+    #if os(iOS)
+    private var redesignedCard: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Sleep marks")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    Text("Tap when you're heading to bed or when you wake. Each tap is logged with the time. It doesn't change tonight's detected sleep.")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button { logMark(.bedtime) } label: {
+                        Label("Going to sleep", systemImage: "moon.zzz.fill")
+                    }
+                    .buttonStyle(NoopSecondaryButton())
+                    .accessibilityLabel("Log going to sleep")
+                    Button { logMark(.wake) } label: {
+                        Label("I'm awake", systemImage: "sun.max.fill")
+                    }
+                    .buttonStyle(NoopSecondaryButton())
+                    .accessibilityLabel("Log waking up")
+                    if let lastMark {
+                        Text(lastMark.confirmation)
+                            .noopFont(.footnote, color: false)
+                            .foregroundStyle(NoopTheme.sleep)
+                            .transition(.opacity)
+                            .accessibilityLabel(lastMark.confirmation)
+                    }
+                }
+            }
+        }
+    }
+    #endif
 
     /// Persist + log a tapped mark. Optimistically shows the confirmation immediately, fires the
     /// haptic via `lastMark`, appends the human-readable strap-log line, then writes the metric-series

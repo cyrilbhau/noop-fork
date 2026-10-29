@@ -22,9 +22,21 @@ struct BodyClockDialCard: View {
     let actualBedHour: Double
     let actualWakeHour: Double
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
+    private var usesRedesign: Bool {
+        #if os(iOS)
+        redesignEnabled
+        #else
+        false
+        #endif
+    }
+
     // One hue for both arcs, told apart by dash and weight rather than by a second colour. Two blues
     // competed with the background image; a single legible one plus a dashed, lighter reference does not.
-    private var hue: Color { StrandPalette.restLine }
+    private var hue: Color { usesRedesign ? NoopTheme.sleep : StrandPalette.restLine }
 
     /// The night's length, taken the long way round the clock when it crosses midnight.
     private var durationHours: Double {
@@ -42,6 +54,14 @@ struct BodyClockDialCard: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled { redesignedCard } else { classicCard }
+        #else
+        classicCard
+        #endif
+    }
+
+    @ViewBuilder private var classicCard: some View {
         // `ideal` is nil exactly when the night's length is non-positive or a full day — the same input
         // that makes `sweep` wrap to 24 h and draw the actual arc as a complete ring. Rendering a full
         // circle with no ideal arc beside it would state something false about the night, so the card
@@ -71,6 +91,37 @@ struct BodyClockDialCard: View {
             .accessibilityElement(children: .contain)
         }
     }
+
+    #if os(iOS)
+    @ViewBuilder private var redesignedCard: some View {
+        if ideal != nil {
+            VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                NoopSectionHeader("Body clock")
+                NoopGlassCard {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                        Text("Last night against your clock").noopFont(.footnote)
+                        dial
+                            .frame(maxWidth: .infinity)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(Text("Body clock dial"))
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                            legendItem(colour: hue, dashed: false, label: String(localized: "Last night"))
+                            legendItem(colour: hue.opacity(0.55), dashed: true, label: String(localized: "Your clock"))
+                        }
+                        .accessibilityHidden(true)
+                        Text(alignmentText)
+                            .noopFont(.sectionTitle)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let chronotype = CircadianEngine.chronotype(estimate) {
+                            Text(chronotypeText(chronotype)).noopFont(.footnote)
+                        }
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+    #endif
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -164,11 +215,11 @@ struct BodyClockDialCard: View {
     private func drawTrack(_ ctx: GraphicsContext, _ g: DialGeometry) {
         let trackRect = CGRect(x: g.centre.x - g.night, y: g.centre.y - g.night,
                                width: g.night * 2, height: g.night * 2)
-        ctx.stroke(Path(ellipseIn: trackRect), with: .color(StrandPalette.surfaceInset),
+        ctx.stroke(Path(ellipseIn: trackRect), with: .color(usesRedesign ? NoopTheme.track : StrandPalette.surfaceInset),
                    style: StrokeStyle(lineWidth: 9, lineCap: .round))
         let rimRect = CGRect(x: g.centre.x - g.outer, y: g.centre.y - g.outer,
                              width: g.outer * 2, height: g.outer * 2)
-        ctx.stroke(Path(ellipseIn: rimRect), with: .color(StrandPalette.hairline), lineWidth: 1)
+        ctx.stroke(Path(ellipseIn: rimRect), with: .color(usesRedesign ? NoopTheme.separator : StrandPalette.hairline), lineWidth: 1)
     }
 
     /// Six-hourly ticks, with MIDNIGHT drawn longer and brighter. Four identical marks at 90 degrees
@@ -186,8 +237,9 @@ struct BodyClockDialCard: View {
             p.move(to: CGPoint(x: g.centre.x + cosA * (g.outer - len),
                                y: g.centre.y + sinA * (g.outer - len)))
             p.addLine(to: CGPoint(x: g.centre.x + cosA * g.outer, y: g.centre.y + sinA * g.outer))
-            let tint: Color = isMidnight ? StrandPalette.textSecondary
-                                         : StrandPalette.textTertiary.opacity(0.5)
+            let secondary = usesRedesign ? NoopTheme.textSecondary : StrandPalette.textSecondary
+            let tertiary = usesRedesign ? NoopTheme.textTertiary : StrandPalette.textTertiary.opacity(0.5)
+            let tint: Color = isMidnight ? secondary : tertiary
             ctx.stroke(p, with: .color(tint), lineWidth: isMidnight ? 1.5 : 1)
         }
     }
@@ -214,9 +266,12 @@ struct BodyClockDialCard: View {
             // target is macOS 13, so there the expression is a `View` and `resolve` has no matching
             // overload. The iOS leg compiled it happily on its iOS 17 floor, which is why only the macOS
             // leg caught it, and why `swiftc -parse` could not: it never resolves a symbol.
-            var numeral = ctx.resolve(
-                Text(String(format: "%02d", Int(hour))).font(.system(size: 10, design: .rounded)))
-            numeral.shading = .color(StrandPalette.textTertiary)
+            let label = Text(String(format: "%02d", Int(hour)))
+            let numeralText = usesRedesign
+                ? label.font(NoopType.ringLabelFont(diameter: 40))
+                : label.font(.system(size: 10, design: .rounded))
+            var numeral = ctx.resolve(numeralText)
+            numeral.shading = .color(usesRedesign ? NoopTheme.textTertiary : StrandPalette.textTertiary)
             ctx.draw(numeral, at: CGPoint(x: x, y: y), anchor: .center)
         }
     }
@@ -295,9 +350,13 @@ struct BodyClockDialCard: View {
                                               dash: dashed ? [2, 3] : []))
             }
             .frame(width: 18, height: 4)
-            Text(label)
-                .font(StrandFont.footnote)
-                .foregroundStyle(StrandPalette.textTertiary)
+            if usesRedesign {
+                Text(label).noopFont(.footnote)
+            } else {
+                Text(label)
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+            }
         }
     }
 

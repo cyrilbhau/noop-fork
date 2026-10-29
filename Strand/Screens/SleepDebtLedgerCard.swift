@@ -19,7 +19,19 @@ import WhoopStore
 struct SleepDebtLedgerCard: View {
     let model: SleepModel
 
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
     var body: some View {
+        #if os(iOS)
+        if redesignEnabled { redesignedCard } else { classicCard }
+        #else
+        classicCard
+        #endif
+    }
+
+    @ViewBuilder private var classicCard: some View {
         let ledger = model.sleepDebtLedger
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Sleep-debt ledger", overline: "Last 14 nights")
@@ -66,6 +78,73 @@ struct SleepDebtLedgerCard: View {
             }
         }
     }
+
+    #if os(iOS)
+    private var redesignedCard: some View {
+        let ledger = model.sleepDebtLedger
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            NoopSectionHeader("Sleep-debt ledger")
+            NoopGlassCard {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+                    Text("Last 14 nights").noopFont(.footnote)
+                    if ledger.nightCount == 0 {
+                        Text("No nights with sleep data yet. Your ledger fills in as you wear the strap to bed.")
+                            .noopFont(.bodySmall)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                            Text(debtHeadline(forMagnitudeMin: ledger.magnitudeMin, ledger: ledger))
+                                .noopFont(.bigNumber, color: false)
+                                .foregroundStyle(redesignedBalanceColor(ledger))
+                            Text(debtTag(ledger))
+                                .noopFont(.bodySmall, color: false)
+                                .foregroundStyle(redesignedBalanceColor(ledger))
+                        }
+                        Text(debtRead(ledger))
+                            .noopFont(.bodySmall)
+                            .fixedSize(horizontal: false, vertical: true)
+                        redesignedDeltaBars(ledger)
+                        StatGrid([
+                            StatGridItem("Balance", value: debtSigned(ledger.balanceMin)),
+                            StatGridItem("Per-night need", value: durationText(ledger.needMin)),
+                            StatGridItem("Nights", value: "\(ledger.nightCount)"),
+                        ])
+                    }
+                }
+            }
+        }
+    }
+
+    private func redesignedBalanceColor(_ ledger: SleepDebtLedger) -> Color {
+        if ledger.magnitudeMin < SleepDebt.onTargetBandMin || !ledger.isDebt { return NoopTheme.recovery }
+        return ledger.magnitudeMin < 180 ? NoopTheme.recoveryMid : NoopTheme.recoveryLow
+    }
+
+    private func redesignedDeltaBars(_ ledger: SleepDebtLedger) -> some View {
+        let deltas = ledger.nights.map(\.deltaMin)
+        let scale = max(deltas.map { abs($0) }.max() ?? 1, 1)
+        return GeometryReader { geo in
+            let slot = geo.size.width / CGFloat(max(deltas.count, 1))
+            let midY = geo.size.height / 2
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(deltas.enumerated()), id: \.offset) { index, delta in
+                    // A real zero has no bar; an absent night is never added to this series.
+                    if delta != 0 {
+                        let height = CGFloat(abs(delta) / scale) * (midY - NoopTheme.Layout.xs)
+                        Capsule()
+                            .fill((delta >= 0 ? NoopTheme.sleep : NoopTheme.recoveryLow).gradient)
+                            .frame(width: slot * 0.6, height: height)
+                            .position(x: slot * (CGFloat(index) + 0.5),
+                                      y: delta >= 0 ? midY - height / 2 : midY + height / 2)
+                    }
+                }
+            }
+        }
+        .frame(height: NoopTheme.Layout.tileMinHeight / 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Per-night sleep balance: \(ledger.nightCount) nights, net \(debtSigned(ledger.balanceMin))")
+    }
+    #endif
 
     /// The diverging per-night delta strip: each night a bar from the centre line — up
     /// (accent) for a surplus, down (rose) for a deficit — scaled to the largest |delta|.
