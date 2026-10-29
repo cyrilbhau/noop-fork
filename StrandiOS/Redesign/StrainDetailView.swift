@@ -277,14 +277,8 @@ private struct StrainWorkoutRow: View {
     let scale: EffortScale
     let showsDivider: Bool
 
-    private var sourceLabel: String? {
-        switch WorkoutSource.classify(row.source) {
-        case .apple: return String(localized: "Apple Health · summary only")
-        case .lifting: return String(localized: "Lift log · full sets")
-        case .whoop: return String(localized: "WHOOP import")
-        case .detected, .manual, .activityFile: return nil
-        }
-    }
+    /// The same resolver Today and the Training hub use, so one workout carries one label everywhere.
+    private var sourceLabel: String? { TrainingProvenance.forWorkout(row).label }
 
     private var detail: String {
         let seconds = row.durationS ?? Double(max(0, row.endTs - row.startTs))

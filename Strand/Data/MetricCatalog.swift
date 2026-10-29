@@ -279,6 +279,29 @@ enum MetricCatalog {
         }
     }
 
+    /// How a metric is measured, for the metric detail's About card (iPhone redesign A3). Only the vitals
+    /// whose method is settled in the analytics code carry one; every other metric falls back to its
+    /// `description`, or to its source line alone. Never claims more than the pipeline does.
+    static func howMeasured(key: String, source: String) -> String? {
+        guard source == "my-whoop" else { return nil }
+        switch key {
+        case "hrv":
+            return String(localized: "Heart rate variability is the beat-to-beat change in timing between heartbeats. NOOP averages RMSSD over clean 5-minute windows of R-R intervals across your sleep. Nights imported from WHOOP keep WHOOP's own value.")
+        case "rhr":
+            return String(localized: "The lowest sustained heart rate NOOP sees while you sleep. Nights imported from WHOOP keep WHOOP's own value.")
+        case "resp_rate":
+            return String(localized: "Breaths per minute while you sleep, estimated from your strap's overnight signals. Nights imported from WHOOP keep WHOOP's own value.")
+        case "skin_temp":
+            return String(localized: "Shown as the difference from your own baseline, not as an absolute temperature. NOOP needs about 4 worn nights before the difference appears.")
+        case "spo2":
+            return String(localized: "Blood oxygen saturation. WHOOP 4.0 does not report it offline, so values here come from a WHOOP export, Apple Health or, if you turned it on, the experimental strap estimate.")
+        case "fitness_age":
+            return String(localized: "A weekly fitness comparison against an average peer your age, built from published methods (Nes/HUNT). Not a biological or medical age.")
+        default:
+            return nil
+        }
+    }
+
     private static func d(_ key: String, _ title: String, _ category: String, _ unit: String,
                           _ source: String, _ icon: String, _ decimals: Int,
                           _ higherIsBetter: Bool?, _ description: String? = nil) -> MetricDescriptor {

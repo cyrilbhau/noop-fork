@@ -719,8 +719,9 @@ struct RedesignTodayView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// "6:40 PM · 52 min · Apple Health · Summary only". The source names where the row came from, and
-    /// summary vs full-set detail is said outright so a Health summary never reads as a full lift log.
+    /// "6:40 PM · 52 min · Apple Health · summary only". The source label is `TrainingProvenance`'s, the one
+    /// resolver the Training hub and Strain detail also use, so one workout reads the same everywhere and a
+    /// Health summary never reads as a full lift log.
     private func workoutSubtitle(_ w: WorkoutRow) -> String {
         var parts: [String] = []
         parts.append(Date(timeIntervalSince1970: TimeInterval(w.startTs))
@@ -730,14 +731,7 @@ struct RedesignTodayView: View {
         if let dm = w.distanceM, dm > 0 {
             parts.append(UnitFormatter.distanceFromMeters(dm, system: distanceUnitSystem))
         }
-        switch WorkoutSource.classify(w.source) {
-        case .apple: parts.append("Apple Health"); parts.append(String(localized: "Summary only"))
-        case .lifting: parts.append(String(localized: "Lifting")); parts.append(String(localized: "Full sets"))
-        case .whoop: parts.append(String(localized: "Whoop"))
-        case .manual: parts.append(String(localized: "Manual"))
-        case .detected: parts.append(String(localized: "Detected"))
-        case .activityFile: parts.append(String(localized: "File"))
-        }
+        parts.append(TrainingProvenance.forWorkout(w).label)
         return parts.joined(separator: " · ")
     }
 
