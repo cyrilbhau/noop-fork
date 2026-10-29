@@ -1,11 +1,16 @@
-// Repairs html_to_figma import faults on the round-3 frames, using geometry only (the importer's
-// layer names are generic). Safe to re-run: a ring that already fits its frame is left alone.
+// Local development plugin for the NOOP redesign file (import with Plugins > Development > Import plugin
+// from manifest). It works without the Figma MCP, which the Starter plan rate-limits.
 //
-// Rings are SVGs with a 0–100 viewBox. The importer places each SVG frame correctly but draws its
-// contents in viewBox units, so a 230px ring renders ~100px in a corner and a 46px ring overflows
-// and clips. Map the contents back into the frame: scale by frame/viewBox and centre, treating any
-// label text the same way as the arcs.
-(async () => {
+//  import  Builds frames from design/round4 via the local preview server: the page's
+//          exportSvgFrames() writes export/r4-frames.json, the hidden UI fetches it, and each frame is
+//          created with createNodeFromSvg on the "Round 4 · System surfaces" page (replacing same-named
+//          frames, so it is safe to re-run).
+//  repair  Fixes html_to_figma ring imports (see repairRings). Safe to re-run.
+
+// html_to_figma draws an SVG ring's contents in viewBox units, so a 230px ring renders ~100px in a
+// corner and a 46px ring overflows. Scale the contents back into the frame and centre them; a ring
+// that already fits is left alone.
+async function repairRings() {
   let fixed = 0;
   for (const page of figma.root.children) {
     await page.loadAsync();
@@ -38,5 +43,80 @@
       fixed++;
     }
   }
-  figma.closePlugin(`Rescaled ${fixed} rings`);
-})().catch(e => figma.closePlugin(`Error: ${e.message}`));
+  return `Rescaled ${fixed} rings`;
+}
+
+const PAGE = 'Round 4 · System surfaces';
+
+async function importFrames(json) {
+  const frames = JSON.parse(json);
+  const fonts = await figma.listAvailableFontsAsync();
+  const families = new Set(fonts.map(f => f.fontName.family));
+  // A family can be listed yet not lay out (e.g. a system font Figma cannot render): probe each candidate.
+  let family = 'Inter';
+  for (const cand of ['SF Pro Display', 'SF Pro', 'SF Pro Text', 'Inter']) {
+    if (!families.has(cand)) continue;
+    const style = fonts.find(f => f.fontName.family === cand && f.fontName.style === 'Regular') ? 'Regular' : fonts.find(f => f.fontName.family === cand).fontName.style;
+    try {
+      await figma.loadFontAsync({ family: cand, style });
+      const probe = figma.createText(); probe.fontName = { family: cand, style }; probe.characters = 'Probe 68%';
+      const ok = probe.width > 1; probe.remove();
+      if (ok) { family = cand; break; }
+    } catch (e) { /* try the next family */ }
+  }
+  const styles = fonts.filter(f => f.fontName.family === family).map(f => f.fontName.style);
+  for (const style of styles) await figma.loadFontAsync({ family, style });
+  // CSS weight -> the family's style name, falling back to the nearest one it has.
+  const NAMES = { 100: 'Ultralight', 200: 'Thin', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semibold', 700: 'Bold', 800: 'Heavy', 900: 'Black' };
+  const styleFor = w => {
+    const want = Math.round((w || 400) / 100) * 100;
+    for (const d of [0, 100, -100, 200, -200, 300]) { const n = NAMES[want + d]; if (n && styles.includes(n)) return n; }
+    return styles.includes('Regular') ? 'Regular' : styles[0];
+  };
+  const paint = c => {
+    const m = /rgba?\(([^)]+)\)/.exec(c);
+    if (m) { const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { color: { r: p[0] / 255, g: p[1] / 255, b: p[2] / 255 }, opacity: p.length > 3 ? p[3] : 1 }; }
+    const h = c.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map(x => x + x).join('') : h.slice(0, 6), 16);
+    return { color: { r: (n >> 16 & 255) / 255, g: (n >> 8 & 255) / 255, b: (n & 255) / 255 }, opacity: 1 };
+  };
+
+  let page = figma.root.children.find(p => p.name === PAGE);
+  if (!page) { page = figma.createPage(); page.name = PAGE; }
+  await page.loadAsync();
+  let x = 0;
+  for (const f of frames) {
+    for (const old of page.children.filter(n => n.name === f.name)) old.remove();
+    const svg = f.svg.replace(/font-family="[^"]*"/g, `font-family="${family}"`);
+    const node = figma.createNodeFromSvg(svg);
+    node.name = f.name;
+    page.appendChild(node);
+    node.x = x; node.y = 0;
+    // Figma's SVG importer drops <text>, so text arrives as positioned items and becomes real layers.
+    for (const t of f.texts || []) {
+      if (!t.s) continue;
+      const tx = figma.createText();
+      tx.fontName = { family, style: styleFor(t.weight) };
+      tx.characters = t.s;
+      tx.fontSize = t.size;
+      if (t.ls) tx.letterSpacing = { unit: 'PIXELS', value: t.ls };
+      const p = paint(t.color);
+      tx.fills = [{ type: 'SOLID', color: p.color, opacity: p.opacity }];
+      if (t.o < 1) tx.opacity = t.o;
+      node.appendChild(tx);
+      tx.x = t.x;
+      tx.y = t.y + (t.h - tx.height) / 2;
+    }
+    x += node.width + 80;
+  }
+  return `Imported ${frames.length} frames in ${family}`;
+}
+
+if (figma.command === 'repair') {
+  repairRings().then(m => figma.closePlugin(m), e => figma.closePlugin(`Error: ${e.message}`));
+} else {
+  figma.showUI(__html__, { visible: false });
+  figma.ui.onmessage = msg => {
+    if (msg.type === 'frames') importFrames(msg.json).then(m => figma.closePlugin(m), e => figma.closePlugin(`Error: ${e.message}`));
+    else figma.closePlugin(`Could not reach the preview server: ${msg.message}`);
+  };
+}

@@ -93,8 +93,8 @@ function ring(host){const d=host.dataset,s=+d.size,sw=+(d.sw||7),c=C(d.c||'--t1'
   if(d.empty!==undefined){el('circle',{cx:50,cy:50,r,fill:'none',stroke:'#FFFFFF','stroke-opacity':.22,'stroke-width':sw*.45,'stroke-dasharray':'3 5'},svg)}
   else{el('circle',{cx:50,cy:50,r,fill:'none',stroke:'#FFFFFF','stroke-opacity':.08,'stroke-width':sw},svg);
     el('circle',{class:'prog',cx:50,cy:50,r,fill:'none',stroke:c,'stroke-width':sw,'stroke-linecap':'round',pathLength:100,'stroke-dasharray':`${p} 100`,transform:'rotate(-90 50 50)','data-p':p},svg)}
-  if(d.label!==undefined&&d.label!==''){const t=el('text',{x:50,y:50+(+d.fs||24)*.36,'text-anchor':'middle',fill:d.empty!==undefined?'#5F5F67':'#F5F5F7','font-size':d.fs||24,'font-weight':600,'font-family':'-apple-system,system-ui'},svg);
-    t.textContent=d.label;if(d.unit){const u=el('tspan',{'font-size':13,fill:'#9B9BA3'},t);u.textContent=d.unit}}
+  if(d.label!==undefined&&d.label!==''){const t=el('text',{x:50,y:50+(+d.fs||24)*.36,'text-anchor':'middle',fill:d.empty!==undefined?'#5F5F67':'#F5F5F7','font-size':d.fs||24,'font-weight':d.fw||600,'font-family':'-apple-system,system-ui'},svg);
+    t.textContent=d.label;if(d.unit){const u=el('tspan',{'font-size':d.ufs||13,fill:'#9B9BA3','font-weight':400},t);u.textContent=d.unit}}
   if(d.icon){const g=el('g',{transform:'translate(36 36) scale(1.17)',color:c},svg);g.innerHTML=ICONS[d.icon].replace(/<\/?symbol[^>]*>/g,'').replace(/currentColor/g,c)}
   svg.setAttribute('style',host.getAttribute('style')||'');host.replaceWith(svg);return svg}
 
@@ -230,4 +230,84 @@ async function exportForFigma(name){
   const html='<!doctype html>'+document.documentElement.outerHTML;
   const n=await fetch('/save?name='+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':'text/plain'},body:html}).then(r=>r.text());
   return {bytes:n,screens:document.querySelectorAll('.screen').length,css};
+}
+
+/* ---------- Figma fallback: serialise rendered frames to SVG for a local plugin's createNodeFromSvg ---------- */
+// Used when the Figma MCP is unavailable. Walks each rendered .screen and emits shapes (rounded rects,
+// CSS gradients, borders, ::after knobs), text lines with their real positions, and inline SVGs mapped
+// into place with a transform (Figma's importer does not honour a nested SVG's viewBox).
+async function exportSvgFrames(name){
+  const cs0=getComputedStyle(document.documentElement);
+  const resolve=v=>v&&v.includes('var(')?v.replace(/var\((--[\w-]+)\)/g,(_,n)=>cs0.getPropertyValue(n).trim()):v;
+  document.querySelectorAll('svg use').forEach(u=>{const sym=document.getElementById((u.getAttribute('href')||'').slice(1)),svg=u.closest('svg');if(!sym||!svg)return;
+    if(!svg.getAttribute('viewBox'))svg.setAttribute('viewBox',sym.getAttribute('viewBox'));const color=getComputedStyle(svg).color;const frag=sym.cloneNode(true);
+    [...frag.querySelectorAll('*')].forEach(n=>['fill','stroke'].forEach(a=>{if(n.getAttribute(a)==='currentColor')n.setAttribute(a,color)}));u.replaceWith(...frag.childNodes)});
+  document.querySelectorAll('circle[pathLength]').forEach(c=>{const cx=+c.getAttribute('cx'),cy=+c.getAttribute('cy'),r=+c.getAttribute('r');
+    const p=parseFloat(c.dataset.p??(c.getAttribute('stroke-dasharray')||'100').split(/[ ,]+/)[0]);
+    const m=/rotate\(([-\d.]+)/.exec(c.getAttribute('transform')||'');const a0=(m?+m[1]:0)*Math.PI/180;
+    const sweep=Math.min(p,99.9)/100*2*Math.PI,a1=a0+sweep;const pt=a=>`${(cx+r*Math.cos(a)).toFixed(2)} ${(cy+r*Math.sin(a)).toFixed(2)}`;
+    const path=document.createElementNS(NS,'path');for(const at of c.attributes)if(!['cx','cy','r','pathLength','stroke-dasharray','transform','data-p','class'].includes(at.name))path.setAttribute(at.name,at.value);
+    path.setAttribute('d',`M ${pt(a0)} A ${r} ${r} 0 ${sweep>Math.PI?1:0} 1 ${pt(a1)}`);path.setAttribute('fill','none');c.replaceWith(path)});
+  document.querySelectorAll('svg *').forEach(n=>['fill','stroke'].forEach(a=>{const v=n.getAttribute(a);if(v&&v.includes('var('))n.setAttribute(a,resolve(v))}));
+
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const px=v=>parseFloat(v)||0;
+  const alpha=c=>{const m=/rgba?\(([^)]+)\)/.exec(c);if(!m)return c==='transparent'?0:1;const p=m[1].split(/[ ,\/]+/).filter(Boolean);return p.length>3?+p[3]:1};
+  const splitTop=s=>{const out=[];let d=0,cur='';for(const ch of s){if(ch==='(')d++;if(ch===')')d--;if(ch===','&&d===0){out.push(cur.trim());cur=''}else cur+=ch}if(cur.trim())out.push(cur.trim());return out};
+  const ctx=document.createElement('canvas').getContext('2d');
+  const out=[];
+  for(const screen of document.querySelectorAll('.screen')){
+    const R=screen.getBoundingClientRect(),W=Math.round(R.width),H=Math.round(R.height);
+    let defs='',body='',gid=0,groupOpacity=1;const T=[];
+    const rr=(x,y,w,h,r)=>{const m=Math.min(w,h)/2;const [a,b,c,d]=r.map(v=>Math.max(0,Math.min(v,m)));
+      return `M${x+a},${y}H${x+w-b}${b?`A${b},${b} 0 0 1 ${x+w},${y+b}`:''}V${y+h-c}${c?`A${c},${c} 0 0 1 ${x+w-c},${y+h}`:''}H${x+d}${d?`A${d},${d} 0 0 1 ${x},${y+h-d}`:''}V${y+a}${a?`A${a},${a} 0 0 1 ${x+a},${y}`:''}Z`};
+    const radii=(cs,w,h)=>['borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius'].map(k=>{const v=cs[k];return v.endsWith('%')?parseFloat(v)/100*Math.min(w,h):px(v)});
+    const stops=parts=>{const n=parts.length;return parts.map((p,i)=>{const m=/^(.*?\))\s*([\d.]+%)?$/.exec(p)||/^(\S+)\s*([\d.]+%)?$/.exec(p);const col=m?m[1]:p;const off=m&&m[2]?m[2]:`${(i/(n-1||1))*100}%`;
+      const a=alpha(col);const rgb=col.replace(/rgba\(([^,]+),([^,]+),([^,]+),[^)]+\)/,'rgb($1,$2,$3)');return `<stop offset="${off}" stop-color="${col==='transparent'?'#000':rgb}" stop-opacity="${col==='transparent'?0:a}"/>`}).join('')};
+    const gradient=g=>{const id=`f${out.length}g${gid++}`;let m;
+      if((m=/^linear-gradient\((.*)\)$/s.exec(g))){let p=splitTop(m[1]);let ang=180;if(/deg$/.test(p[0])){ang=parseFloat(p[0]);p=p.slice(1)}else if(/^to /.test(p[0])){ang={'to right':90,'to left':270,'to top':0,'to bottom':180}[p[0]]??180;p=p.slice(1)}
+        const r=ang*Math.PI/180,dx=Math.sin(r),dy=-Math.cos(r);defs+=`<linearGradient id="${id}" x1="${.5-dx/2}" y1="${.5-dy/2}" x2="${.5+dx/2}" y2="${.5+dy/2}">${stops(p)}</linearGradient>`;return id}
+      if((m=/^radial-gradient\((.*)\)$/s.exec(g))){let p=splitTop(m[1]);let cx=.5,cy=.5,rx=.71,ry=.71;
+        if(!/^rgb|^#|^transparent/.test(p[0])){const shape=p[0];const at=/at ([\d.]+)% ([\d.]+)%/.exec(shape);if(at){cx=+at[1]/100;cy=+at[2]/100}
+          const sz=/^([\d.]+)% ([\d.]+)%/.exec(shape);if(sz){rx=+sz[1]/100;ry=+sz[2]/100}p=p.slice(1)}
+        defs+=`<radialGradient id="${id}" cx="${cx}" cy="${cy}" r="${rx}" gradientTransform="translate(${cx} ${cy}) scale(1 ${ry/rx}) translate(${-cx} ${-cy})">${stops(p)}</radialGradient>`;return id}
+      return null};
+    const shape=(cs,x,y,w,h)=>{const d=rr(x,y,w,h,radii(cs,w,h));let s='';
+      if(alpha(cs.backgroundColor)>0)s+=`<path d="${d}" fill="${cs.backgroundColor}"/>`;
+      if(cs.backgroundImage&&cs.backgroundImage!=='none')for(const layer of splitTop(cs.backgroundImage).reverse()){const id=gradient(layer);if(id)s+=`<path d="${d}" fill="url(#${id})"/>`}
+      const bw=px(cs.borderTopWidth);if(bw>0&&alpha(cs.borderTopColor)>0&&cs.borderTopStyle!=='none'){const di=rr(x+bw/2,y+bw/2,w-bw,h-bw,radii(cs,w,h).map(v=>Math.max(0,v-bw/2)));
+        s+=`<path d="${di}" fill="none" stroke="${cs.borderTopColor}" stroke-width="${bw}"${cs.borderTopStyle==='dashed'?' stroke-dasharray="4 4"':''}/>`}
+      return s};
+    const textLines=(node,cs)=>{const t=node.textContent;const rg=document.createRange();const lines=[];let cur=null;
+      for(let i=0;i<t.length;i++){rg.setStart(node,i);rg.setEnd(node,i+1);const r=rg.getBoundingClientRect();if(!r.width&&/\s/.test(t[i]))continue;if(!r.height)continue;
+        const top=Math.round(r.top);if(!cur||Math.abs(cur.top-top)>2){cur={top,x:r.left,h:r.height,s:''};lines.push(cur)}cur.s+=t[i]}
+      ctx.font=`${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;const mt=ctx.measureText('Hg');const asc=mt.fontBoundingBoxAscent,des=mt.fontBoundingBoxDescent;
+      for(const l of lines)T.push({_owner:node.parentElement,_cx:l.x+2,_cy:l.top+l.h/2,x:+(l.x-R.left).toFixed(1),y:+(l.top-R.top).toFixed(1),h:+l.h.toFixed(1),size:px(cs.fontSize),weight:+cs.fontWeight,color:cs.color,ls:cs.letterSpacing==='normal'?0:px(cs.letterSpacing),s:l.s.replace(/\s+/g,' '),o:groupOpacity});
+      return ''};
+    const walk=el=>{const cs=getComputedStyle(el);if(cs.display==='none'||cs.visibility==='hidden'||+cs.opacity===0)return'';
+      const saved=groupOpacity;groupOpacity*=+cs.opacity;try{return walkInner(el,cs)}finally{groupOpacity=saved}};
+    const walkInner=(el,cs)=>{
+      const r=el.getBoundingClientRect(),x=r.left-R.left,y=r.top-R.top,w=r.width,h=r.height;
+      if(el.tagName.toLowerCase()==='svg'){const vb=(el.getAttribute('viewBox')||`0 0 ${el.getAttribute('width')||w} ${el.getAttribute('height')||h}`).split(/[ ,]+/).map(Number);
+        for(const t of el.querySelectorAll('text')){const fill=t.getAttribute('fill')||'#fff';const fw=+(t.getAttribute('font-weight')||400);const sc=h/vb[3];
+          const rg=document.createRange();const tn=[...t.childNodes].find(n=>n.nodeType===3&&n.textContent.trim());
+          if(tn){rg.selectNodeContents(tn);const r2=rg.getBoundingClientRect();T.push({_owner:el,_cx:r2.left+r2.width/2,_cy:r2.top+r2.height/2,x:+(r2.left-R.left).toFixed(1),y:+(r2.top-R.top).toFixed(1),h:+r2.height.toFixed(1),size:+(+t.getAttribute('font-size')*sc).toFixed(2),weight:fw,color:fill,ls:0,s:tn.textContent.trim(),o:groupOpacity})}
+          for(const sp of t.querySelectorAll('tspan')){const r3=sp.getBoundingClientRect();T.push({_owner:el,_cx:r3.left+r3.width/2,_cy:r3.top+r3.height/2,x:+(r3.left-R.left).toFixed(1),y:+(r3.top-R.top).toFixed(1),h:+r3.height.toFixed(1),size:+(+(sp.getAttribute('font-size')||t.getAttribute('font-size'))*sc).toFixed(2),weight:+(sp.getAttribute('font-weight')||fw),color:sp.getAttribute('fill')||fill,ls:0,s:sp.textContent.trim(),o:groupOpacity})}}
+        let inner='';for(const c of el.childNodes)if(c.nodeType===1&&c.tagName.toLowerCase()!=='text')inner+=c.outerHTML;
+        return `<g transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${(w/vb[2]).toFixed(4)} ${(h/vb[3]).toFixed(4)}) translate(${-vb[0]} ${-vb[1]})"${+cs.opacity<1?` opacity="${cs.opacity}"`:''}>${inner}</g>`}
+      let s=shape(cs,x,y,w,h);
+      const af=getComputedStyle(el,'::after');if(af.content&&af.content!=='none'&&af.position==='absolute'){const ax=x+px(af.left),ay=y+px(af.top),aw=px(af.width),ah=px(af.height);if(aw&&ah)s+=shape(af,ax,ay,aw,ah)}
+      let kids='';for(const c of el.childNodes){if(c.nodeType===3&&c.textContent.trim())kids+=textLines(c,cs);else if(c.nodeType===1)kids+=walk(c)}
+      if(cs.overflow==='hidden'&&kids){const id=`f${out.length}c${gid++}`;defs+=`<clipPath id="${id}"><path d="${rr(x,y,w,h,radii(cs,w,h))}"/></clipPath>`;kids=`<g clip-path="url(#${id})">${kids}</g>`}
+      s+=kids;return +cs.opacity<1?`<g opacity="${cs.opacity}">${s}</g>`:s};
+    let inner='';for(const c of screen.childNodes){if(c.nodeType===1)inner+=walk(c);else if(c.nodeType===3&&c.textContent.trim())inner+=textLines(c,getComputedStyle(screen))}
+    const scs=getComputedStyle(screen);const bg=shape(scs,0,0,W,H);
+    const title=screen.closest('section')?.querySelector('.board-title')?.textContent.trim()||`Frame ${out.length+1}`;
+    // Text is layered above every shape in the plugin, so drop lines that something painted later covers.
+    const visible=T.filter(t=>{const hit=document.elementFromPoint(t._cx,t._cy);return !hit||hit===t._owner||t._owner.contains(hit)||hit.contains(t._owner)}).map(({_owner,_cx,_cy,...rest})=>rest);
+    out.push({name:title,w:W,h:H,texts:visible,svg:`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs>${defs}</defs><g clip-path="url(#f${out.length}clip)">${bg}${inner}</g><clipPath id="f${out.length}clip"><rect width="${W}" height="${H}"/></clipPath></svg>`});
+  }
+  const json=JSON.stringify(out);
+  const n=await fetch('/save?name='+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':'text/plain'},body:json}).then(r=>r.text());
+  return {bytes:n,frames:out.map(f=>`${f.name} ${f.w}x${f.h} ${f.svg.length}`)};
 }

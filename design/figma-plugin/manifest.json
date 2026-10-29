@@ -1,8 +1,29 @@
 {
-  "name": "NOOP organise round 3",
+  "name": "NOOP design tools",
   "id": "noop-organise-round3-local",
   "api": "1.0.0",
   "main": "code.js",
-  "editorType": ["figma"],
-  "documentAccess": "dynamic-page"
+  "editorType": [
+    "figma"
+  ],
+  "documentAccess": "dynamic-page",
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "none"
+    ],
+    "devAllowedDomains": [
+      "http://localhost:8765"
+    ]
+  },
+  "menu": [
+    {
+      "name": "Import round 4 frames",
+      "command": "import"
+    },
+    {
+      "name": "Repair imported rings",
+      "command": "repair"
+    }
+  ]
 }

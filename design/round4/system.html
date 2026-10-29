@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP System Surfaces</title>
+<link rel="stylesheet" href="../system/noop.css">
+<style>
+/* ---------- system surfaces ---------- */
+.wall{background:radial-gradient(120% 70% at 20% 0%,#2A2152 0%,rgba(42,33,82,0) 60%),radial-gradient(90% 60% at 100% 40%,#0F3B45 0%,rgba(15,59,69,0) 65%),linear-gradient(180deg,#0E0F1A 0%,#06070B 100%)}
+
+/* widgets: light numerals, generous padding, one idea per widget */
+.wg{border-radius:24px;background:rgba(24,24,28,.62);backdrop-filter:blur(30px) saturate(150%);border:1px solid rgba(255,255,255,.07);padding:18px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.wg.s{width:166px;height:166px}
+.wg.m{width:352px;height:166px}
+.wg .h{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:500;letter-spacing:.01em}
+.wg .h span:last-child{color:rgba(255,255,255,.38);font-weight:400}
+.wg .n{font-weight:300;letter-spacing:-1.4px;line-height:1;font-variant-numeric:tabular-nums}
+.wg .n small{font-size:14px;font-weight:400;letter-spacing:0;color:rgba(255,255,255,.5);margin-left:3px}
+.wg .c{font-size:12px;color:rgba(255,255,255,.5);font-weight:400;margin-top:6px}
+.wlabel{font-size:12px;color:rgba(255,255,255,.72);text-align:center;margin-top:7px;font-weight:400}
+.thin{height:4px;border-radius:2px;background:rgba(255,255,255,.1);position:relative;overflow:hidden}
+.thin b{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
+
+/* lock screen */
+.lockdate{text-align:center;font-size:20px;font-weight:500;color:rgba(255,255,255,.85);margin-top:56px}
+.lockclock{text-align:center;font-size:104px;font-weight:200;letter-spacing:-3px;line-height:1;color:rgba(255,255,255,.92)}
+.acc{display:flex;justify-content:center;gap:12px;margin-top:14px}
+.acc .circ{width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.14);backdrop-filter:blur(20px);display:grid;place-items:center}
+.acc .rect{height:58px;border-radius:16px;background:rgba(255,255,255,.14);backdrop-filter:blur(20px);padding:9px 14px;width:160px}
+.acc .rect b{display:block;font-size:13px;font-weight:600}
+.acc .rect span{display:block;font-size:12px;color:rgba(255,255,255,.72);margin-top:2px}
+
+/* notifications (iOS draws the chrome; NOOP supplies copy, icon and an optional expanded view) */
+.notif{border-radius:24px;background:rgba(38,38,44,.72);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);padding:13px 15px;display:flex;gap:12px;align-items:flex-start}
+.notif .t{font-size:15px;font-weight:600;line-height:20px}
+.notif .st{font-size:14px;color:rgba(255,255,255,.7);line-height:19px}
+.notif .b{font-size:15px;line-height:20px;color:rgba(255,255,255,.88);font-weight:400}
+.notif .tm{font-size:13px;color:rgba(255,255,255,.45);white-space:nowrap}
+.appicon{width:38px;height:38px;border-radius:9px;background:#000;border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;flex:none;position:relative;overflow:hidden}
+.stack2{position:relative;height:12px;margin:0 12px;border-radius:0 0 22px 22px;background:rgba(38,38,44,.5)}
+.tag{display:inline-flex;font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--t2)}
+
+/* dynamic island */
+.strip{position:relative;height:74px;background:linear-gradient(180deg,#2B2B31,#1A1A1F);border-radius:18px;overflow:hidden;margin-top:10px}
+.isl{position:absolute;left:50%;top:11px;transform:translateX(-50%);background:#000;border-radius:999px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 0 0 1px rgba(255,255,255,.04)}
+.isl.compact{width:252px;height:37px;padding:0 14px 0 12px}
+.isl.minimal{width:126px;height:37px;padding:0 6px}
+.isl .cam{width:86px;height:100%}
+.isl.exp{width:376px;border-radius:46px;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:16px 22px 18px;top:8px}
+.minimal-dot{width:37px;height:37px;border-radius:50%;background:#000;position:absolute;top:11px}
+.lbl2{font-size:12px;color:rgba(255,255,255,.5);font-weight:400}
+.livebanner{border-radius:24px;background:rgba(20,20,24,.78);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.07);padding:16px 18px}
+.secttl{font-size:13px;color:var(--t2);font-weight:600;letter-spacing:.02em;margin-top:26px}
+.note{font-size:12px;color:var(--t3);line-height:17px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="controls"><button id="replay">Replay load</button><span>Round 4 · Widgets, Lock Screen, Dynamic Island and notifications</span></div>
+<div class="board">
+
+<!-- ================= R4-1 HOME SCREEN WIDGETS ================= -->
+<section><div class="board-title">R4-1 · Home Screen widgets (lighter)</div>
+<div class="screen wall" data-nomotion style="min-height:0;padding:0 0 40px">
+  <div class="sb"></div>
+  <div style="display:grid;grid-template-columns:166px 166px;gap:22px 20px;justify-content:center;margin-top:18px">
+    <div><div class="wg s">
+      <div class="h"><span style="color:var(--recovery)">Recovery</span><span>6:12 AM</span></div>
+      <div class="row sp" style="align-items:flex-end">
+        <div><div class="n" style="font-size:44px">68<small>%</small></div><div class="c">Recovered</div></div>
+        <div class="ring" data-size="46" data-sw="9" data-p="68" data-c="--recovery" style="margin-bottom:4px"></div>
+      </div>
+    </div><div class="wlabel">NOOP</div></div>
+    <div><div class="wg s">
+      <div class="h"><span style="color:var(--strain)">Strain</span><span>Live</span></div>
+      <div><div class="n" style="font-size:44px">11.4</div><div class="c">Target 12–15</div>
+        <div class="thin" style="margin-top:12px"><b style="width:54%;background:var(--strain)"></b></div></div>
+    </div><div class="wlabel">NOOP</div></div>
+    <div style="grid-column:span 2"><div class="wg m">
+      <div class="h"><span style="color:rgba(255,255,255,.85)">Today</span><span>Updated 9:38 AM</span></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);text-align:center">
+        <div><div class="ring" data-size="62" data-sw="6" data-p="86" data-c="--sleep" data-label="86" data-fs="26" data-fw="300" style="display:block;margin:0 auto"></div><div class="c" style="margin-top:8px;color:rgba(255,255,255,.7)">Sleep</div></div>
+        <div><div class="ring" data-size="62" data-sw="6" data-p="68" data-c="--recovery" data-label="68" data-fs="26" data-fw="300" style="display:block;margin:0 auto"></div><div class="c" style="margin-top:8px;color:rgba(255,255,255,.7)">Recovery</div></div>
+        <div><div class="ring" data-size="62" data-sw="6" data-p="54" data-c="--strain" data-label="11.4" data-fs="23" data-fw="300" style="display:block;margin:0 auto"></div><div class="c" style="margin-top:8px;color:rgba(255,255,255,.7)">Strain</div></div>
+      </div>
+    </div><div class="wlabel">NOOP</div></div>
+    <div><div class="wg s">
+      <div class="h"><span style="color:var(--sleep)">Sleep</span><span>Last night</span></div>
+      <div><div class="n" style="font-size:38px">7<small>h</small> 42<small>m</small></div><div class="c">86% of need</div>
+        <div class="thin" style="margin-top:12px"><b style="width:86%;background:var(--sleep)"></b></div></div>
+    </div><div class="wlabel">NOOP</div></div>
+    <div><div class="wg s">
+      <div class="h"><span style="color:var(--lift)">Steps</span><span>Estimated</span></div>
+      <div><div class="n" style="font-size:38px">6,240</div><div class="c">of 8,000</div>
+        <div class="thin" style="margin-top:12px"><b style="width:78%;background:var(--lift)"></b></div></div>
+    </div><div class="wlabel">NOOP</div></div>
+    <div style="grid-column:span 2"><div class="wg m" style="justify-content:flex-start;gap:12px">
+      <div class="h"><span style="color:var(--coach)">Morning brief</span><span>7:04 AM</span></div>
+      <div style="font-size:16px;line-height:23px;font-weight:400;color:rgba(255,255,255,.88)">HRV is up and you slept well. A hard pull session fits today; keep it under Strain 15 so legs are fresh tomorrow.</div>
+    </div><div class="wlabel">NOOP</div></div>
+    <div><div class="wg s">
+      <div class="h"><span style="color:var(--heart)">Heart rate</span><span>1 min ago</span></div>
+      <div><div class="n" style="font-size:44px">74<small>bpm</small></div>
+        <svg class="line" data-c="--heart" data-v="62,66,64,70,68,73,71,74" data-nodot="1" width="130" height="30" style="margin-top:10px;display:block"></svg></div>
+    </div><div class="wlabel">NOOP</div></div>
+    <div><div class="wg s">
+      <div class="h"><span style="color:var(--stress)">Stress</span><span>Now</span></div>
+      <div><div class="n" style="font-size:44px">0.8</div><div class="c">Low · of 3</div>
+        <div style="position:relative;margin-top:12px;height:4px;border-radius:2px;background:linear-gradient(90deg,#2FD27A,#FFC83D 55%,#FF5A4F)"><i style="position:absolute;left:calc(27% - 5px);top:-3px;width:10px;height:10px;border-radius:50%;background:#fff"></i></div></div>
+    </div><div class="wlabel">NOOP</div></div>
+  </div>
+  <div class="note" style="padding:22px 24px 0;color:rgba(255,255,255,.45)">Numbers in SF Pro Light, labels Medium 12. One idea per widget, 18 pt padding, and every value carries its time or source.</div>
+</div></section>
+
+<!-- ================= R4-2 LOCK SCREEN ================= -->
+<section><div class="board-title">R4-2 · Lock Screen</div>
+<div class="screen wall" data-nomotion>
+  <div class="sb"></div>
+  <div class="lockdate">Wednesday 29 October</div>
+  <div class="lockclock">9:41</div>
+  <div class="acc">
+    <div class="circ"><div class="ring" data-size="48" data-sw="9" data-p="68" data-c="#FFFFFF" data-label="68" data-fs="30" data-fw="500"></div></div>
+    <div class="circ"><div class="ring" data-size="48" data-sw="9" data-p="54" data-c="#FFFFFF" data-label="11.4" data-fs="26" data-fw="500"></div></div>
+    <div class="rect"><b>Recovery 68%</b><span>HRV 62 · Slept 7h 42m</span></div>
+  </div>
+
+  <div style="position:absolute;left:12px;right:12px;bottom:276px">
+    <div class="notif">
+      <div class="appicon"><div class="ring" data-size="26" data-sw="12" data-p="68" data-c="--recovery"></div></div>
+      <div class="grow1"><div class="row sp"><span class="t">Recovered · 68%</span><span class="tm">6:12 AM</span></div>
+        <div class="b">HRV is up and you slept 7h 42m. Good day to push: aim for Strain 12–15.</div></div>
+    </div>
+    <div class="stack2"></div>
+  </div>
+
+  <div class="livebanner" style="position:absolute;left:12px;right:12px;bottom:96px">
+    <div class="row sp">
+      <div class="row gap8"><span class="beat" data-ic="heart-f" data-s="16" style="color:var(--heart);display:inline-flex"></span><span class="lbl2" style="color:rgba(255,255,255,.75)">Live heart rate</span></div>
+      <span class="lbl2">Zone 3</span>
+    </div>
+    <div class="row sp" style="align-items:flex-end;margin-top:8px">
+      <div class="num" style="font-size:46px;font-weight:300;letter-spacing:-1.5px;line-height:1">118<span style="font-size:15px;color:rgba(255,255,255,.5);margin-left:4px;letter-spacing:0">bpm</span></div>
+      <div class="row gap16" style="text-align:right">
+        <div><div class="lbl2">Recovery</div><div style="font-size:17px;font-weight:400;color:var(--recovery)">68%</div></div>
+        <div><div class="lbl2">Strain</div><div style="font-size:17px;font-weight:400;color:var(--strain)">11.4</div></div>
+      </div>
+    </div>
+    <div class="row gap4" style="height:4px;margin-top:12px;align-items:stretch"><div style="flex:1;border-radius:2px;background:var(--z1);opacity:.3"></div><div style="flex:1;border-radius:2px;background:var(--z2);opacity:.3"></div><div style="flex:1;border-radius:2px;background:var(--z3)"></div><div style="flex:1;border-radius:2px;background:var(--z4);opacity:.3"></div><div style="flex:1;border-radius:2px;background:var(--z5);opacity:.3"></div></div>
+  </div>
+  <div class="row sp" style="position:absolute;left:46px;right:46px;bottom:22px">
+    <div style="width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.14);backdrop-filter:blur(20px)"></div>
+    <div style="width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.14);backdrop-filter:blur(20px)"></div>
+  </div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= R4-3 DYNAMIC ISLAND STATES ================= -->
+<section><div class="board-title">R4-3 · Dynamic Island</div>
+<div class="screen" data-nomotion style="min-height:0;padding:20px 13px 34px;background:#0E0E11">
+  <div class="h2">Dynamic Island</div>
+  <div class="fn mt8">Three Live Activities: live heart rate, a lift session and strap sync. Thin numerals, one colour per activity.</div>
+
+  <!-- Live heart rate -->
+  <div class="secttl">LIVE HEART RATE · COMPACT</div>
+  <div class="strip"><div class="isl compact">
+    <span class="beat" data-ic="heart-f" data-s="17" style="color:var(--heart);display:inline-flex"></span><span class="cam"></span>
+    <span class="num" style="font-size:16px;font-weight:500;color:var(--z3)">118</span>
+  </div></div>
+  <div class="secttl">MINIMAL (WHEN SHARING THE ISLAND)</div>
+  <div class="strip"><div class="isl compact" style="width:200px;left:44%"><span data-ic="moon" data-s="16" style="color:var(--t2);display:inline-flex"></span><span class="cam"></span><span></span></div>
+    <div class="minimal-dot" style="left:calc(44% + 108px);display:grid;place-items:center"><div class="ring" data-size="27" data-sw="10" data-p="62" data-c="--z3"></div></div></div>
+  <div class="secttl">EXPANDED (LONG PRESS)</div>
+  <div class="strip" style="height:200px"><div class="isl exp" style="height:182px">
+    <div class="row sp"><div class="row gap6"><span class="beat" data-ic="heart-f" data-s="15" style="color:var(--heart);display:inline-flex"></span><span class="lbl2" style="color:rgba(255,255,255,.75)">Live</span></div><span class="lbl2">Zone 3 · 113–132</span></div>
+    <div class="row sp" style="align-items:flex-end;margin-top:6px">
+      <div class="num" style="font-size:46px;font-weight:300;letter-spacing:-1.6px;line-height:1">118<span style="font-size:14px;color:rgba(255,255,255,.5);margin-left:4px;letter-spacing:0">bpm</span></div>
+      <div class="row gap16" style="text-align:right;padding-bottom:4px">
+        <div><div class="lbl2">Recovery</div><div style="font-size:16px;color:var(--recovery)">68%</div></div>
+        <div><div class="lbl2">Strain</div><div style="font-size:16px;color:var(--strain)">11.4</div></div>
+      </div>
+    </div>
+    <svg class="line" data-zones="1" data-min="88" data-max="126" data-v="96,101,104,108,106,111,115,113,117,121,119,116,118" width="332" height="50" style="display:block;margin-top:10px"></svg>
+  </div></div>
+
+  <!-- Lift session -->
+  <div class="secttl">LIFT SESSION · COMPACT (RESTING)</div>
+  <div class="strip"><div class="isl compact">
+    <div class="row gap6"><span data-ic="dumbbell" data-s="17" style="color:var(--lift);display:inline-flex"></span><span style="font-size:13px;color:rgba(255,255,255,.7)">3/4</span></div><span class="cam"></span>
+    <div class="row gap6"><div class="ring" data-size="16" data-sw="14" data-p="62" data-c="--lift"></div><span class="num" style="font-size:16px;font-weight:500;color:var(--lift)">1:24</span></div>
+  </div></div>
+  <div class="secttl">EXPANDED</div>
+  <div class="strip" style="height:196px"><div class="isl exp" style="height:178px">
+    <div class="row sp"><div class="row gap6"><span data-ic="dumbbell" data-s="15" style="color:var(--lift);display:inline-flex"></span><span class="lbl2" style="color:rgba(255,255,255,.75)">Push day · 24 min</span></div>
+      <div class="row gap6"><span data-ic="heart-f" data-s="13" style="color:var(--heart);display:inline-flex"></span><span class="num" style="font-size:13px;color:rgba(255,255,255,.75)">132</span></div></div>
+    <div class="row sp" style="align-items:flex-end;margin-top:8px">
+      <div><div style="font-size:19px;font-weight:500">Bench press</div><div class="lbl2" style="margin-top:3px">Next: set 3 of 4 · 85 kg × 6</div></div>
+      <div style="text-align:right"><div class="lbl2">Rest</div><div class="num" style="font-size:38px;font-weight:300;letter-spacing:-1.2px;line-height:1;color:var(--lift)">1:24</div></div>
+    </div>
+    <div class="thin" style="margin-top:14px;height:5px"><b style="width:62%;background:var(--lift)"></b></div>
+    <div class="row sp mt8"><span class="lbl2">Set 2 done · 80 kg × 8</span><span class="lbl2">of 2:15</span></div>
+  </div></div>
+
+  <!-- Sync -->
+  <div class="secttl">STRAP SYNC · COMPACT</div>
+  <div class="strip"><div class="isl compact">
+    <span data-ic="refresh" data-s="16" style="color:var(--breath);display:inline-flex"></span><span class="cam"></span>
+    <span class="num" style="font-size:16px;font-weight:500;color:var(--breath)">62%</span>
+  </div></div>
+  <div class="secttl">EXPANDED</div>
+  <div class="strip" style="height:142px"><div class="isl exp" style="height:124px">
+    <div class="row sp"><div class="row gap6"><span data-ic="strap" data-s="15" style="color:var(--breath);display:inline-flex"></span><span class="lbl2" style="color:rgba(255,255,255,.75)">Syncing strap history</span></div><span class="lbl2">WHOOP 4.0</span></div>
+    <div class="row sp" style="align-items:flex-end;margin-top:8px">
+      <div style="font-size:17px;font-weight:400">2 nights, 25 of 40 chunks</div>
+      <div class="num" style="font-size:30px;font-weight:300;letter-spacing:-1px;line-height:1;color:var(--breath)">62%</div>
+    </div>
+    <div class="thin" style="margin-top:12px;height:5px"><b style="width:62%;background:var(--breath)"></b></div>
+  </div></div>
+  <div class="note">Motion: the island springs open (response 0.42, damping 0.8); the heart pulses at the measured BPM; numbers roll with a numeric text transition; the rest ring drains in real time with no app wake-ups.</div>
+</div></section>
+
+<!-- ================= R4-4 IN CONTEXT ================= -->
+<section><div class="board-title">R4-4 · Expanded island over the app</div>
+<div class="screen" data-ambient="today:86,68,11.4" data-nomotion>
+  <div class="sb" style="visibility:hidden"></div>
+  <div class="hdr" style="opacity:.35"><div><div class="lt">Today</div><div class="sub">Wed, 29 Oct</div></div></div>
+  <div class="wrap mt20" style="opacity:.35"><div class="card" style="padding:22px 14px 18px"><div class="rings" data-s="86" data-r="68" data-st="11.4"></div></div></div>
+  <div style="position:absolute;left:13px;right:13px;top:10px;z-index:8">
+    <div class="isl exp" style="position:relative;left:auto;top:0;transform:none;width:auto;height:186px">
+      <div class="row sp"><div class="row gap6"><span class="beat" data-ic="heart-f" data-s="15" style="color:var(--heart);display:inline-flex"></span><span class="lbl2" style="color:rgba(255,255,255,.75)">Live</span></div><span class="lbl2">Zone 3 · 113–132</span></div>
+      <div class="row sp" style="align-items:flex-end;margin-top:6px">
+        <div class="num" style="font-size:46px;font-weight:300;letter-spacing:-1.6px;line-height:1">118<span style="font-size:14px;color:rgba(255,255,255,.5);margin-left:4px;letter-spacing:0">bpm</span></div>
+        <div class="row gap16" style="text-align:right;padding-bottom:4px">
+          <div><div class="lbl2">Recovery</div><div style="font-size:16px;color:var(--recovery)">68%</div></div>
+          <div><div class="lbl2">Strain</div><div style="font-size:16px;color:var(--strain)">11.4</div></div>
+        </div>
+      </div>
+      <svg class="line" data-zones="1" data-min="88" data-max="126" data-v="96,101,104,108,106,111,115,113,117,121,119,116,118" width="332" height="50" style="display:block;margin-top:10px"></svg>
+    </div>
+  </div>
+  <div class="tabbar" data-on="0" style="opacity:.35"></div>
+  <div class="home"></div>
+</div></section>
+
+<!-- ================= R4-5 NOTIFICATIONS ================= -->
+<section><div class="board-title">R4-5 · Notifications</div>
+<div class="screen wall" data-nomotion style="min-height:0;padding:20px 12px 34px">
+  <div class="h2" style="padding:0 4px">Notifications</div>
+  <div class="fn mt8" style="padding:0 4px">iOS draws the banner. NOOP controls the words, the icon and, on long press, a custom view. Titles state the fact; bodies say what to do.</div>
+
+  <div class="secttl" style="padding:0 4px">BANNERS</div>
+  <div class="col gap8 mt12">
+    <div class="notif"><div class="appicon"><div class="ring" data-size="26" data-sw="12" data-p="68" data-c="--recovery"></div></div>
+      <div class="grow1"><div class="row sp"><span class="t">Recovered · 68%</span><span class="tm">6:12 AM</span></div><div class="b">HRV is up and you slept 7h 42m. Good day to push: aim for Strain 12–15.</div></div></div>
+    <div class="notif"><div class="appicon"><div class="ring" data-size="26" data-sw="12" data-p="68" data-c="--recovery"></div></div>
+      <div class="grow1"><div class="row sp"><span class="t">Your morning brief</span><span class="tm">7:04 AM</span></div><div class="b">A hard pull session fits today. Keep it under Strain 15 so legs are fresh tomorrow.</div></div></div>
+    <div class="notif"><div class="appicon"><div class="ring" data-size="26" data-sw="12" data-p="68" data-c="--recovery"></div></div>
+      <div class="grow1"><div class="row sp"><span class="t">Strain target reached</span><span class="tm">7:52 PM</span></div><div class="b">13.2 after Pull day. Anything more today is extra load for tomorrow.</div></div></div>
+    <div class="notif"><div class="appicon"><div class="ring" data-size="26" data-sw="12" data-p="68" data-c="--recovery"></div></div>
+      <div class="grow1"><div class="row sp"><span class="t">Time to wind down</span><span class="tm">10:35 PM</span></div><div class="b">Lights low now keeps you on track to wake at 6:45, well rested.</div></div></div>
+    <div class="notif"><div class="appicon"><div class="ring" data-size="26" data-sw="12" data-p="68" data-c="--recovery"></div></div>
+      <div class="grow1"><div class="row sp"><span class="t">Strap battery at 15%</span><span class="tm">8:20 PM</span></div><div class="b">About 12 hours left. Charge it before bed so tonight's sleep is recorded.</div></div></div>
+    <div class="notif"><div class="appicon"><div class="ring" data-size="26" data-sw="12" data-p="68" data-c="--recovery"></div></div>
+      <div class="grow1"><div class="row sp"><span class="t">Early warning: take it easy</span><span class="tm">6:15 AM</span></div><div class="st">On-device estimate, not a diagnosis</div><div class="b">Resting heart rate and skin temperature have been up for two nights.</div></div></div>
+  </div>
+
+  <div class="secttl" style="padding:0 4px">LONG PRESS · CUSTOM VIEW <span class="tag" style="margin-left:6px">needs a Notification Content Extension</span></div>
+  <div class="mt12" style="border-radius:28px;background:rgba(24,24,28,.86);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.07);padding:20px 18px 18px">
+    <div class="row sp"><span style="font-size:13px;color:rgba(255,255,255,.55)">NOOP · 6:12 AM</span></div>
+    <div style="font-size:22px;font-weight:500;margin-top:6px">Recovered · 68%</div>
+    <div class="mt16"><div class="rings" data-s="86" data-r="68" data-st="11.4" data-size="72"></div></div>
+    <div style="font-size:15px;line-height:21px;color:rgba(255,255,255,.75);margin-top:16px">HRV 62 ms, 7 above your baseline. Slept 7h 42m of 8h 58m needed.</div>
+  </div>
+  <div class="mt8" style="border-radius:20px;background:rgba(38,38,44,.8);backdrop-filter:blur(30px);overflow:hidden">
+    <div style="padding:13px 18px;font-size:16px;border-bottom:1px solid rgba(255,255,255,.08)">Open Today</div>
+    <div style="padding:13px 18px;font-size:16px">Ask Coach about it</div>
+  </div>
+  <div class="note" style="padding:0 4px;color:rgba(255,255,255,.45)">Notification icon is a placeholder ring mark until an app icon is designed.</div>
+</div></section>
+
+</div>
+<script src="../system/noop.js"></script>
+<script>boot()</script>
+</body>
+</html>
