@@ -9,8 +9,8 @@ import StrandDesign
 ///   The brief is generated on a schedule by `CoachBriefScheduler` (K5) and mirrored into the
 ///   App Group via `publishToWidget`. The widget just displays whatever text is there.
 /// - Tap → opens the Coach tab (via the app's URL scheme / deeplink).
-/// - Supported families: `accessoryRectangular` (Lock Screen), `systemSmall` (Home Screen).
-///   The Lock Screen accessory shows the first line; the Home Screen widget shows more.
+/// - Supported families: `accessoryRectangular` / `accessoryInline` (Lock Screen), `systemSmall` /
+///   `systemMedium` (Home Screen). The Lock Screen accessory shows the first lines; the Home Screen more.
 struct CoachBriefEntry: TimelineEntry {
     let date: Date
     let briefText: String?
@@ -63,31 +63,28 @@ struct CoachBriefWidgetView: View {
         case .accessoryInline:
             inline
         default:
-            small
+            home
         }
     }
 
     // MARK: - Lock Screen: accessoryRectangular
 
+    /// Plain primary/secondary on the lock screen, which maps those two levels onto the wallpaper.
     private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: NoopTheme.Layout.xs) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(StrandPalette.accent)
                 Text("Coach")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(StrandPalette.textSecondary)
                 Spacer(minLength: 0)
                 if let date = entry.briefDate {
-                    Text(date, style: .time)
-                        .font(.caption2)
-                        .foregroundStyle(StrandPalette.textTertiary)
+                    Text(WidgetStyle.timeLabel(date, now: entry.date))
                 }
             }
+            .noopFont(.widgetLabel, color: false)
+            .foregroundStyle(.secondary)
             Text(briefDisplay)
-                .font(.system(size: 11))
-                .foregroundStyle(StrandPalette.textPrimary)
+                .noopFont(.widgetCaption, color: false)
+                .foregroundStyle(.primary)
                 .lineLimit(3)
                 .minimumScaleFactor(0.8)
         }
@@ -99,44 +96,33 @@ struct CoachBriefWidgetView: View {
         Text(briefOneLine)
     }
 
-    // MARK: - Home Screen: systemSmall
+    // MARK: - Home Screen: systemSmall / systemMedium
 
-    private var small: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(StrandPalette.accent)
-                Text("Coach Brief")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(StrandPalette.textSecondary)
-                Spacer()
+    /// R4-1: "Morning brief" in the Coach colour with the brief's time, then the stored text.
+    private var home: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+            WidgetHeader(title: "Morning brief", tint: NoopTheme.coach) {
+                if let date = entry.briefDate { Text(WidgetStyle.timeLabel(date, now: entry.date)) }
             }
             if entry.briefText == nil {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
                     Text("No brief yet")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .noopFont(.rowTitle, color: false)
+                        .foregroundStyle(NoopTheme.textSecondary)
                     Text("Enable Morning Brief in Coach settings to see today's readiness here.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .noopFont(.widgetCaption)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 Text(briefDisplay)
-                    .font(.system(size: 12))
-                    .foregroundStyle(StrandPalette.textPrimary)
-                    .lineLimit(5)
+                    .noopFont(.bodySmall, color: false)
+                    .foregroundStyle(NoopTheme.textPrimary)
+                    .lineLimit(family == .systemSmall ? 5 : 4)
                     .minimumScaleFactor(0.8)
             }
             Spacer(minLength: 0)
-            if let date = entry.briefDate {
-                Text(date, format: .dateTime.hour().minute())
-                    .font(.caption2)
-                    .foregroundStyle(StrandPalette.textTertiary)
-            }
         }
-        .padding(12)
+        .padding(WidgetStyle.padding)
     }
 
     // MARK: - Text helpers
@@ -165,19 +151,21 @@ struct CoachBriefWidget: Widget {
         StaticConfiguration(kind: Self.kind, provider: CoachBriefProvider()) { entry in
             if #available(iOS 17.0, *) {
                 CoachBriefWidgetView(entry: entry)
-                    .containerBackground(StrandPalette.surfaceBase, for: .widget)
+                    .containerBackground(WidgetStyle.background, for: .widget)
             } else {
                 CoachBriefWidgetView(entry: entry)
-                    .padding()
-                    .background(StrandPalette.surfaceBase)
+                    .background(WidgetStyle.background)
             }
         }
         .configurationDisplayName("Coach Brief")
         .description("Today's coaching brief at a glance. Tap to open Coach.")
         .supportedFamilies([
             .systemSmall,
+            // systemMedium added for R4-1's wide "Morning brief" card; same stored text, more of it.
+            .systemMedium,
             .accessoryRectangular,
             .accessoryInline,
         ])
+        .contentMarginsDisabled()
     }
 }

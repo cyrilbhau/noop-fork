@@ -45,6 +45,24 @@ struct TodayCustomizationSheet: View {
     @State private var detailed: Bool
     @State private var windowDays: Int
 
+    #if os(iOS)
+    // A5 (iPhone redesign): the Background settings ride the same draft / Save / Cancel flow as every other
+    // edit here. nil = untouched, so a sheet the user only looks at stays clean.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientFromScores) private var ambientFromScores = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    @State private var ambientFromScoresDraft: Bool?
+    @State private var ambientIntensityDraft: AmbientIntensity?
+
+    private var storedAmbientIntensity: AmbientIntensity {
+        AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced
+    }
+    private var ambientDirty: Bool {
+        (ambientFromScoresDraft.map { $0 != ambientFromScores } ?? false)
+            || (ambientIntensityDraft.map { $0 != storedAmbientIntensity } ?? false)
+    }
+    #endif
+
     private var currentDestination: TodayCustomizationDestination {
         switch path.last {
         case .keyMetrics: return .keyMetrics
@@ -61,6 +79,15 @@ struct TodayCustomizationSheet: View {
             || hostedDraft != initialHostedDraft
             || detailed != initialDetailed
             || windowDays != initialWindowDays
+            || backgroundDirty
+    }
+
+    private var backgroundDirty: Bool {
+        #if os(iOS)
+        return ambientDirty
+        #else
+        return false
+        #endif
     }
 
     init(
@@ -134,7 +161,8 @@ struct TodayCustomizationSheet: View {
                 dashboardCardCount: dashboardDraft.visible.count,
                 hostedCardCount: hostedDraft.visible.count,
                 onConfigure: openConfiguration,
-                onReset: resetCurrentLayout
+                onReset: resetCurrentLayout,
+                backgroundSection: backgroundSection
             )
             .toolbar {
                 customizationToolbar(showCancel: true)
@@ -171,7 +199,7 @@ struct TodayCustomizationSheet: View {
             }
         }
         .interactiveDismissDisabled(isDirty)
-        .tint(StrandPalette.accent)
+        .modifier(CustomizationSheetChrome())
         #if os(macOS)
         .frame(
             minWidth: NoopMetrics.editorSheetMinWidth,
@@ -232,7 +260,26 @@ struct TodayCustomizationSheet: View {
         keyMetricsWindowDays = windowDays
         dashboardCardsRaw = DashboardCardPrefs.encode(dashboardDraft.visible)
         hostedCardsRaw = HostedCardPrefs.encode(hostedDraft.visible)
+        #if os(iOS)
+        if let draft = ambientFromScoresDraft { ambientFromScores = draft }
+        if let draft = ambientIntensityDraft { ambientIntensityRaw = draft.rawValue }
+        #endif
         dismiss()
+    }
+
+    /// A5's Background section (§3.7): only on iPhone with the redesign on, where the ambient field exists.
+    /// nil elsewhere, so macOS and the Liquid/classic Today keep the editor exactly as it was.
+    private var backgroundSection: AnyView? {
+        #if os(iOS)
+        guard redesignEnabled else { return nil }
+        let fromScores = Binding(get: { ambientFromScoresDraft ?? ambientFromScores },
+                                 set: { ambientFromScoresDraft = $0 })
+        let intensity = Binding(get: { ambientIntensityDraft ?? storedAmbientIntensity },
+                                set: { ambientIntensityDraft = $0 })
+        return AnyView(TodayBackgroundSection(fromScores: fromScores, intensity: intensity))
+        #else
+        return nil
+        #endif
     }
 
     @ToolbarContentBuilder
@@ -248,6 +295,67 @@ struct TodayCustomizationSheet: View {
     }
 }
 
+// MARK: - Sheet chrome
+
+/// The sheet's tint and surface. macOS (and an iPhone with the redesign off) keep the shipped accent
+/// unchanged; the iPhone redesign (A5) draws it dark on the redesign's sheet colour with blue actions.
+private struct CustomizationSheetChrome: ViewModifier {
+    #if os(iOS)
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if redesignEnabled {
+            content
+                .tint(NoopTheme.strain)
+                .preferredColorScheme(.dark)
+                .presentationBackground(NoopTheme.sheet)
+        } else {
+            content.tint(StrandPalette.accent)
+        }
+        #else
+        content.tint(StrandPalette.accent)
+        #endif
+    }
+}
+
+#if os(iOS)
+/// A5 "Background": whether the ambient glow takes its colours from the day's scores, and how strongly
+/// (Subtle / Balanced / Vivid multiply every blob's opacity by 0.6 / 1.0 / 1.4, §3.7).
+private struct TodayBackgroundSection: View {
+    @Binding var fromScores: Bool
+    @Binding var intensity: AmbientIntensity
+
+    var body: some View {
+        Section {
+            Toggle(isOn: $fromScores) {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text("Colour from your scores").noopFont(.listTitle)
+                    Text("The glow follows Sleep, Recovery and Strain")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            SegmentedPills(AmbientIntensity.allCases, selection: $intensity) { option in
+                switch option {
+                case .subtle: return Text("Subtle")
+                case .balanced: return Text("Balanced")
+                case .vivid: return Text("Vivid")
+                }
+            }
+            .disabled(!fromScores)
+            .opacity(fromScores ? 1 : Self.disabledOpacity)
+            .accessibilityLabel(Text("Intensity"))
+        } header: {
+            Text("Background").noopFont(.footnote)
+        }
+    }
+
+    private static let disabledOpacity: Double = 0.45
+}
+#endif
+
 // MARK: - Editor pages
 
 private struct TodaySectionsCustomizationPage: View {
@@ -257,6 +365,7 @@ private struct TodaySectionsCustomizationPage: View {
     let hostedCardCount: Int
     let onConfigure: (TodaySection) -> Void
     let onReset: () -> Void
+    var backgroundSection: AnyView? = nil
 
     var body: some View {
         EditableLayoutList(
@@ -271,7 +380,7 @@ private struct TodaySectionsCustomizationPage: View {
             onConfigure: onConfigure,
             onReset: onReset
         ) {
-            EmptyView()
+            if let backgroundSection { backgroundSection }
         }
         .navigationTitle("Customize Today")
         #if os(iOS)

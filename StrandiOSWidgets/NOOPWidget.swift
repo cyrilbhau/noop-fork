@@ -28,14 +28,17 @@ struct NOOPProvider: TimelineProvider {
     }
 }
 
-/// The glanceable widget — the iOS analogue of the macOS menu-bar extra.
-/// Home Screen families mirror Today's hero trio (Charge · Effort · Rest) as score rings. Lock Screen
-/// accessories are compact: a single line, a gauge, or the rectangular glyph-over-value trio.
+/// The glanceable score widget (round 4, R4-1 and R4-2).
+///
+/// One idea per family: systemSmall is Recovery alone, systemMedium is the Today trio (Sleep · Recovery ·
+/// Strain) as thin rings, systemLarge adds the vitals grid. Lock Screen: a Recovery capacity gauge, the
+/// "Recovery 68% · HRV 62 · Sleep 7h 42m" rectangle and an inline line. Every value carries the time the app
+/// last published it, and a missing score is a dash over an empty track, never a zero.
 struct NOOPWidgetView: View {
     @Environment(\.widgetFamily) private var family
     /// `.fullColor` on the home screen and in the gallery; `.vibrant` or `.accented` on the lock screen,
     /// where the system desaturates any colour it is handed. The accessory cells check this rather than
-    /// tinting unconditionally — see `accessoryScore`.
+    /// tinting unconditionally.
     @Environment(\.widgetRenderingMode) private var renderingMode
     let entry: NOOPEntry
 
@@ -46,7 +49,7 @@ struct NOOPWidgetView: View {
         case .accessoryCircular:
             recoveryGauge
         case .accessoryInline:
-            Text(inlineText)
+            inline
         case .accessoryRectangular:
             rectangular
         case .systemLarge:
@@ -59,155 +62,140 @@ struct NOOPWidgetView: View {
         }
     }
 
-    // MARK: - Colours (match Today's GlowRing domain constants)
+    // MARK: - Values
 
-    private var chargeColor: Color {
-        snap.recovery != nil ? StrandPalette.chargeColor : StrandPalette.textTertiary
+    /// Recovery's colour comes from its band (`NoopTheme.recoveryColor`, thresholds 34 / 67); grey when unscored.
+    private var recoveryTint: Color {
+        snap.recovery.map { NoopTheme.recoveryColor(for: $0) } ?? NoopTheme.textTertiary
     }
 
-    /// Fixed domain accent — same as `TodayView.effortRing` (`StrandPalette.effortColor`), not the
-    /// value-sampled `effortTint` ramp the old footer bolt used.
-    private var effortColor: Color {
-        snap.effort != nil ? StrandPalette.effortColor : StrandPalette.textTertiary
-    }
-
-    private var restColor: Color {
-        snap.rest != nil ? StrandPalette.restColor : StrandPalette.textTertiary
-    }
-
-    /// Effort centre/accessory text: pre-formatted #313 display when present, else whole-number 0–100.
-    private var effortText: String? {
+    /// Strain read-out: the pre-formatted #313 display (0–21 or 0–100, per the app's setting) when present,
+    /// else the whole-number 0–100 value.
+    private var strainText: String? {
         snap.effortDisplay ?? snap.effort.map(String.init)
     }
 
-    private var inlineText: String {
-        var parts: [String] = []
-        if let r = snap.recovery { parts.append("Recovery \(r)%") }
-        if let b = snap.bpm { parts.append("\(b) bpm") }
-        return parts.isEmpty ? "NOOP" : parts.joined(separator: " · ")
+    /// When the app last published, or nil before it ever has. Live pushes move it too, so it is labelled
+    /// "Updated", not presented as the time a score was computed.
+    private var updated: Date? {
+        snap.updated == .distantPast ? nil : snap.updated
+    }
+
+    private var sleep: PersonalSleepReading? {
+        snap.personal?.recentSleep(now: entry.date)
+    }
+
+    /// "58 bpm": "bpm" is the same in every locale the catalogs carry.
+    private func bpmText(_ bpm: Int) -> String { String(bpm) + " " + "bpm" }
+
+    /// The band's word under the Recovery number, from keys the catalogs already carry.
+    private func bandKey(_ score: Int) -> LocalizedStringKey {
+        switch NoopTheme.recoveryBand(for: Double(score)) {
+        case .low: return "Low"
+        case .mid: return "Moderate"
+        case .high: return "High"
+        }
     }
 
     // MARK: - Lock Screen accessories
 
+    /// R4-2 circular gauge: a capacity ring with the number in the middle. No score leaves the ring empty
+    /// and the centre a dash.
     private var recoveryGauge: some View {
         Gauge(value: Double(snap.recovery ?? 0), in: 0...100) {
-            Image(systemName: "heart.fill")
+            Text("Recovery")
         } currentValueLabel: {
-            Text(snap.recovery.map { "\($0)" } ?? "–")
+            Text(verbatim: snap.recovery.map(String.init) ?? "—")
+                .font(WidgetStyle.numberFont(size: NoopType.rowNumber.size))
         }
-        .gaugeStyle(.accessoryCircular)
-        .tint(chargeColor)
-    }
-
-    /// Lock-Screen rectangular accessory: Charge · Effort · Rest, same trio as the Home Screen rings.
-    private var rectangular: some View {
-        // The lock screen gives this family roughly 72pt of height for everything. A "NOOP" title spent
-        // a whole row of that restating which widget the user chose to add, leaving the three scores —
-        // the only reason to add it — squeezed underneath. The title is gone and the heart-rate line is
-        // now conditional, so with no live HR the scores get the entire area.
-        VStack(spacing: 2) {
-            if let bpm = snap.bpm {
-                Text("\(bpm) bpm")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            HStack(alignment: .top, spacing: 0) {
-                accessoryScore("Recovery", symbol: "figure.mind.and.body",
-                               text: snap.recovery.map { "\($0)%" }, tint: chargeColor)
-                accessoryScore("Strain", symbol: "figure.strengthtraining.traditional",
-                               text: effortText, tint: effortColor)
-                accessoryScore("Sleep", symbol: "moon.fill",
-                               text: snap.rest.map { "\($0)%" }, tint: restColor)
-            }
-        }
-    }
-
-    /// One score cell. On the LOCK SCREEN the domain tint is deliberately dropped; it survives only
-    /// where the system actually renders full colour, which for this family means a gallery preview.
-    ///
-    /// Lock-screen widgets render in `.vibrant` (or `.accented`), where the system desaturates whatever
-    /// colour it is given and maps it onto the wallpaper. A domain colour handed to it does not survive
-    /// as that colour — it lands as an arbitrary grey whose luminance nobody chose, so Charge, Effort and
-    /// Rest stopped being distinguishable AND stopped being legible. `.primary`/`.secondary` are the two
-    /// levels the system is designed to map, so the value reads at full strength and the glyph above it
-    /// recedes, which is the hierarchy the tint was there to express in the first place.
-    ///
-    /// The `.fullColor` branch is defensive rather than hot: this family renders `.vibrant` on the lock
-    /// screen and in StandBy, so the tint realistically only reaches a gallery preview.
-    private func accessoryScore(_ label: String, symbol: String, text: String?, tint: Color) -> some View {
-        VStack(spacing: 1) {
-            // Glyph over value, the shape the request asked for. A 9pt word under each number was
-            // spending scarce height on text nobody needs twice — the icons carry the metric identity.
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(renderingMode == .fullColor
-                                 ? AnyShapeStyle(StrandPalette.textTertiary)
-                                 : AnyShapeStyle(HierarchicalShapeStyle.secondary))
-            Text(text ?? "–")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(scoreStyle(hasValue: text != nil, tint: tint))
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity)
-        // An icon says nothing to VoiceOver, and the word it replaced was the only thing naming this
-        // metric. Collapse the cell to one element that still speaks "Charge, 68 percent".
+        .gaugeStyle(.accessoryCircularCapacity)
+        .tint(renderingMode == .fullColor ? recoveryTint : .primary)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(label))
-        // Plain literal, not String(localized:). This extension's sources are StrandiOSWidgets +
-        // StrandiOSShared only — Strand/Resources/Localizable.xcstrings is NOT in the target, and
-        // String(localized:) resolves against Bundle.main, which for an app extension is the extension's
-        // own bundle. It would compile, look localized, and render English in every locale. Every other
-        // string in this file is a bare literal for the same reason: the widget is not localized yet.
-        .accessibilityValue(Text(text ?? "No data"))
+        .accessibilityLabel(Text("Recovery"))
+        .accessibilityValue(Text(verbatim: snap.recovery.map { "\($0)%" } ?? "—"))
     }
 
-    private func scoreStyle(hasValue: Bool, tint: Color) -> AnyShapeStyle {
-        // Spelled out rather than leaning on leading-dot inference through AnyShapeStyle's generic
-        // init, which is the kind of expression that type-checks in a playground and not in a build.
-        guard renderingMode == .fullColor else {
-            return hasValue ? AnyShapeStyle(HierarchicalShapeStyle.primary)
-                            : AnyShapeStyle(HierarchicalShapeStyle.secondary)
+    private var inline: some View {
+        Group {
+            if let r = snap.recovery {
+                Text("Recovery") + Text(verbatim: " " + String(r) + "%" + (snap.bpm.map { " · " + bpmText($0) } ?? ""))
+            } else if let b = snap.bpm {
+                Text(verbatim: bpmText(b))
+            } else {
+                Text(verbatim: "NOOP")
+            }
         }
-        return hasValue ? AnyShapeStyle(tint) : AnyShapeStyle(StrandPalette.textTertiary)
     }
 
-    // MARK: - Home Screen: systemSmall
+    /// R4-2 rectangle: "Recovery 68%" over "HRV 62 · Sleep 7h 42m", then when it was published. Plain
+    /// primary/secondary styles, because the lock screen maps those two levels onto the wallpaper and turns
+    /// any domain colour into a grey nobody chose.
+    private var rectangular: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            (Text("Recovery") + Text(verbatim: " " + (snap.recovery.map { "\($0)%" } ?? "—")))
+                .noopFont(.rowTitle, color: false)
+                .foregroundStyle(.primary)
+            (Text(verbatim: "HRV") + Text(verbatim: " " + (snap.hrv.map(String.init) ?? "—") + " · ")
+             + Text("Sleep")
+             + Text(verbatim: " ")
+             + (sleep.map { WidgetStyle.durationText(minutes: $0.asleepMinutes) } ?? Text(verbatim: "—")))
+                .noopFont(.widgetCaption, color: false)
+                .foregroundStyle(.secondary)
+            if let updated {
+                Text("Updated \(WidgetStyle.timeLabel(updated, now: entry.date))")
+                    .noopFont(.widgetCaption, color: false)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
 
-    /// Compact three-ring hero. Diameter is capped so three hard-framed circles fit the narrowest
-    /// systemSmall content width (SE ~128pt after padding) without overlapping — see review on #1022.
+    // MARK: - Home Screen
+
+    /// R4-1 small: Recovery alone — the number, its band, a thin ring.
     private var small: some View {
-        VStack(spacing: 6) {
-            headerRow
-            // 40pt × 3 = 120 ≤ 128 (SE) / 138 (15 Pro) content widths after 10pt padding.
-            scoreRings(diameter: 40, lineWidth: 4, labelFont: .system(size: 9, weight: .medium))
+        VStack(alignment: .leading, spacing: 0) {
+            WidgetHeader(title: "Recovery", tint: recoveryTint) {
+                if let updated { Text(WidgetStyle.timeLabel(updated, now: entry.date)) }
+            }
             Spacer(minLength: 0)
-            vitalsFooter(compact: true)
+            HStack(alignment: .bottom, spacing: NoopTheme.Layout.s) {
+                VStack(alignment: .leading, spacing: WidgetStyle.captionGap) {
+                    WidgetNumber(value: snap.recovery.map(String.init), unit: "%")
+                    Group {
+                        if let r = snap.recovery { Text(bandKey(r)) } else { Text("No data") }
+                    }
+                    .noopFont(.widgetCaption)
+                }
+                Spacer(minLength: 0)
+                WidgetRing(fraction: snap.recovery.map { Double($0) / 100 }, tint: recoveryTint,
+                           diameter: 46, lineWidth: 9, labelled: false)
+                    .padding(.bottom, NoopTheme.Layout.xs)
+                    .accessibilityHidden(true)
+            }
         }
-        .padding(10)
+        .padding(WidgetStyle.padding)
     }
 
-    // MARK: - Home Screen: systemMedium
-
-    /// Wider three-ring row with room for a fuller vitals footer (live HR + strap battery).
+    /// R4-1 medium: the Today trio, Sleep · Recovery · Strain, as thin rings with light numerals inside.
     private var medium: some View {
-        VStack(spacing: 8) {
-            headerRow
-            scoreRings(diameter: 72, lineWidth: 7, labelFont: .caption2)
+        VStack(alignment: .leading, spacing: 0) {
+            todayHeader
             Spacer(minLength: 0)
-            vitalsFooter(compact: false)
+            scoreRings(diameter: 62, lineWidth: 6)
         }
-        .padding(12)
+        .padding(WidgetStyle.padding)
     }
 
-    // MARK: - Home Screen: systemLarge
-
-    /// Rings on top, then the richer stat grid (HRV, RHR, live HR, battery) — "show me more".
+    /// Large: the trio, then the vitals grid (HRV, resting HR, live HR, strap battery).
     private var large: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            headerRow
-            scoreRings(diameter: 88, lineWidth: 8, labelFont: .caption)
-            Divider()
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
+            todayHeader
+            scoreRings(diameter: 84, lineWidth: 7)
+            Rectangle().fill(NoopTheme.separator).frame(height: 1)
             HStack(alignment: .top, spacing: 0) {
                 statCell("HRV", value: snap.hrv.map { "\($0)" }, unit: "ms",
                          name: "Heart rate variability",
@@ -215,204 +203,85 @@ struct NOOPWidgetView: View {
                 statCell("Rest HR", value: snap.restingHr.map { "\($0)" }, unit: "bpm",
                          name: "Resting heart rate",
                          spoken: snap.restingHr.map { "\($0) beats per minute" })
-                statCell("HR", value: snap.bpm.map { "\($0)" }, unit: "bpm",
+                statCell("Heart rate", value: snap.bpm.map { "\($0)" }, unit: "bpm",
                          name: "Heart rate",
                          spoken: snap.bpm.map { "\($0) beats per minute" })
-                statCell("Battery", value: snap.batteryPct.map { "\($0)%" },
+                statCell("Battery", value: snap.batteryPct.map { "\($0)" }, unit: "%",
                          name: "Strap battery",
                          spoken: snap.batteryPct.map { "\($0) percent" })
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(WidgetStyle.padding)
     }
 
-    // MARK: - Shared pieces
-
-    private var headerRow: some View {
-        HStack {
-            Text("NOOP")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(StrandPalette.textSecondary)
-            Spacer()
-            Circle()
-                .fill(snap.bonded ? StrandPalette.statusPositive : StrandPalette.statusCritical)
-                .frame(width: 8, height: 8)
-                .accessibilityLabel(snap.bonded ? Text("Connected") : Text("Disconnected"))
+    private var todayHeader: some View {
+        WidgetHeader(title: "Today", tint: NoopTheme.textPrimary) {
+            if let updated { Text("Updated \(WidgetStyle.timeLabel(updated, now: entry.date))") }
         }
     }
 
-    /// The Today hero trio as static score rings (widget-safe: no draw-in animation / onAppear race).
-    /// Order matches TodayView: Charge · Effort · Rest. Each cell is honest-null ("–") until scored.
-    private func scoreRings(diameter: CGFloat, lineWidth: CGFloat, labelFont: Font) -> some View {
+    /// Order is the round-4 trio: Sleep · Recovery · Strain. Each cell is a dash over an empty track until scored.
+    private func scoreRings(diameter: CGFloat, lineWidth: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 0) {
-            WidgetScoreRing(
-                text: snap.recovery.map(String.init),
-                fraction: snap.recovery.map { Double($0) / 100 },
-                label: "Recovery",
-                color: chargeColor,
-                diameter: diameter,
-                lineWidth: lineWidth,
-                labelFont: labelFont,
-                accessibilityOutOf: 100
-            )
-            WidgetScoreRing(
-                text: effortText,
-                // Fill is always the stored 0–100 axis so WHOOP 0–21 and native 0–100 agree on arc length.
-                fraction: snap.effort.map { Double($0) / 100 },
-                label: "Strain",
-                color: effortColor,
-                diameter: diameter,
-                lineWidth: lineWidth,
-                labelFont: labelFont,
-                accessibilityOutOf: (snap.effortWhoop == true) ? 21 : 100
-            )
-            WidgetScoreRing(
-                text: snap.rest.map(String.init),
-                fraction: snap.rest.map { Double($0) / 100 },
-                label: "Sleep",
-                color: restColor,
-                diameter: diameter,
-                lineWidth: lineWidth,
-                labelFont: labelFont,
-                accessibilityOutOf: 100
-            )
+            scoreCell(label: "Sleep", text: snap.rest.map(String.init),
+                      fraction: snap.rest.map { Double($0) / 100 },
+                      tint: NoopTheme.sleep, outOf: 100, diameter: diameter, lineWidth: lineWidth)
+            scoreCell(label: "Recovery", text: snap.recovery.map(String.init),
+                      fraction: snap.recovery.map { Double($0) / 100 },
+                      tint: recoveryTint, outOf: 100, diameter: diameter, lineWidth: lineWidth)
+            // Fill is always the stored 0–100 axis so WHOOP 0–21 and native 0–100 agree on arc length.
+            scoreCell(label: "Strain", text: strainText,
+                      fraction: snap.effort.map { Double($0) / 100 },
+                      tint: NoopTheme.strain, outOf: (snap.effortWhoop == true) ? 21 : 100,
+                      diameter: diameter, lineWidth: lineWidth)
         }
         .frame(maxWidth: .infinity)
     }
 
-    /// Home-Screen footer: heart rate, HRV, strap battery, under the score rings.
-    ///
-    /// `heart.fill` is HR and `waveform.path.ecg` is HRV, which is the metric pairing the rest of the app
-    /// uses — `TodayView` renders them as adjacent rows that way, and `DashboardCards`,
-    /// `TodayCustomizationMetadata`, `MetricCatalog` and this extension's own Live Activity all agree.
-    /// The two were inverted here from #1022 until #1795 reported it.
-    ///
-    /// The inversion was an easy one to make and is worth naming so it is not "corrected" back:
-    /// `waveform.path.ecg` IS the right symbol for Live HR as a FEATURE — `RootView`, `RootTabView` and
-    /// `HomeScreenQuickActions` all use it for the Live screen. As a METRIC icon it belongs to HRV, and
-    /// this footer is the one place that renders both metrics side by side, where the collision is the
-    /// entire problem: nothing here carries a text label, so the glyph is the only thing naming a number.
-    private func vitalsFooter(compact: Bool) -> some View {
-        HStack {
-            vital(symbol: "heart.fill", text: snap.bpm.map(String.init),
-                  name: "Heart rate", spoken: snap.bpm.map { "\($0) beats per minute" })
-            Spacer()
-            if !compact, let hrv = snap.hrv {
-                vital(symbol: "waveform.path.ecg", text: "\(hrv)",
-                      name: "Heart rate variability", spoken: "\(hrv) milliseconds")
-                Spacer()
-            }
-            vital(symbol: "battery.50", text: snap.batteryPct.map { "\($0)%" },
-                  name: "Strap battery", spoken: snap.batteryPct.map { "\($0) percent" })
-        }
-        .font(.caption2)
-        .foregroundStyle(StrandPalette.textSecondary)
-        .labelStyle(.titleAndIcon)
-    }
-
-    /// One footer vital. `spoken` is carried separately from the rendered `text` because VoiceOver gets
-    /// neither of the two things a sighted reader uses here: the glyph that names the metric, and the
-    /// unit, which the footer shows for none of them. Without this a reader hears "58", "64", "84 percent"
-    /// — three anonymous numbers. Same reasoning as `accessoryScore`, which #1715 fixed for the lock
-    /// screen; this footer predates it.
-    ///
-    /// Plain literals rather than `String(localized:)`, for the reason spelled out on `accessoryScore`:
-    /// this extension does not carry the app's string catalog, so `String(localized:)` would look
-    /// localized and render English anyway.
-    private func vital(symbol: String, text: String?, name: String, spoken: String?) -> some View {
-        Label(text ?? "–", systemImage: symbol)
-            // Collapse first, like `accessoryScore` and `WidgetScoreRing` already do. A `Label` under
-            // `.titleAndIcon` renders an image beside a text, so without this the bare number stays its
-            // own element and whether the label below wins is SwiftUI container semantics rather than
-            // something this file decides. Every other labelled graphic here ignores its children.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(name))
-            .accessibilityValue(Text(spoken ?? "No data"))
-    }
-
-    /// One labelled stat in the large grid — value over a caption, equal-width so the columns align.
-    ///
-    /// `name` and `spoken` exist because the on-screen caption is abbreviated for width and the unit is a
-    /// separate view: read as-is, VoiceOver produces "64", "ms", "HRV" — three fragments, value before
-    /// label, with "ms" and "bpm" spelled out letter by letter. Collapsing to one element lets the cell
-    /// speak "Heart rate variability, 64 milliseconds". `spoken` falls back to the rendered value rather
-    /// than to "No data", so a caller that omits it degrades to the old reading instead of lying.
-    private func statCell(_ label: String, value: String?, unit: String? = nil,
-                          tint: Color = StrandPalette.textPrimary,
-                          name: String? = nil, spoken: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value ?? "–")
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .foregroundStyle(value == nil ? StrandPalette.textTertiary : tint)
-                if let unit, value != nil {
-                    Text(unit).font(.caption2).foregroundStyle(StrandPalette.textTertiary)
-                }
-            }
-            Text(label).font(.caption2).foregroundStyle(StrandPalette.textTertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(name ?? label))
-        .accessibilityValue(Text(spoken ?? value ?? "No data"))
-    }
-}
-
-// MARK: - WidgetScoreRing
-
-/// A static, widget-safe score ring: full-circle track + solid arc + centre number + caption.
-/// Deliberately avoids `GlowRing`'s draw-in `@State` animation — WidgetKit timelines don't reliably
-/// fire `onAppear`, so an animated ring can freeze empty (0 fill) until the next timeline rebuild.
-private struct WidgetScoreRing: View {
-    /// Centre read-out already formatted (whole number, or one-decimal WHOOP Effort).
-    let text: String?
-    /// Arc fill 0…1; nil draws the empty track only (unscored).
-    let fraction: Double?
-    let label: String
-    let color: Color
-    let diameter: CGFloat
-    let lineWidth: CGFloat
-    let labelFont: Font
-    let accessibilityOutOf: Int
-
-    private var clampedFraction: CGFloat {
-        guard let fraction else { return 0 }
-        return CGFloat(min(max(fraction, 0), 1))
-    }
-
-    var body: some View {
-        VStack(spacing: 4) {
-            ZStack {
-                Circle()
-                    .stroke(StrandPalette.textPrimary.opacity(0.10),
-                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                if fraction != nil {
-                    Circle()
-                        // A genuine zero still draws a round-cap bead so scored-0 reads as data, not absence.
-                        .trim(from: 0, to: max(0.0001, clampedFraction))
-                        .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                }
-                Text(text ?? "–")
-                    .font(StrandFont.rounded(diameter * 0.34, weight: .bold))
-                    .foregroundStyle(text == nil ? StrandPalette.textTertiary : StrandPalette.textPrimary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .padding(.horizontal, lineWidth + 2)
-            }
-            .frame(width: diameter, height: diameter)
+    private func scoreCell(label: LocalizedStringKey, text: String?, fraction: Double?, tint: Color, outOf: Int,
+                           diameter: CGFloat, lineWidth: CGFloat) -> some View {
+        VStack(spacing: NoopTheme.Layout.s) {
+            WidgetRing(fraction: fraction, tint: tint, diameter: diameter, lineWidth: lineWidth, text: text)
             Text(label)
-                .font(labelFont)
-                .foregroundStyle(StrandPalette.textTertiary)
+                .noopFont(.widgetCaption, color: false)
+                .foregroundStyle(WidgetStyle.ringLabel)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(label))
-        .accessibilityValue(Text(text.map { "\($0) out of \(accessibilityOutOf)" } ?? "unavailable"))
+        .accessibilityValue(Text(text.map { "\($0) out of \(outOf)" } ?? "No data"))
+    }
+
+    /// One labelled stat in the large grid: a light value with its unit, the label under it.
+    ///
+    /// `name` and `spoken` exist because the on-screen label is abbreviated for width and the unit is a
+    /// separate view: collapsing to one element lets the cell speak "Heart rate variability, 64 milliseconds".
+    private func statCell(_ label: LocalizedStringKey, value: String?, unit: String,
+                          name: LocalizedStringKey, spoken: String?) -> some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+            HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text(verbatim: value ?? "—")
+                    .font(WidgetStyle.numberFont(size: NoopType.statNumber.size))
+                    .tracking(NoopType.widgetNumber.tracking / 2)
+                    .foregroundStyle(value == nil ? NoopTheme.textTertiary : NoopTheme.textPrimary)
+                if value != nil {
+                    Text(verbatim: unit)
+                        .noopFont(.widgetCaption)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            Text(label)
+                .noopFont(.widgetCaption)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(name))
+        .accessibilityValue(Text(spoken ?? "No data"))
     }
 }
 
@@ -423,11 +292,10 @@ struct NOOPWidget: Widget {
         StaticConfiguration(kind: kind, provider: NOOPProvider()) { entry in
             if #available(iOS 17.0, *) {
                 NOOPWidgetView(entry: entry)
-                    .containerBackground(StrandPalette.surfaceBase, for: .widget)
+                    .containerBackground(WidgetStyle.background, for: .widget)
             } else {
                 NOOPWidgetView(entry: entry)
-                    .padding()
-                    .background(StrandPalette.surfaceBase)
+                    .background(WidgetStyle.background)
             }
         }
         .configurationDisplayName("NOOP")
@@ -436,5 +304,172 @@ struct NOOPWidget: Widget {
             .systemSmall, .systemMedium, .systemLarge,
             .accessoryCircular, .accessoryInline, .accessoryRectangular
         ])
+        // The round-4 layouts carry their own 18 pt padding (`WidgetStyle.padding`) on the Home Screen
+        // families; the Lock Screen accessories have no system margin to lose.
+        .contentMarginsDisabled()
+    }
+}
+
+// MARK: - Shared round-4 widget pieces
+
+/// Round-4 surface values for widgets and Live Activities (`design/round4/system.html`, R4-1…R4-4).
+///
+/// Everything colour- and type-shaped comes from `NoopTheme` / `NoopType` in StrandDesign, which this
+/// extension links. The few white-alpha levels below are the R4-1/R4-2 CSS values that have no in-app
+/// equivalent (widgets are deliberately lighter than in-app cards), kept here in one place rather than in
+/// the views.
+enum WidgetStyle {
+    /// R4-1: 18 pt padding on every Home Screen widget and Lock Screen banner.
+    static let padding: CGFloat = NoopTheme.Layout.cardPadding
+    /// The widget body. Opaque: a widget cannot blur the wallpaper the way the mockup's glass does.
+    static let background = NoopTheme.cardSolid
+    /// The Lock Screen Live Activity banner (`.livebanner`: rgba(20,20,24,.78)).
+    static let activityBackground = NoopTheme.cardSolid.opacity(0.78)
+    /// The header's right-hand time/source label (`.wg .h span:last-child`).
+    static let headerTrailing = Color.white.opacity(0.38)
+    /// Ring captions and the strongest secondary label (`rgba(255,255,255,.72)`).
+    static let ringLabel = Color.white.opacity(0.72)
+    /// Thin progress-bar track (`.thin`).
+    static let barTrack = Color.white.opacity(0.10)
+    static let barHeight: CGFloat = 4
+    /// Gap between a big number and its caption (`.wg .c { margin-top: 6px }`).
+    static let captionGap: CGFloat = 6
+    /// Gap above a thin bar (`margin-top: 12px`).
+    static let barGap: CGFloat = NoopTheme.Layout.m
+    /// Inactive zone segments (R4-2 `opacity:.3`).
+    static let zoneDim: Double = 0.3
+
+    /// A light numeral at a ramp size — the widget weight (`NoopType.widgetNumber`) at a smaller step,
+    /// for values that sit beside or inside other marks.
+    static func numberFont(size: CGFloat) -> Font {
+        Font.system(size: size, weight: NoopType.widgetNumber.weight, design: .default).monospacedDigit()
+    }
+
+    /// "6:12 AM" for a time today, "Tue 6:12 AM" otherwise, so a value from another day says so.
+    static func timeLabel(_ date: Date, now: Date) -> String {
+        Calendar.current.isDate(date, inSameDayAs: now)
+            ? date.formatted(date: .omitted, time: .shortened)
+            : date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+    }
+
+    /// "7h 42m", localized by Foundation (no catalog key), with the unit runs drawn smaller and dimmer
+    /// (`.wg .n small`). Applied over the caller's number font, which styles the digits.
+    static func durationText(minutes: Int, unitsSmall: Bool = false) -> Text {
+        let style = Duration.UnitsFormatStyle(allowedUnits: [.hours, .minutes], width: .narrow)
+        var attributed = Duration.seconds(minutes * 60).formatted(style.attributed)
+        if unitsSmall {
+            for run in attributed.runs where run.measurement == .unit {
+                attributed[run.range].font = NoopType.unit.fixedFont
+                attributed[run.range].foregroundColor = NoopType.widgetCaption.defaultColor
+            }
+        }
+        return Text(attributed)
+    }
+}
+
+/// R4-1 header: the domain label in Medium 12, its time or source on the right at white 38%.
+struct WidgetHeader<Trailing: View>: View {
+    let title: LocalizedStringKey
+    let tint: Color
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: NoopTheme.Layout.s) {
+            Text(title)
+                .noopFont(.widgetLabel, color: false)
+                .foregroundStyle(tint)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            trailing()
+                .noopFont(.widgetCaption, color: false)
+                .foregroundStyle(WidgetStyle.headerTrailing)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+}
+
+/// R4-1 number: Light 42 with −1.4 tracking, an optional small unit at white 50%. Nil is a dash in the
+/// tertiary colour, never a zero.
+struct WidgetNumber: View {
+    let value: String?
+    var unit: String? = nil
+    /// A carried-over reading: still shown, no longer drawn as current.
+    var dimmed: Bool = false
+
+    var body: some View {
+        HStack(alignment: .lastTextBaseline, spacing: 3) {
+            Text(verbatim: value ?? "—")
+                .noopFont(.widgetNumber, color: false)
+                .foregroundStyle(value == nil ? NoopTheme.textTertiary
+                                 : (dimmed ? NoopTheme.textSecondary : NoopTheme.textPrimary))
+            if let unit, value != nil {
+                Text(verbatim: unit)
+                    .noopFont(.unit, color: false)
+                    .foregroundStyle(NoopType.widgetCaption.defaultColor)
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+    }
+}
+
+/// R4-1 `.thin` bar. Nil draws the track alone.
+struct WidgetThinBar: View {
+    let fraction: Double?
+    let tint: Color
+    var height: CGFloat = WidgetStyle.barHeight
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(WidgetStyle.barTrack)
+                if let fraction {
+                    Capsule().fill(tint)
+                        .frame(width: max(height, geo.size.width * CGFloat(min(max(fraction, 0), 1))))
+                }
+            }
+        }
+        .frame(height: height)
+    }
+}
+
+/// A static, widget-safe thin ring. Avoids any draw-in animation: WidgetKit timelines do not reliably fire
+/// `onAppear`, so an animated ring can freeze empty. Nil fraction draws the dashed empty track (the
+/// redesign's missing-value ring) and a dash in the centre when a label is asked for.
+struct WidgetRing: View {
+    let fraction: Double?
+    let tint: Color
+    let diameter: CGFloat
+    let lineWidth: CGFloat
+    /// Centre read-out, already formatted. Nil on a labelled ring with no value draws a dash.
+    var text: String? = nil
+    /// False for a decorative ring beside a number that already says the value.
+    var labelled: Bool = true
+
+    var body: some View {
+        ZStack {
+            if let fraction {
+                Circle().stroke(NoopTheme.track, lineWidth: lineWidth)
+                Circle()
+                    // A genuine zero still draws a round-cap bead so scored-0 reads as data, not absence.
+                    .trim(from: 0, to: max(0.0001, CGFloat(min(max(fraction, 0), 1))))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            } else {
+                Circle().stroke(NoopTheme.trackEmpty,
+                                style: StrokeStyle(lineWidth: max(1, lineWidth / 3), dash: [2, 3]))
+            }
+            if labelled {
+                Text(verbatim: text ?? "—")
+                    .font(WidgetStyle.numberFont(size: diameter * 0.4))
+                    .tracking(NoopType.widgetNumber.tracking * diameter / 100)
+                    .foregroundStyle(text == nil ? NoopTheme.textTertiary : NoopTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(.horizontal, lineWidth + 2)
+            }
+        }
+        .frame(width: diameter, height: diameter)
     }
 }

@@ -120,9 +120,10 @@ private struct StressMovingMarksShape: Shape {
 }
 
 struct StressWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: StressEntry
     private let scaleWidth: CGFloat = 14
-    private let scaleGap: CGFloat = 6
+    private let scaleGap: CGFloat = NoopTheme.Layout.s
 
     /// Resolved on read, so a curve scored for a day that is over is dropped rather than drawn. Measured
     /// from `entry.date` rather than `Date()` because WidgetKit renders an entry at ITS date, which is
@@ -131,68 +132,62 @@ struct StressWidgetView: View {
         entry.snap?.stressCurve(now: entry.date) ?? []
     }
     private var stats: StressTrace.Stats? { StressTrace.stats(series) }
-    private var latest: Double? { series.last(where: { $0.level != nil })?.level }
+    private var latestPoint: StressPoint? { series.last(where: { $0.level != nil }) }
+    private var latest: Double? { latestPoint?.level }
 
-    // The ramp's band anchors, taken from the palette tokens the Stress screen's own ramp is built from,
-    // rather than the local hexes the Glance twin has to carry. Blue calm, green steady, amber tense.
-    private var calm: Color { StrandPalette.accent }
-    private var steady: Color { StrandPalette.statusPositive }
-    private var tense: Color { StrandPalette.statusWarning }
+    // R4-1's ramp, calm to tense: the Recovery band colours read the other way up (green low, red high).
+    private var calm: Color { NoopTheme.recovery }
+    private var steady: Color { NoopTheme.recoveryMid }
+    private var tense: Color { NoopTheme.recoveryLow }
 
     /// Vertical, because `StressTrace.segments` maps the score onto Y off a FIXED domain: height already
     /// encodes level, so one top-to-bottom gradient paints every run the colour its own score deserves.
-    /// The screen's ramp read upward.
     private var rampGradient: LinearGradient {
         LinearGradient(colors: [tense, steady, calm], startPoint: .top, endPoint: .bottom)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Stress")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(StrandPalette.textPrimary)
-
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text(latest.map { StressTrace.formatLevel($0) } ?? "—")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(StrandPalette.textPrimary)
-                if latest != nil {
-                    Text("of 3")
-                        .font(.system(size: 12))
-                        .foregroundStyle(StrandPalette.textSecondary)
-                }
-                if let stats, let peak = stats.peak.level {
-                    // "Peak" is a catalog key the app already carries in every locale; the value and the
-                    // time are DATA, so they are formatted into a plain String and shown verbatim. That
-                    // keeps a translator's job to the word that has one, and adds no catalog entry for a
-                    // string that is otherwise punctuation.
-                    let peakTime = Date(timeIntervalSince1970: TimeInterval(stats.peak.ts))
-                        .formatted(date: .omitted, time: .shortened)
-                    HStack(spacing: 4) {
-                        Text("Peak")
-                        Text(verbatim: StressTrace.formatLevel(peak) + " · " + peakTime)
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(StrandPalette.textPrimary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(tense.opacity(0.18), in: Capsule())
-                    .padding(.leading, 6)
+        VStack(alignment: .leading, spacing: 0) {
+            WidgetHeader(title: "Stress", tint: NoopTheme.stress) {
+                // The hour the number was scored for, which is the time the value carries.
+                if let ts = latestPoint?.ts {
+                    Text(WidgetStyle.timeLabel(Date(timeIntervalSince1970: TimeInterval(ts)), now: entry.date))
                 }
             }
-
-            if stats != nil {
+            Spacer(minLength: 0)
+            HStack(alignment: .lastTextBaseline, spacing: NoopTheme.Layout.s) {
+                WidgetNumber(value: latest.map { StressTrace.formatLevel($0) })
+                if latest != nil {
+                    Text("of 3").noopFont(.widgetCaption)
+                }
+                if family != .systemSmall, let stats, let peak = stats.peak.level {
+                    // "Peak" is a catalog key; the value and the time are DATA, shown verbatim.
+                    let peakTime = Date(timeIntervalSince1970: TimeInterval(stats.peak.ts))
+                        .formatted(date: .omitted, time: .shortened)
+                    // `Peak` and `avg %@` are both catalog keys; the separators carry nothing to translate.
+                    HStack(spacing: NoopTheme.Layout.xs) {
+                        Text("Peak")
+                        Text(verbatim: StressTrace.formatLevel(peak) + " · " + peakTime + " · ")
+                        Text("avg \(StressTrace.formatLevel(stats.mean))")
+                    }
+                    .noopFont(.widgetCaption)
+                    .lineLimit(1)
+                }
+            }
+            if family == .systemSmall {
+                // R4-1 small: where the latest hour sits on the fixed 0–3 domain. Track alone when unscored.
+                StressRangeBar(level: latest, colors: [calm, steady, tense])
+                    .padding(.top, WidgetStyle.barGap)
+            } else if stats != nil {
                 HStack(alignment: .top, spacing: scaleGap) {
-                    // The scale sits on the LEFT, where the Stress screen puts it. (The heart-rate
-                    // widget puts its scale on the right, which is right for a trace whose numbers are
-                    // read off the end.) Fixed rather than derived, because that is what the domain is:
-                    // an axis that moved with the day would make two days impossible to compare.
+                    // The scale sits on the LEFT, where the Stress screen puts it. Fixed rather than
+                    // derived, because that is what the domain is: an axis that moved with the day
+                    // would make two days impossible to compare.
                     let ticks = StressTrace.levelTicks()
                     VStack(alignment: .trailing) {
                         ForEach(Array(ticks.enumerated()), id: \.offset) { index, tick in
-                            Text("\(tick)")
-                                .font(.system(size: 10))
-                                .foregroundStyle(StrandPalette.textSecondary)
+                            Text(verbatim: "\(tick)")
+                                .noopFont(.widgetCaption)
                             if index < ticks.count - 1 { Spacer(minLength: 0) }
                         }
                     }
@@ -200,34 +195,12 @@ struct StressWidgetView: View {
                     StressCurveChart(series: series, ramp: rampGradient,
                                      fillTint: steady, dotTint: tense)
                 }
+                .padding(.top, NoopTheme.Layout.s)
                 StressTimeAxis(series: series)
                     .padding(.leading, scaleWidth + scaleGap)
             }
-
-            Spacer(minLength: 0)
-            if let updated = entry.snap?.updated, updated != .distantPast {
-                HStack {
-                    Spacer()
-                    // Both halves are catalog keys the app already carries, `avg %@` and `Updated %@`,
-                    // joined by a separator with nothing in it to translate. One composite key would have
-                    // needed a new entry in ten locales to say what these two already say.
-                    if let stats {
-                        HStack(spacing: 0) {
-                            Text("avg \(StressTrace.formatLevel(stats.mean))")
-                            Text(verbatim: " · ")
-                            Text("Updated \(updated, format: .dateTime.hour().minute())")
-                        }
-                        .font(.system(size: 10))
-                        .foregroundStyle(StrandPalette.textSecondary)
-                    } else {
-                        Text("Updated \(updated, format: .dateTime.hour().minute())")
-                            .font(.system(size: 10))
-                            .foregroundStyle(StrandPalette.textSecondary)
-                    }
-                    Spacer()
-                }
-            }
         }
+        .padding(WidgetStyle.padding)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
     }
@@ -245,6 +218,33 @@ struct StressWidgetView: View {
         let peakText = StressTrace.formatLevel(peak)
         let meanText = StressTrace.formatLevel(stats.mean)
         return String(localized: "Stress \(now) of 3, average \(meanText), peak \(peakText)")
+    }
+}
+
+/// R4-1's stress bar: the calm-to-tense ramp across the fixed 0–3 domain, with a white knob at the
+/// latest scored hour. No knob when nothing is scored, so an empty day is not drawn as a calm zero.
+private struct StressRangeBar: View {
+    let level: Double?
+    let colors: [Color]
+    private let knob: CGFloat = 10
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+                    .frame(height: WidgetStyle.barHeight)
+                if let level {
+                    let x = geo.size.width * CGFloat(min(max(level / StressTrace.domainMax, 0), 1))
+                    Circle()
+                        .fill(NoopTheme.knob)
+                        .frame(width: knob, height: knob)
+                        .offset(x: min(max(x - knob / 2, 0), geo.size.width - knob))
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .frame(height: knob)
     }
 }
 
@@ -271,13 +271,13 @@ private struct StressCurveChart: View {
                         startPoint: .top, endPoint: .bottom,
                     ))
                 StressCurveShape(series: series, filled: false)
-                    .stroke(ramp, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .stroke(ramp, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                 StressHighDotsShape(series: series)
                     .fill(dotTint)
             }
             if hasMarks {
                 StressMovingMarksShape(series: series)
-                    .fill(StrandPalette.textSecondary.opacity(0.45))
+                    .fill(WidgetStyle.headerTrailing)
                     .frame(height: 3)
             }
         }
@@ -297,8 +297,7 @@ private struct StressTimeAxis: View {
                 ForEach(Array(ticks.enumerated()), id: \.offset) { i, ts in
                     Text(Date(timeIntervalSince1970: TimeInterval(ts)),
                          format: .dateTime.hour().minute())
-                        .font(.system(size: 9))
-                        .foregroundStyle(StrandPalette.textSecondary)
+                        .noopFont(.widgetCaption)
                     if i < ticks.count - 1 { Spacer(minLength: 0) }
                 }
             }
@@ -313,15 +312,16 @@ struct StressWidget: Widget {
         StaticConfiguration(kind: Self.kind, provider: StressProvider()) { entry in
             if #available(iOS 17.0, *) {
                 StressWidgetView(entry: entry)
-                    .containerBackground(StrandPalette.surfaceBase, for: .widget)
+                    .containerBackground(WidgetStyle.background, for: .widget)
             } else {
                 StressWidgetView(entry: entry)
-                    .padding()
-                    .background(StrandPalette.surfaceBase)
+                    .background(WidgetStyle.background)
             }
         }
         .configurationDisplayName("Stress")
         .description("Today's stress as an hour-by-hour curve.")
-        .supportedFamilies([.systemMedium])
+        // systemSmall added for R4-1 (latest hour on the 0–3 bar); systemMedium keeps the curve.
+        .supportedFamilies([.systemSmall, .systemMedium])
+        .contentMarginsDisabled()
     }
 }
