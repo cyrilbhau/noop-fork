@@ -78,12 +78,7 @@ extension WidgetSnapshot {
             UserDefaults.standard.string(forKey: UnitPrefs.effortScaleKey) ?? ""
         )
         let strain = day?.strain
-        let effortDisplay: String? = strain.map { stored in
-            if effortScale == .whoop {
-                return String(format: "%.1f", UnitFormatter.effortValue(stored, scale: .whoop))
-            }
-            return "\(Int(stored.rounded()))"
-        }
+        let effortDisplay = UnitFormatter.effortSnapshotDisplay(strain, scale: effortScale)
         // #2040: today's stress curve. Self-gating on a cheap heart-rate fingerprint, so a publish that
         // changed nothing costs one indexed COUNT and no rows. Only the FULL path scores it; the live
         // fast path below reuses the previous snapshot and so carries the curve forward untouched.

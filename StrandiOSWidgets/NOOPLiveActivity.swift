@@ -24,7 +24,7 @@ struct NOOPLiveActivity: Widget {
         ActivityConfiguration(for: NOOPActivityAttributes.self) { context in
             // Lock Screen / banner presentation (R4-2).
             LiveHRPanel(bpm: Self.shownBpm(context), zone: Self.shownZone(context),
-                        recovery: context.state.recovery, strain: context.state.effort, title: "Live heart rate")
+                        recovery: context.state.recovery, strain: context.state.shownEffort, title: "Live heart rate")
                 .padding(WidgetStyle.padding)
                 .activityBackgroundTint(WidgetStyle.activityBackground)
                 .activitySystemActionForegroundColor(NoopTheme.textPrimary)
@@ -35,7 +35,7 @@ struct NOOPLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     // R4-3 expanded: the same panel as the banner, with the shorter "Live" title.
                     LiveHRPanel(bpm: bpm, zone: zone, recovery: context.state.recovery,
-                                strain: context.state.effort, title: "Live")
+                                strain: context.state.shownEffort, title: "Live")
                         .padding(.horizontal, NoopTheme.Layout.xs)
                 }
             } compactLeading: {
@@ -66,8 +66,8 @@ private struct LiveHRPanel: View {
     let bpm: Int?
     let zone: Int?
     let recovery: Int?
-    /// NOOP's 0–100 axis (`ContentState.effort`), shown as the whole number the app sends.
-    let strain: Int?
+    /// Selected-scale text from the app, with the native 0–100 fallback for older activity payloads.
+    let strain: String?
     let title: LocalizedStringKey
 
     var body: some View {
@@ -90,7 +90,7 @@ private struct LiveHRPanel: View {
                 // Centre-aligned with `fixedSize` so each value sits under its own label (#759).
                 activityStat("Recovery", value: recovery.map { "\($0)%" },
                      tint: recovery.map { NoopTheme.recoveryColor(for: $0) })
-                activityStat("Strain", value: strain.map(String.init), tint: NoopTheme.strain)
+                activityStat("Strain", value: strain, tint: NoopTheme.strain)
             }
             .padding(.top, NoopTheme.Layout.s)
 

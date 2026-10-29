@@ -39,6 +39,13 @@ final class LiveActivityController {
     /// Banners NOOP has asked iOS to remove (`removeLeftovers`), so a tick that arrives before iOS has dropped one from
     /// its list neither asks again nor logs it twice.
     private var removing: Set<String> = []
+    /// A scale change must refresh a quiet banner too, without waiting for another heart-rate sample.
+    private struct BannerPreferences: Equatable {
+        let enabled = UnitPrefs.liveActivityEnabled()
+        let effortScale = UnitPrefs.resolveEffortScale(
+            UserDefaults.standard.string(forKey: UnitPrefs.effortScaleKey) ?? ""
+        )
+    }
     /// How long after the last push iOS treats the banner as fresh; after that the banner draws the dash
     /// (`NOOPLiveActivity.shownBpm`). A WHOOP 5.0 taken off the wrist goes quiet, and with nothing arriving iOS
     /// suspends NOOP, so no timer of NOOP's can clear the number: iOS's own stale date is what does it, in at most
@@ -61,15 +68,15 @@ final class LiveActivityController {
                                     model.$bpm.map { _ in () }.eraseToAnyPublisher()])
             .sink { [weak self] in self?.refreshBanner() }
             .store(in: &cancellables)
-        // The switch is the one way to be rid of the banner, so it acts at once — not at the next heart-rate tick,
-        // which a strap off the wrist may not send for hours.
+        // The switch and displayed scale act at once — not at the next heart-rate tick, which a strap
+        // off the wrist may not send for hours.
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
-            .map { _ in UnitPrefs.liveActivityEnabled() }
-            .prepend(UnitPrefs.liveActivityEnabled())
+            .map { _ in BannerPreferences() }
+            .prepend(BannerPreferences())
             .removeDuplicates()
             .dropFirst()
-            .sink { [weak self] _ in self?.refreshBanner() }
+            .sink { [weak self] _ in self?.refreshBanner(preferenceChanged: true) }
             .store(in: &cancellables)
     }
 
@@ -83,16 +90,20 @@ final class LiveActivityController {
     /// #911: recovery and effort come from the SAME shared `Repository.widgetAnchor` the widget and the watch use, so
     /// the banner cannot name a different day at the rollover; memoized, because this runs on every heart-rate tick
     /// (re-deriving it once scanned the whole history, #1051).
-    private func refreshBanner(appActive: Bool? = nil) {
+    private func refreshBanner(appActive: Bool? = nil, preferenceChanged: Bool = false) {
         guard let model else { return }
         let connected = model.live.connected
         let day = model.repo.cachedWidgetAnchor()
         let bpm = connected ? (model.bpm ?? model.live.heartRate) : nil
+        let effortScale = UnitPrefs.resolveEffortScale(
+            UserDefaults.standard.string(forKey: UnitPrefs.effortScaleKey) ?? ""
+        )
         update(bpm: bpm,
                recovery: day?.recovery.map { Int($0.rounded()) }, connected: connected, standsAside: standsAside(),
                appActive: appActive ?? (UIApplication.shared.applicationState == .active),
                effort: day?.strain.map { Int($0.rounded()) },
-               zone: Self.zone(bpm: bpm, profile: model.profile))
+               effortDisplay: UnitFormatter.effortSnapshotDisplay(day?.strain, scale: effortScale),
+               zone: Self.zone(bpm: bpm, profile: model.profile), preferenceChanged: preferenceChanged)
     }
 
     /// The banner's zone colour: the profile's own zone set (personalised, or %HRmax), the one Live HR,
@@ -109,7 +120,7 @@ final class LiveActivityController {
     /// (`standsAside`). Pushed when what it shows changes, and often enough to stay fresh (`LiveHRBannerPushPolicy`,
     /// `staleAfter`).
     private func update(bpm: Int?, recovery: Int?, connected: Bool, standsAside: Bool, appActive: Bool,
-                        effort: Int?, zone: Int?) {
+                        effort: Int?, effortDisplay: String?, zone: Int?, preferenceChanged: Bool) {
         guard authInfo.areActivitiesEnabled else { return }
 
         // A banner iOS ended (after about eight hours) or the user swiped away is gone: forget it, so the next time
@@ -162,7 +173,8 @@ final class LiveActivityController {
         // which is typically the strap coming back — exactly when the banner should stay.
         let state = NOOPActivityAttributes.ContentState(bpm: connected ? bpm : nil, recovery: recovery,
                                                         bonded: connected, effort: effort,
-                                                        zone: connected ? zone : nil)
+                                                        zone: connected ? zone : nil,
+                                                        effortDisplay: effortDisplay)
 
         if step == .renew, activity != nil {
             // The fresh banner first, then the old one goes, so the Lock Screen is never without one; if iOS refuses
@@ -175,7 +187,7 @@ final class LiveActivityController {
         } else if let activity {
             // The number giving way to the dash (the strap off the wrist, the link dropping) is pushed at once: no
             // tick follows it, so a push skipped for spacing would leave the last number standing.
-            guard LiveHRBannerPushPolicy.due(shown: shownState, next: state, reading: \.bpm,
+            guard preferenceChanged || LiveHRBannerPushPolicy.due(shown: shownState, next: state, reading: \.bpm,
                                              sinceLastPush: now.timeIntervalSince(lastPush),
                                              staleAfter: Self.staleAfter) else { return }
             if let shown = shownState, (shown.bpm == nil) != (state.bpm == nil) { logReading(state) }

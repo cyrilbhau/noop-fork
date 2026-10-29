@@ -194,6 +194,24 @@ final class UnitFormatterTests: XCTestCase {
         XCTAssertEqual(skin.format(34.0, system: .metric, temperature: .celsius), "34.0 °C")
     }
 
+    // MARK: - Strain snapshot formatting
+
+    func testStrainSnapshotTextMatchesTheChosenScaleBeforeRounding() {
+        // 59.51 rounds to 60 for native display, but converting the rounded value would give 12.6
+        // instead of 12.5. Widgets and the banner must both format the original stored value.
+        XCTAssertEqual(UnitFormatter.effortSnapshotDisplay(59.51, scale: .hundred), "60")
+        XCTAssertEqual(UnitFormatter.effortSnapshotDisplay(59.51, scale: .whoop), "12.5")
+        XCTAssertEqual(UnitFormatter.effortSnapshotDisplay(100, scale: .hundred), "100")
+        XCTAssertEqual(UnitFormatter.effortSnapshotDisplay(100, scale: .whoop), "21.0")
+    }
+
+    func testStrainSnapshotTextDistinguishesMissingFromMeasuredZero() {
+        XCTAssertNil(UnitFormatter.effortSnapshotDisplay(nil, scale: .hundred))
+        XCTAssertNil(UnitFormatter.effortSnapshotDisplay(nil, scale: .whoop))
+        XCTAssertEqual(UnitFormatter.effortSnapshotDisplay(0, scale: .hundred), "0")
+        XCTAssertEqual(UnitFormatter.effortSnapshotDisplay(0, scale: .whoop), "0.0")
+    }
+
     // MARK: - Preference resolution
 
     func testTemperatureOverrideResolution() {

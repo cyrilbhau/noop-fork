@@ -357,6 +357,14 @@ enum UnitFormatter {
         oneDecimal(effortValue(value, scale: scale))
     }
 
+    /// iPhone widgets and Live Activities share the same compact Strain text: whole numbers on the
+    /// native axis, one decimal on the 0–21 axis. Format before rounding the stored value for ring fill.
+    static func effortSnapshotDisplay(_ value: Double?, scale: EffortScale) -> String? {
+        value.map { stored in
+            scale == .whoop ? effortDisplay(stored, scale: scale) : String(Int(stored.rounded()))
+        }
+    }
+
     /// The "out of" denominator label for the selected Effort scale — "100" or "21". Used by the tile
     /// caption ("of 100"/"of 21"), the chart unit ("/ 100"/"/ 21") and the model-breakdown axis label.
     static func effortScaleMax(_ scale: EffortScale) -> String {
