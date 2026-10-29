@@ -42,7 +42,64 @@ struct LiveWorkoutView: View {
     private var zoneSet: HRZoneSet { model.profile.hrZoneSet }
     private var zone: Int { model.bpm.map { zoneSet.zoneNumber(forBPM: Double($0)) } ?? 0 }
 
+    #if os(iOS)
+    /// The iPhone redesign (B5) replaces the classic layout unless the user chose the classic look.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    #endif
+
     var body: some View {
+        Group {
+            #if os(iOS)
+            if redesignEnabled { redesignContent } else { classicContent }
+            #else
+            classicContent
+            #endif
+        }
+        // If the workout ended elsewhere (process restart cleared it), close the screen.
+        .onChangeCompat(of: model.activeWorkout == nil) { gone in if gone { onClose() } }
+        // Arm the realtime HR stream while the in-exercise screen is up (#681). On a WHOOP 5/MG live HR
+        // only flows while the puffin realtime stream is armed; previously only the Live tab armed it, so
+        // starting a manual workout straight from Workouts (Live never opened) left `model.bpm == nil` —
+        // captureWorkoutSample bailed on every sample and endWorkout silently discarded the empty
+        // session. Ref-counted in AppModel, so when this sheet sits over an already-armed Live tab the
+        // two balance and neither disarms the other (mirrors Android LiveWorkoutScreen's DisposableEffect
+        // requestRealtimeHr/releaseRealtimeHr). Balanced: one start on appear, one stop on disappear.
+        .onAppear {
+            model.startRealtimeHR()
+            // Hold the display awake for the session only if the user opted in (#703).
+            if keepScreenOn { ScreenIdle.keepAwake(true) }
+        }
+        .onDisappear {
+            model.stopRealtimeHR()
+            // Always release on the way out so the system idle timer resumes. Even if the toggle was
+            // flipped off mid-workout, this clears any hold we placed.
+            ScreenIdle.keepAwake(false)
+        }
+        // Confirm before ending (#517): ending still requires an explicit confirm so a stray tap on the
+        // compact exit control cannot discard the in-progress recording with no way back.
+        .alert("End this workout?",
+               isPresented: $showEndConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("End", role: .destructive) {
+                model.endWorkout()
+                onClose()
+            }
+        } message: {
+            Text("This stops recording and saves what's captured so far. It can't be resumed.")
+        }
+        .confirmationDialog("Delete", isPresented: $showDeleteConfirm,
+                            titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                model.discardWorkout()
+                onClose()
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+    }
+
+    /// The classic layout (macOS, and iPhone with the redesign off).
+    private var classicContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
                 let cards: [AnyView] = [
@@ -85,46 +142,6 @@ struct LiveWorkoutView: View {
         .background {
             ScenicHeroBackground(domain: .effort)
                 .ignoresSafeArea()
-        }
-        // If the workout ended elsewhere (process restart cleared it), close the screen.
-        .onChangeCompat(of: model.activeWorkout == nil) { gone in if gone { onClose() } }
-        // Arm the realtime HR stream while the in-exercise screen is up (#681). On a WHOOP 5/MG live HR
-        // only flows while the puffin realtime stream is armed; previously only the Live tab armed it, so
-        // starting a manual workout straight from Workouts (Live never opened) left `model.bpm == nil` —
-        // captureWorkoutSample bailed on every sample and endWorkout silently discarded the empty
-        // session. Ref-counted in AppModel, so when this sheet sits over an already-armed Live tab the
-        // two balance and neither disarms the other (mirrors Android LiveWorkoutScreen's DisposableEffect
-        // requestRealtimeHr/releaseRealtimeHr). Balanced: one start on appear, one stop on disappear.
-        .onAppear {
-            model.startRealtimeHR()
-            // Hold the display awake for the session only if the user opted in (#703).
-            if keepScreenOn { ScreenIdle.keepAwake(true) }
-        }
-        .onDisappear {
-            model.stopRealtimeHR()
-            // Always release on the way out so the system idle timer resumes. Even if the toggle was
-            // flipped off mid-workout, this clears any hold we placed.
-            ScreenIdle.keepAwake(false)
-        }
-        // Confirm before ending (#517): ending still requires an explicit confirm so a stray tap on the
-        // compact exit control cannot discard the in-progress recording with no way back.
-        .alert("End this workout?",
-               isPresented: $showEndConfirm) {
-            Button("Cancel", role: .cancel) { }
-            Button("End", role: .destructive) {
-                model.endWorkout()
-                onClose()
-            }
-        } message: {
-            Text("This stops recording and saves what's captured so far. It can't be resumed.")
-        }
-        .confirmationDialog("Delete", isPresented: $showDeleteConfirm,
-                            titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                model.discardWorkout()
-                onClose()
-            }
-            Button("Cancel", role: .cancel) { }
         }
     }
 
@@ -458,6 +475,212 @@ struct LiveWorkoutView: View {
         }
     }
 }
+
+// MARK: - iPhone redesign (B5)
+//
+// `design/round3/training.html` B5 over the same live feed and actions: the zone ring (heart rate as a
+// share of the zone set's max, coloured by the current zone) around the Strain ring (`liveStrain` on the
+// user's scale), big elapsed and BPM figures, time in zones from this session's own samples, and the
+// classic controls — discard, pause/resume and end, with end and discard still behind their confirms.
+
+#if os(iOS)
+extension LiveWorkoutView {
+    var redesignContent: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                rdTopBar
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                rdElapsed
+                    .padding(.top, NoopTheme.Layout.xl)
+                rdRings
+                    .padding(.top, NoopTheme.Layout.s)
+                rdStats
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.m)
+                rdZoneStrip
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .padding(.top, NoopTheme.Layout.m)
+                VStack(spacing: NoopTheme.Layout.cardGap) {
+                    DistancePaceRowIfPresent(recorder: model.gpsRecorder)
+                    SensorRowIfPresent()
+                }
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+                .padding(.top, NoopTheme.Layout.m)
+            }
+            .padding(.top, NoopTheme.Layout.l)
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .safeAreaInset(edge: .bottom, spacing: 0) { rdControls }
+        .trainingAmbient(.workoutInProgress, intensityRaw: ambientIntensityRaw)
+    }
+
+    private var rdPaused: Bool { model.activeWorkout?.isPaused == true }
+
+    private var rdTopBar: some View {
+        HStack(spacing: NoopTheme.Layout.m) {
+            NoopPill(rdPaused ? "Paused" : "Recording",
+                     dot: rdPaused ? NoopTheme.recoveryMid : NoopTheme.recoveryLow)
+            Spacer(minLength: NoopTheme.Layout.s)
+            if let sport = model.activeWorkout?.sport {
+                // The sport is data, never a catalogue key.
+                Text(verbatim: WorkoutSource.displaySport(sport))
+                    .noopFont(.navTitle)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: NoopTheme.Layout.s)
+            NoopIconButton(systemImage: "chevron.down", accessibilityLabel: "Close") { onClose() }
+        }
+    }
+
+    private var rdElapsed: some View {
+        VStack(spacing: NoopTheme.Layout.xs / 2) {
+            Text("Elapsed").noopFont(.footnote)
+            if let workout = model.activeWorkout {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text(verbatim: Self.elapsed(seconds: workout.elapsed()))
+                        .noopFont(.heroNumber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .contentTransition(.numericText())
+                }
+                .accessibilityLabel(Text("Elapsed time"))
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Heart rate as a share of the zone set's maximum, the scale the zones themselves are drawn on.
+    private var rdZoneFraction: Double? {
+        guard let bpm = model.bpm, zoneSet.maxHR > 0 else { return nil }
+        return Double(bpm) / zoneSet.maxHR
+    }
+
+    private var rdStrainFraction: Double {
+        let strain = model.activeWorkout?.liveStrain ?? 0
+        let maxValue = effortScale == .whoop ? 21.0 : 100.0
+        return min(max(UnitFormatter.effortValue(strain, scale: effortScale) / maxValue, 0), 1)
+    }
+
+    private var rdRings: some View {
+        let zoneTint = zone >= 1 ? NoopTheme.zoneColor(zone) : NoopTheme.textTertiary
+        return ZStack {
+            NoopRing(value: rdZoneFraction, color: zoneTint, lineWidth: TrainingLayout.liveZoneLine,
+                     diameter: TrainingLayout.liveZoneRing, animate: false,
+                     accessibilityLabel: String(localized: "Heart rate"),
+                     accessibilityValue: model.bpm.map { String(localized: "\($0) bpm") } ?? String(localized: "No data"))
+            NoopRing(value: rdStrainFraction, color: NoopTheme.strain, lineWidth: TrainingLayout.liveStrainLine,
+                     diameter: TrainingLayout.liveStrainRing, animate: false,
+                     accessibilityLabel: String(localized: "Strain"),
+                     accessibilityValue: "\(UnitFormatter.effortDisplay(model.activeWorkout?.liveStrain ?? 0, scale: effortScale)) \(String(localized: "of \(UnitFormatter.effortScaleMax(effortScale))"))")
+            VStack(spacing: NoopTheme.Layout.xs / 2) {
+                HStack(spacing: NoopTheme.Layout.xs) {
+                    Image(systemName: "heart.fill").accessibilityHidden(true)
+                    Text(zone >= 1 ? "Zone \(zone) · \(Self.zoneName(zone))" : "Below Zone 1")
+                }
+                .noopFont(.footnote, color: false)
+                .fontWeight(.semibold)
+                .foregroundStyle(NoopTheme.heart)
+                Text(verbatim: model.bpm.map { "\($0)" } ?? "—")
+                    .noopFont(.bigNumber, color: false)
+                    .foregroundStyle(model.bpm == nil ? NoopTheme.textSecondary : NoopTheme.textPrimary)
+                Text("BPM").noopFont(.footnote)
+            }
+            .accessibilityElement(children: .combine)
+        }
+        .frame(height: TrainingLayout.liveRingsHeight)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var rdStats: some View {
+        let w = model.activeWorkout
+        return NoopGlassCard {
+            StatGrid([
+                StatGridItem("Strain so far",
+                             value: UnitFormatter.effortDisplay(w?.liveStrain ?? 0, scale: effortScale)),
+                StatGridItem("Average", value: (w?.avgHr ?? 0) > 0 ? "\(w!.avgHr)" : nil, unit: "bpm"),
+                StatGridItem("Peak", value: (w?.peakHr ?? 0) > 0 ? "\(w!.peakHr)" : nil, unit: "bpm"),
+            ], columns: 3)
+        }
+    }
+
+    /// Seconds in each zone from this session's captured samples, nil until any zone time exists.
+    private var rdZoneSeconds: [Double]? {
+        guard let samples = model.activeWorkout?.samples, !samples.isEmpty else { return nil }
+        let seconds = HRZones.timeInZone(samples, zoneSet: zoneSet).seconds
+        return seconds.contains { $0 > 0 } ? seconds : nil
+    }
+
+    @ViewBuilder private var rdZoneStrip: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            if let seconds = rdZoneSeconds {
+                GeometryReader { geo in
+                    let total = seconds.reduce(0, +)
+                    let gaps = NoopTheme.Layout.xs * 4
+                    HStack(spacing: NoopTheme.Layout.xs) {
+                        ForEach(0..<5, id: \.self) { i in
+                            Capsule()
+                                .fill(NoopTheme.zoneColor(i + 1))
+                                .frame(width: max(0, (geo.size.width - gaps) * seconds[i] / total))
+                        }
+                    }
+                }
+                .frame(height: TrainingLayout.zoneStripHeight)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Time in zones"))
+                .accessibilityValue(Text(verbatim: (1...5).map { "Z\($0) \(Int((seconds[$0 - 1] / 60).rounded())) min" }
+                    .joined(separator: ", ")))
+                Text("Time in zones").noopFont(.footnote)
+            }
+            if let band = zoneSet.zones.first(where: { $0.number == zone }) {
+                Text("Zone \(zone): \(Int(band.lower))-\(Int(band.upper)) bpm (\(Int(band.lowerPct * 100))-\(Int(band.upperPct * 100))% max HR)")
+                    .noopFont(.caption)
+            } else {
+                Text("Warming up. Keep moving to climb into Zone 1.")
+                    .noopFont(.caption)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Discard, end and pause/resume. End and discard open the same confirms as the classic bar.
+    private var rdControls: some View {
+        HStack(spacing: NoopTheme.Layout.l) {
+            Button { showDeleteConfirm = true } label: {
+                Image(systemName: "trash")
+                    .noopFont(.sectionTitle, color: false)
+                    .foregroundStyle(NoopTheme.recoveryLow)
+                    .frame(width: TrainingLayout.liveSecondaryControl, height: TrainingLayout.liveSecondaryControl)
+                    .background(Circle().fill(NoopTheme.control))
+            }
+            .buttonStyle(.noopPress)
+            .accessibilityLabel(Text("Delete"))
+            Button { showEndConfirm = true } label: {
+                Image(systemName: "stop.fill")
+                    .noopFont(.screenHeadline, color: false)
+                    .foregroundStyle(NoopTheme.recoveryLow)
+                    .frame(width: TrainingLayout.liveControl, height: TrainingLayout.liveControl)
+                    .background(Circle().fill(NoopTheme.recoveryLow.opacity(TrainingLayout.stopFill)))
+            }
+            .buttonStyle(.noopPress)
+            .accessibilityLabel(Text("End workout"))
+            .accessibilityHint(Text("Stops recording and saves what's captured so far"))
+            Button { model.toggleWorkoutPause() } label: {
+                Image(systemName: rdPaused ? "play.fill" : "pause.fill")
+                    .noopFont(.screenHeadline, color: false)
+                    .foregroundStyle(NoopTheme.canvas)
+                    .frame(width: TrainingLayout.liveControl, height: TrainingLayout.liveControl)
+                    .background(Circle().fill(NoopTheme.textPrimary))
+            }
+            .buttonStyle(.noopPress)
+            .accessibilityLabel(Text(rdPaused ? "Resume" : "Pause"))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, NoopTheme.Layout.s)
+        .padding(.bottom, NoopTheme.Layout.m)
+    }
+}
+#endif
 
 // MARK: - Native Liquid Glass workout controls
 

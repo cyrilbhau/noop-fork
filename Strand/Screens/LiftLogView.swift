@@ -39,18 +39,19 @@ struct LiftLogView: View {
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
     private var unitSystem: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
+    #if os(iOS)
+    /// The iPhone redesign (B2) replaces the classic layout unless the user chose the classic look.
+    @AppStorage(NoopTheme.Keys.redesignEnabled) private var redesignEnabled = true
+    @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
+    #endif
+
     var body: some View {
-        ScreenScaffold(
-            title: "Lift Log",
-            subtitle: "Build a program once, then tap through it at the gym. Kept on \(Platform.deviceNounPhrase).",
-            onRefresh: { await load() }
-        ) {
-            VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
-                headerCard
-                programsSection
-                weekSection
-                historySection
-            }
+        Group {
+            #if os(iOS)
+            if redesignEnabled { redesignContent } else { classicContent }
+            #else
+            classicContent
+            #endif
         }
         // Also on a saved session: the session sheet lives above this screen and cannot tell it
         // directly, and a save does not always bump `refreshSeq`.
@@ -68,6 +69,22 @@ struct LiftLogView: View {
         }
         .sheet(item: $viewing) { target in
             LiftSessionDetailSheet(session: target.session) { await load() }
+        }
+    }
+
+    /// The classic layout (macOS, and iPhone with the redesign off).
+    private var classicContent: some View {
+        ScreenScaffold(
+            title: "Lift Log",
+            subtitle: "Build a program once, then tap through it at the gym. Kept on \(Platform.deviceNounPhrase).",
+            onRefresh: { await load() }
+        ) {
+            VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                headerCard
+                programsSection
+                weekSection
+                historySection
+            }
         }
     }
 
@@ -382,6 +399,221 @@ struct LiftLogView: View {
         loaded = true
     }
 }
+
+// MARK: - iPhone redesign (B2)
+//
+// `design/round3/training.html` B2, over this screen's own state and actions: paste a workout, programs
+// (edit, start, new, import), the week's sets per muscle with the research floor tick, and every finished
+// session. The mockup's "Up next" rotation and "Active" program have no stored equivalent, so programs are
+// listed with Start as they are today.
+
+#if os(iOS)
+extension LiftLogView {
+    var redesignContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text("Lift Log")
+                        .noopFont(.largeTitle)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Build a program once, then tap through it at the gym. Kept on \(Platform.deviceNounPhrase).")
+                        .noopFont(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+                .noopEntrance(index: 0)
+
+                Button { pastingWorkout = true } label: {
+                    Label("Paste workout text", systemImage: "doc.on.clipboard")
+                }
+                .buttonStyle(NoopSecondaryButton())
+                .padding(.horizontal, NoopTheme.Layout.gutter)
+                .padding(.top, NoopTheme.Layout.l)
+
+                Text("Lifting adds volume and set counts. It never changes your Effort, which stays measured from heart rate.")
+                    .noopFont(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, NoopTheme.Layout.sectionSide)
+                    .padding(.top, NoopTheme.Layout.s)
+
+                TrainingSectionTitle(title: "Programs")
+                rdPrograms
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .noopEntrance(index: 1)
+
+                TrainingSectionTitle(title: "Sets per muscle", trailing: String(localized: "Last 7 days · estimated"))
+                rdWeek
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .noopEntrance(index: 2)
+
+                TrainingSectionTitle(title: "Sessions")
+                rdHistory
+                    .padding(.horizontal, NoopTheme.Layout.gutter)
+                    .noopEntrance(index: 3)
+            }
+            .padding(.bottom, NoopTheme.Layout.xl)
+        }
+        .trainingAmbient(.liftLog, intensityRaw: ambientIntensityRaw)
+        .refreshable { await load() }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    // MARK: Programs
+
+    @ViewBuilder private var rdPrograms: some View {
+        VStack(alignment: .leading, spacing: NoopTheme.Layout.cardGap) {
+            if !loaded {
+                NoopGlassCard { Text("Reading your programs…").noopFont(.footnote) }
+                    .noopSkeleton(true)
+            } else if programs.isEmpty {
+                NoopGlassCard {
+                    VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+                        Text("No programs yet").noopFont(.rowTitle)
+                        Text("A program is a name and an ordered list of exercises with your targets — working sets, reps, weight, rest and your own technique note.")
+                            .noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } else {
+                ForEach(programs, id: \.id) { program in rdProgramCard(program) }
+            }
+            HStack(spacing: NoopTheme.Layout.cardGap) {
+                Button { editing = ProgramEditTarget(id: "new", program: nil) } label: {
+                    Label("New program", systemImage: "plus")
+                }
+                .buttonStyle(NoopSecondaryButton())
+                Button { importing = true } label: {
+                    Label("Import", systemImage: "tablecells")
+                }
+                .buttonStyle(NoopSecondaryButton())
+            }
+        }
+    }
+
+    private func rdProgramCard(_ program: LiftProgramRow) -> some View {
+        HStack(spacing: NoopTheme.Layout.m) {
+            Button { editing = ProgramEditTarget(id: program.id, program: program) } label: {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
+                    // Program names and notes are data.
+                    Text(verbatim: program.name).noopFont(.rowTitle)
+                    if let note = program.note, !note.isEmpty {
+                        Text(verbatim: note).noopFont(.footnote).lineLimit(3)
+                    }
+                    Text("Tap to edit").noopFont(.caption)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button { Task { await start(program) } } label: {
+                Label(session.isActive ? "Running" : "Start", systemImage: "play.fill")
+                    .noopFont(.pill, color: false)
+                    .foregroundStyle(NoopTheme.canvas)
+                    .padding(.horizontal, NoopTheme.Layout.l)
+                    .frame(minHeight: NoopTheme.Layout.minTouchTarget)
+                    .background(Capsule().fill(NoopTheme.textPrimary))
+            }
+            .buttonStyle(.noopPress)
+            .accessibilityLabel("Start this program")
+        }
+        .padding(NoopTheme.Layout.cardPadding)
+        .background {
+            RoundedRectangle(cornerRadius: NoopTheme.Layout.cardRadius, style: .continuous)
+                .fill(LinearGradient(colors: [NoopTheme.lift.opacity(TrainingLayout.liftCardTint), .clear],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+        }
+        .noopGlassBackground()
+    }
+
+    // MARK: Week
+
+    @ViewBuilder private var rdWeek: some View {
+        let ordered = LiftMuscle.ordered.filter { (weekCounts[$0] ?? 0) > 0 }
+        NoopGlassCard {
+            if ordered.isEmpty {
+                Text("Once you've logged a session, this shows how many sets each muscle got this week, against what the research associates with growth.")
+                    .noopFont(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.m) {
+                    ForEach(ordered, id: \.self) { muscle in
+                        rdMuscleBar(muscle, sets: weekCounts[muscle] ?? 0)
+                    }
+                    Text("Counted from the muscles you assigned each exercise: direct sets count once, indirect ones half. The tick is about 4 sets a week — below that, studies across GROUPS of people stop reliably detecting growth. It is a research reference, not a target for you, and above it gains continue with strongly diminishing returns and no clear ceiling, so the bar has no \"full\".")
+                        .noopFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// The classic bar's rules in the redesign's tokens: the number is the truth, the floor is a tick a
+    /// fifth of the way along, nothing reads as complete.
+    private func rdMuscleBar(_ muscle: LiftMuscle, sets: Double) -> some View {
+        let floor = LiftMetrics.ReferenceDose.hypertrophyMinimumSetsPerWeek
+        let atOrAboveFloor = sets >= floor
+        let fill = min(1.0, sets / Self.weeklySetsBarSpan)
+        let tick = min(1.0, floor / Self.weeklySetsBarSpan)
+        return HStack(spacing: NoopTheme.Layout.m) {
+            Text(verbatim: muscle.displayName)
+                .noopFont(.bodySmall)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(NoopTheme.track)
+                    Capsule()
+                        .fill(NoopTheme.lift.opacity(atOrAboveFloor ? 1.0 : TrainingLayout.belowFloorOpacity))
+                        .frame(width: max(TrainingLayout.hairline * 2, geo.size.width * fill))
+                    Capsule()
+                        .fill(NoopTheme.textPrimary.opacity(TrainingLayout.floorTickOpacity))
+                        .frame(width: TrainingLayout.hairline * 2)
+                        .offset(x: max(0, geo.size.width * tick - TrainingLayout.hairline))
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(height: NoopTheme.Layout.s)
+            .frame(maxWidth: .infinity)
+            .layoutPriority(2)
+            Text(verbatim: LiftFormat.trim(sets))
+                .noopFont(.footnote, color: false)
+                .monospacedDigit()
+                .foregroundStyle(NoopTheme.textPrimary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(atOrAboveFloor
+                            ? String(localized: "\(muscle.displayName): \(LiftFormat.trim(sets)) sets, at or above the weekly floor of \(LiftFormat.trim(floor))")
+                            : String(localized: "\(muscle.displayName): \(LiftFormat.trim(sets)) sets, below the weekly floor of \(LiftFormat.trim(floor))"))
+    }
+
+    // MARK: History
+
+    @ViewBuilder private var rdHistory: some View {
+        if history.isEmpty {
+            NoopGlassCard {
+                Text("Finished sessions land here, with every set you logged.")
+                    .noopFont(.footnote)
+            }
+        } else {
+            NoopGlassCard(flush: true) {
+                VStack(spacing: 0) {
+                    ForEach(Array(history.enumerated()), id: \.element.id) { index, row in
+                        Button { viewing = SessionDetailTarget(id: row.id, session: row) } label: {
+                            NoopListRow("\(row.programName ?? String(localized: "Session"))",
+                                        systemImage: "dumbbell.fill", color: NoopTheme.lift,
+                                        detail: "\(Date(timeIntervalSince1970: TimeInterval(row.startTs)).formatted(date: .abbreviated, time: .shortened)) · \(TrainingProvenance.forLift(row).label)",
+                                        showsDivider: index > 0)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+#endif
 
 /// The session whose detail is being read back. A wrapper rather than a retroactive `Identifiable`
 /// on `LiftSessionRow`, keeping the store's row types free of app-layer conformances.
