@@ -1654,20 +1654,14 @@ private struct CoachTypingDots: View {
                                            bottomTrailingRadius: CoachRedesignLayout.bubbleRadius,
                                            topTrailingRadius: CoachRedesignLayout.bubbleRadius,
                                            style: .continuous)
-        TimelineView(.animation(paused: still)) { timeline in
-            HStack(spacing: CoachRedesignLayout.dotGap) {
-                ForEach(0..<3, id: \.self) { index in
-                    let phase = still ? nil : Self.phase(at: timeline.date, index: index)
-                    Circle()
-                        .fill(NoopTheme.textSecondary)
-                        .frame(width: CoachRedesignLayout.dot, height: CoachRedesignLayout.dot)
-                        .opacity(phase.map { CoachRedesignLayout.dotRestOpacity + (1 - CoachRedesignLayout.dotRestOpacity) * $0 }
-                                 ?? CoachRedesignLayout.dotRestOpacity)
-                        .offset(y: -CoachRedesignLayout.dotRise * (phase ?? 0))
-                }
+        // Held still, the resting dots are drawn with no TimelineView behind them: a paused animation
+        // timeline still keeps the render server busy (QuietMotionCoverageTests).
+        Group {
+            if still {
+                dots(at: nil)
+            } else {
+                TimelineView(.animation) { timeline in dots(at: timeline.date) }
             }
-            .padding(.horizontal, CoachRedesignLayout.bubbleHorizontal + NoopTheme.Layout.xs)
-            .padding(.vertical, CoachRedesignLayout.bubbleVertical + NoopTheme.Layout.xs)
         }
         .background {
             ZStack {
@@ -1679,6 +1673,23 @@ private struct CoachTypingDots: View {
         .overlay(shape.strokeBorder(NoopTheme.cardBorder, lineWidth: FormKitLayout.hairline))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Coach is thinking")
+    }
+
+    /// The three dots at `date`, or at rest when `date` is nil.
+    private func dots(at date: Date?) -> some View {
+        HStack(spacing: CoachRedesignLayout.dotGap) {
+            ForEach(0..<3, id: \.self) { index in
+                let phase = date.map { Self.phase(at: $0, index: index) }
+                Circle()
+                    .fill(NoopTheme.textSecondary)
+                    .frame(width: CoachRedesignLayout.dot, height: CoachRedesignLayout.dot)
+                    .opacity(phase.map { CoachRedesignLayout.dotRestOpacity + (1 - CoachRedesignLayout.dotRestOpacity) * $0 }
+                             ?? CoachRedesignLayout.dotRestOpacity)
+                    .offset(y: -CoachRedesignLayout.dotRise * (phase ?? 0))
+            }
+        }
+        .padding(.horizontal, CoachRedesignLayout.bubbleHorizontal + NoopTheme.Layout.xs)
+        .padding(.vertical, CoachRedesignLayout.bubbleVertical + NoopTheme.Layout.xs)
     }
 
     /// Lift 0…1 for one dot: up over the first 30 % of the cycle, down by 60 %, resting after (the
