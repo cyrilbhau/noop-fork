@@ -59,12 +59,14 @@ enum AppleWatchDevice {
 
     /// Build the Apple Watch `PairedDevice` from recent rows, or nil when it shouldn't appear yet.
     ///
-    /// Returns nil when HealthKit isn't authorized, or when no recent apple-health row carries a
+    /// The personal activity-only importer reads phone steps and third-party workouts; those must
+    /// never create a Watch pairing. The full Watch integration retains its existing behavior.
+    /// Returns nil for activity-only imports, when HealthKit isn't authorized, or when no row carries a
     /// single usable metric (a fresh / unused watch). The capability set is the honest trim above.
     /// `now` and `addedAt` are injectable so the logic is deterministic in tests.
-    static func device(daily: [DailyMetric], apple: [AppleDaily], authorized: Bool,
+    static func device(daily: [DailyMetric], apple: [AppleDaily], authorized: Bool, activityOnly: Bool = false,
                        existing: PairedDevice? = nil, now: Date = Date()) -> PairedDevice? {
-        guard authorized else { return nil }
+        guard authorized, !activityOnly else { return nil }
         let caps = capabilities(daily: daily, apple: apple)
         // No usable metric from the watch yet → don't register a device that captures nothing.
         guard !caps.isEmpty else { return nil }
@@ -118,8 +120,8 @@ enum AppleWatchDevice {
     /// HealthKit, so callers there simply never pass `true`.
     @MainActor
     static func registerIfAuthorized(registry: DeviceRegistry, store: WhoopStore,
-                                     authorized: Bool, now: Date = Date()) async {
-        guard authorized else { return }
+                                     authorized: Bool, activityOnly: Bool = false, now: Date = Date()) async {
+        guard authorized, !activityOnly else { return }
         let range = recentDayRange(now: now)
 
         let daily = (try? await store.dailyMetrics(deviceId: deviceId, from: range.from, to: range.to)) ?? []
@@ -127,7 +129,7 @@ enum AppleWatchDevice {
 
         let existing = registry.devices.first(where: { $0.id == deviceId })
         guard let device = device(daily: daily, apple: apple, authorized: authorized,
-                                  existing: existing, now: now) else { return }
+                                  activityOnly: activityOnly, existing: existing, now: now) else { return }
         registry.add(device)
     }
 

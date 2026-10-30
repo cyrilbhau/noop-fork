@@ -36,6 +36,33 @@ final class DeviceRegistry: ObservableObject {
         }
     }
 
+    /// Personal activity imports cannot establish a Watch pairing. Repair historical false pairings
+    /// before starting source routing, including when Health access is disabled or unavailable.
+    @discardableResult
+    func removeActivityOnlyWatchPairing() -> Bool {
+        guard (try? store.removeActivityOnlyWatchPairing()) == true else { return false }
+        // An absent active row must not leave the deleted Watch id cached as a live source.
+        activeDeviceId = (try? store.activeDeviceId()) ?? "my-whoop"
+        reload()
+        return true
+    }
+
+    /// The WHOOP BLE manager owns only WHOOP connections. A nil peripheral means its current strap,
+    /// so allow that fallback solely for the active, not-yet-adopted WHOOP row.
+    static func shouldReleaseWhoop(_ device: PairedDevice, activeDeviceId: String,
+                                   connectedPeripheralId: String?) -> Bool {
+        guard device.sourceKind == .liveBLE || device.sourceKind == .historyBLE,
+              SourceIdentity.isWhoop(device) else { return false }
+        if let peripheralId = device.peripheralId {
+            guard let target = UUID(uuidString: peripheralId) else { return false }
+            if let connectedPeripheralId {
+                return UUID(uuidString: connectedPeripheralId) == target
+            }
+            return device.id == activeDeviceId
+        }
+        return device.id == activeDeviceId && connectedPeripheralId == nil
+    }
+
     // MARK: - UI mutations (Devices screen)
     //
     // Each op delegates to the synchronous store, then `reload()`s so the published `devices` /

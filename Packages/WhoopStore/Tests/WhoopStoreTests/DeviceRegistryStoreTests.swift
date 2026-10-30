@@ -75,6 +75,64 @@ final class DeviceRegistryStoreTests: XCTestCase {
         XCTAssertEqual(try store.all().map(\.id), ["my-whoop"])
     }
 
+    func testActivityOnlyWatchRepairPreservesRecordingsAndActiveWhoop() throws {
+        let dbq = try makeDB()
+        let store = DeviceRegistryStore(dbQueue: dbq)
+        try store.add(PairedDevice(id: "apple-health", brand: "Apple", model: "Apple Watch",
+                                   sourceKind: .liveAppleWatch, capabilities: [.steps], status: .paired,
+                                   addedAt: 2, lastSeenAt: 2))
+        try dbq.write { db in
+            try db.execute(sql: "INSERT INTO device (id, name) VALUES ('apple-health', 'Apple Health')")
+            try db.execute(sql: "INSERT INTO appleDaily (deviceId, day, steps) VALUES ('apple-health', '2026-10-29', 1234)")
+            try db.execute(sql: "INSERT INTO metricSeries (deviceId, day, key, value) VALUES ('apple-health', '2026-10-29', 'steps', 1234)")
+            try db.execute(sql: "INSERT INTO hrSample (deviceId, ts, bpm) VALUES ('my-whoop', 1000, 65)")
+        }
+        XCTAssertTrue(try store.removeActivityOnlyWatchPairing())
+        XCTAssertFalse(try store.removeActivityOnlyWatchPairing()) // repeat on foreground / relaunch is harmless
+        XCTAssertEqual(try store.all().map(\.id), ["my-whoop"])
+        XCTAssertEqual(try store.activeDeviceId(), "my-whoop")
+        try dbq.read { db in
+            XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM device WHERE id = 'apple-health'"), 1)
+            XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT steps FROM appleDaily WHERE deviceId = 'apple-health'"), 1234)
+            XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM metricSeries WHERE deviceId = 'apple-health'"), 1)
+            XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT bpm FROM hrSample WHERE deviceId = 'my-whoop'"), 65)
+        }
+    }
+
+    func testActivityOnlyWatchRepairRestoresAdoptedWhoopAfterWatchWasActiveOrRemoved() throws {
+        for watchStatus in [DeviceStatus.active, .archived] {
+            let store = DeviceRegistryStore(dbQueue: try makeDB())
+            try store.add(PairedDevice(id: "whoop-real", brand: "WHOOP", model: "WHOOP 4.0",
+                                       peripheralId: "11111111-2222-3333-4444-555555555555",
+                                       sourceKind: .liveBLE, capabilities: [.hr], status: .paired,
+                                       addedAt: 3, lastSeenAt: 3))
+            try store.add(PairedDevice(id: "apple-health", brand: "Apple", model: "Apple Watch",
+                                       sourceKind: .liveAppleWatch, capabilities: [.steps], status: .paired,
+                                       addedAt: 2, lastSeenAt: 2))
+            try store.setActive("apple-health")
+            if watchStatus == .archived { try store.archive("apple-health") }
+            try store.removeActivityOnlyWatchPairing()
+            XCTAssertEqual(try store.activeDeviceId(), "whoop-real")
+            XCTAssertEqual(try store.all().filter { $0.status == .active }.count, 1)
+        }
+    }
+
+    func testActivityOnlyRepairKeepsLegitimateImportPairingAndArchivedWhoop() throws {
+        let store = DeviceRegistryStore(dbQueue: try makeDB())
+        try store.add(PairedDevice(id: "apple-health", brand: "Apple", model: "Apple Health",
+                                   sourceKind: .fileImport, capabilities: [.steps], status: .paired,
+                                   addedAt: 2, lastSeenAt: 2))
+        try store.removeActivityOnlyWatchPairing()
+        XCTAssertEqual(try store.all().count, 2)
+        try store.archive("my-whoop")
+        try store.add(PairedDevice(id: "apple-health", brand: "Apple", model: "Apple Watch",
+                                   sourceKind: .liveAppleWatch, capabilities: [.steps], status: .paired,
+                                   addedAt: 2, lastSeenAt: 2))
+        try store.removeActivityOnlyWatchPairing()
+        XCTAssertNil(try store.activeDeviceId())
+        XCTAssertEqual(try store.all().first?.status, .archived)
+    }
+
     func testSeededWhoopHasNilPeripheralId() throws {
         // v16 applies cleanly: the seeded my-whoop row exists with peripheralId nil (it connects to
         // "any WHOOP" today; it adopts its peripheral id later).

@@ -1,14 +1,31 @@
 # Personal WHOOP 4.0 iPhone fork
 
-**Current status — 29 October 2026:** NOOP Cyril is signed, installed and working on the owner's
+**Current status — 30 October 2026:** NOOP Cyril is signed, installed and working on the owner's
 iPhone. The owner confirmed ChatGPT Coach replies and retained sign-in, pasted-workout saving and
 reopening, and Apple Health workout imports. The personal build contains the iPhone app and its
 widgets only; the owner has no Apple Watch. The old device-provisioning blocker is resolved.
-The audited redesign is now installed in place; the owner reconfirmed existing history and saved
-Coach sign-in. Hardware and overnight checks remain open in [the redesign report](docs/personal/REDESIGN-REPORT.md).
+The audited redesign is installed in place; the owner reconfirmed existing history and saved
+Coach sign-in after that earlier update. The 29 October Health/widget update added Apple Health Steps
+reads with refreshed widget artwork; the owner confirmed Steps and existing history/sign-in look
+right. A subsequent signed update preserves independent strap estimates on Health-positive days
+and adds **Today → Steps → Phone-free walk check**. Installation succeeded. The functional repair
+launched normally; launch of its final copy-only revision was blocked by the phone locking.
+Acceptance of this later screen is pending. Phone-free strap step
+tracking remains unresolved. Hardware and overnight checks remain open in [the redesign report](docs/personal/REDESIGN-REPORT.md).
+
+The subsequent device/sync repair is signed, installed in place and launched normally. Device logs
+confirm the synthetic Apple Watch pairing was removed and WHOOP reconnected and completed history
+syncs. The cleanup preserves Health recordings, isolates device removal from the WHOOP connection,
+and stops live/console chatter extending the history idle timer. Both Apple targets compiled;
+101 focused app tests and 22 registry-store tests passed. Background and overnight reliability
+remain separate acceptance checks.
+
+The latest Your Cards/spacing update, including the preceding Health/Steps, device/sync and widget
+work, is installed and launched. Its source manifest and installation evidence are in ignored
+`build/personal/your-cards-device/`. Acceptance of that latest build remains deferred.
 
 Start with [the current context and design handoff](docs/personal/CONTEXT.md). It covers both recent
-workstreams, source entry points, remaining validation and the current checkpoint
+workstreams, source entry points, remaining validation and the earlier installed-redesign checkpoint
 `checkpoint/2026-10-29-redesign-installed`. The earlier `checkpoint/2026-10-29-before-design` is retained.
 Claude loads the context through [CLAUDE.md](CLAUDE.md).
 The [installation guide](docs/personal/INSTALL.md) remains a setup reference; use
@@ -18,11 +35,11 @@ The [installation guide](docs/personal/INSTALL.md) remains a setup reference; us
 
 | Requirement | Current evidence |
 |---|---|
-| Reliable phone-free steps | **Unproven.** The 4.0 engine estimates steps from sparse motion; it does not decode a native pedometer count. An imported phone total can suppress that day's estimate. |
+| Reliable phone-free steps | **Unproven.** The 4.0 engine estimates steps from sparse motion; it does not decode a native pedometer count. The independent strap estimate is retained even on days with imported phone steps. |
 | Sleep, HR/HRV, recovery and cardiovascular strain | Implemented; relevant suites pass. The installed app uses Sleep/Recovery/Strain display names. Multi-night iPhone collection, background reliability and accuracy still need recorded validation. Scores are independent NOOP calculations. |
 | Skin temperature | Provisional conversion/trend; accurate absolute temperature is unsupported. |
 | Offline SpO₂ percentage | Unsupported from the 4.0 sensor stream. Imported historical percentages are a separate source. |
-| Apple Health | Personal build imports workout summaries only. Reads are enabled and an imported Hevy workout is confirmed in NOOP. Health writes are blocked; vitals/sleep/steps are not imported by this route. |
+| Apple Health / steps | The installed build reads Steps and workout summaries; Health writes and physiological imports stay blocked. The owner accepted the initial Health/widget update. The later strap repair preserves an independent owner-attributed estimate even on Health-positive days, without summing sources or changing default selection. A local counted-walk check freezes calibration and reports motion gaps/error. Motion and a three-day automatic calibration exist, but reliable phone-free counting and partial-day reconciliation remain unproven. |
 | Hevy | Reviewed text paste/save and set-level Hevy CSV import are implemented. Owner confirmed paste/save/reopen. No direct account sync; CSV imports append/skip duplicate start times rather than reconcile later edits. Preserve source exports. |
 | ChatGPT Coach | Subscription sign-in, model discovery, streaming replies, history, summaries and briefs implemented. Owner confirmed normal replies and saved sign-in. Overnight scheduling and other field cases remain separate checks. |
 | Widgets | Recovery/Strain/Sleep presentation plus estimated steps/goal and recent sleep. Signed app/widget builds passed and app installation completed; widget values/freshness and refresh still need device acceptance. |
@@ -55,7 +72,7 @@ Personal additions are deliberately modular:
 - Additional private-data ignore patterns; private signing configuration and health data remain local.
 - ChatGPT subscription Coach with device-only Keychain credentials and separate health-context consent;
   existing API-key providers remain available. No NOOP backend or new paid subscription was added.
-- Workout text and Hevy CSV set-level imports, workout-only Apple Health reads and display/cache fixes.
+- Workout text and Hevy CSV set-level imports, Steps and workout-summary Apple Health reads, and display/cache fixes. Health writes and physiological imports remain blocked.
 - Sleep/Recovery/Strain presentation for the owner's familiar WHOOP comparison.
 - Audited Today/Sleep/Training/Health redesign, native Coach tab, Profile navigation, widgets and
   Live Activities, with a live classic-mode fallback and AX5 support.
@@ -73,10 +90,12 @@ are not granted. Prepared source is now available on
 The personal app is installed on the owner's iPhone; no public release was made. Scheduled governance/branch-cleanup jobs are gated to the
 upstream repository; personal-fork runs remain manual. No hosted build service was started.
 
-The installed application source is
+The earlier installed redesign source is
 [`c1763457`](https://github.com/cyrilbhau/noop-fork/commit/c176345781a50a904287044f93743879ba67e22e).
 The `checkpoint/2026-10-29-redesign-installed` tag adds installation acceptance and handoff documentation
-to that source. Earlier
+to that source. The subsequent Your Cards update includes the Health/Steps, device/sync and widget
+work; its exact installed source manifest is in ignored `build/personal/your-cards-device/`.
+Latest runtime acceptance remains deferred. Earlier
 [Mac continuation notes](docs/personal/MAC-CONTINUE.md) are historical; retain the existing local
 checkout, signing identity, app data and ignored configuration for subsequent updates.
 
@@ -88,8 +107,8 @@ checkout, signing identity, app data and ignored configuration for subsequent up
 2. Check two phone-free walks against the **agreed ≤10% error** limit and a seated trial against
    **≤20 false steps per 30 minutes**. If the estimate cannot meet the requirement, use an explicitly
    attributed measured pedometer source; carrying the iPhone is the smallest existing alternative.
-   Automatic calibration expects phone-step references, which the current workout-only Health route
-   does not import; resolve that dependency before claiming calibration or accuracy.
+   Automatic calibration expects phone-step references. The installed step repair supplies them
+   after Steps access is granted; verify the import on the phone before claiming calibration or accuracy.
 3. Validate installed widget values/freshness, a private backup/restore rehearsal, and retention/import
    of the original WHOOP archive. Keep source attribution and original exports intact.
 4. Check Coach overnight briefs, locked-phone operation and real token expiry. iOS scheduling remains

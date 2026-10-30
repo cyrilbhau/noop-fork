@@ -4,10 +4,10 @@ import WhoopProtocol
 /// Estimate daily steps for a WHOOP 4.0 from the strap's MOTION, calibrated per-user against a phone
 /// step count (Apple Health / Health Connect).
 ///
-/// WHY THIS IS A CALIBRATED ESTIMATE, NOT A PEDOMETER. A WHOOP 4.0 does not send a step count over BLE,
-/// and the accelerometer/gravity data we DO get is sparse (~one vector per stored record, roughly minute
-/// granularity) — far below the ~25–50 Hz a true step counter needs to see individual footfalls. So we
-/// cannot count steps. What we CAN measure is movement VOLUME (how much the gravity vector moved over the
+/// WHY THIS IS A CALIBRATED ESTIMATE, NOT A PEDOMETER. NOOP has no validated WHOOP 4.0 native step-count
+/// field. The stored gravity summaries available to this engine do not resolve individual footfalls;
+/// the higher-rate realtime IMU stream is a separate, currently unsupported pedometer input. This does
+/// not establish that the hardware cannot report steps. Here we measure movement VOLUME (how much the gravity vector moved over the
 /// day), and we map that volume to steps with a coefficient learned from days where the phone ALSO counted
 /// steps. The output is always framed as an estimate.
 ///

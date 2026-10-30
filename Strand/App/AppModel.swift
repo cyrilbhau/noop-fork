@@ -623,6 +623,9 @@ final class AppModel: ObservableObject {
         guard sourceCoordinator == nil, let store = await repo.storeHandle() else { return }
         let registry = DeviceRegistry(store: DeviceRegistryStore(dbQueue: store.registryWriter))
         registry.reload()
+        #if os(iOS)
+        if HealthKitBridge.activityImportsOnly { repairActivityOnlyWatchPairing(in: registry) }
+        #endif
         let coordinator = SourceCoordinator(
             registry: registry,
             live: live,
@@ -1258,13 +1261,35 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Archive exactly the selected source; release WHOOP only when that row owns its BLE link.
+    func archiveDevice(_ device: PairedDevice) {
+        guard let registry = deviceRegistry else { return }
+        if DeviceRegistry.shouldReleaseWhoop(device, activeDeviceId: registry.activeDeviceId,
+                                             connectedPeripheralId: ble.connectedPeripheralUUID) {
+            ble.forgetDevice(device.peripheralId)
+        }
+        registry.archive(device.id)
+    }
+
+    /// Pairing repair never reads or deletes Health samples, and logs only an actual metadata change.
+    private func repairActivityOnlyWatchPairing(in registry: DeviceRegistry) {
+        if registry.removeActivityOnlyWatchPairing() {
+            live.append(log: "Removed unsupported Apple Watch pairing; Apple Health history preserved.")
+        }
+    }
+
     #if os(iOS)
     /// Materialize Apple Health as a device and update the source that feeds Today.
     /// Only replaces the seeded WHOOP row while it is still a placeholder with no strap and no data;
     /// a physical or user-selected source always keeps priority.
-    func refreshAfterAppleHealthSync(authorized: Bool, now: Date = Date(), workoutsOnly: Bool = false) async {
-        if workoutsOnly { await repo.refresh(); return }
+    func refreshAfterAppleHealthSync(authorized: Bool, now: Date = Date(), activityOnly: Bool = false) async {
+        let activityOnly = activityOnly || HealthKitBridge.activityImportsOnly
         await wireSourceCoordinator()
+        if activityOnly {
+            if let registry = deviceRegistry { repairActivityOnlyWatchPairing(in: registry) }
+            await repo.refresh()
+            return
+        }
         guard let registry = deviceRegistry, let store = await repo.storeHandle() else {
             await repo.refresh()
             return
@@ -1282,7 +1307,7 @@ final class AppModel: ObservableObject {
         }
 
         await AppleWatchDevice.registerIfAuthorized(
-            registry: registry, store: store, authorized: authorized, now: now)
+            registry: registry, store: store, authorized: authorized, activityOnly: activityOnly, now: now)
         guard registry.devices.contains(where: { $0.id == AppleWatchDevice.deviceId }) else {
             await repo.refresh()
             return

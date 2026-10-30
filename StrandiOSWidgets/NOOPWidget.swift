@@ -28,10 +28,10 @@ struct NOOPProvider: TimelineProvider {
     }
 }
 
-/// The glanceable score widget (round 4, R4-1 and R4-2).
+/// The glanceable score widget, with static ambient artwork on Home Screen families.
 ///
 /// One idea per family: systemSmall is Recovery alone, systemMedium is the Today trio (Sleep · Recovery ·
-/// Strain) as thin rings, systemLarge adds the vitals grid. Lock Screen: a Recovery capacity gauge, the
+/// Strain) as gradient rings, systemLarge adds the vitals grid. Lock Screen: a Recovery capacity gauge, the
 /// "Recovery 68% · HRV 62 · Sleep 7h 42m" rectangle and an inline line. Every value carries the time the app
 /// last published it, and a missing score is a dash over an empty track, never a zero.
 struct NOOPWidgetView: View {
@@ -158,7 +158,7 @@ struct NOOPWidgetView: View {
     /// R4-1 small: Recovery alone — the number, its band, a thin ring.
     private var small: some View {
         VStack(alignment: .leading, spacing: 0) {
-            WidgetHeader(title: "Recovery", tint: recoveryTint) {
+            WidgetHeader(title: "Recovery", tint: recoveryTint, trailingColor: NoopWidgetArt.timestamp) {
                 if let updated { Text(WidgetStyle.timeLabel(updated, now: entry.date)) }
             }
             Spacer(minLength: 0)
@@ -168,11 +168,13 @@ struct NOOPWidgetView: View {
                     Group {
                         if let r = snap.recovery { Text(bandKey(r)) } else { Text("No data") }
                     }
-                    .noopFont(.widgetCaption)
+                    .noopFont(.widgetCaption, color: false)
+                    .foregroundStyle(NoopWidgetArt.caption)
                 }
                 Spacer(minLength: 0)
-                WidgetRing(fraction: snap.recovery.map { Double($0) / 100 }, tint: recoveryTint,
-                           diameter: 46, lineWidth: 9, labelled: false)
+                NoopWidgetScoreRing(fraction: snap.recovery.map { Double($0) / 100 }, tint: recoveryTint,
+                                    diameter: NoopWidgetArt.smallRing, lineWidth: NoopWidgetArt.ringWidth,
+                                    decorated: renderingMode == .fullColor)
                     .padding(.bottom, NoopTheme.Layout.xs)
                     .accessibilityHidden(true)
             }
@@ -180,12 +182,12 @@ struct NOOPWidgetView: View {
         .padding(WidgetStyle.padding)
     }
 
-    /// R4-1 medium: the Today trio, Sleep · Recovery · Strain, as thin rings with light numerals inside.
+    /// The Today trio over a compact version of the app's ambient field.
     private var medium: some View {
         VStack(alignment: .leading, spacing: 0) {
             todayHeader
             Spacer(minLength: 0)
-            scoreRings(diameter: 62, lineWidth: 6)
+            scoreRings(diameter: NoopWidgetArt.mediumRing, lineWidth: NoopWidgetArt.ringWidth)
         }
         .padding(WidgetStyle.padding)
     }
@@ -194,7 +196,7 @@ struct NOOPWidgetView: View {
     private var large: some View {
         VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
             todayHeader
-            scoreRings(diameter: 84, lineWidth: 7)
+            scoreRings(diameter: NoopWidgetArt.largeRing, lineWidth: NoopWidgetArt.largeRingWidth)
             Rectangle().fill(NoopTheme.separator).frame(height: 1)
             HStack(alignment: .top, spacing: 0) {
                 widgetStatCell("HRV", value: snap.hrv.map { "\($0)" }, unit: "ms",
@@ -216,9 +218,18 @@ struct NOOPWidgetView: View {
     }
 
     private var todayHeader: some View {
-        WidgetHeader(title: "Today", tint: NoopTheme.textPrimary) {
-            if let updated { Text("Updated \(WidgetStyle.timeLabel(updated, now: entry.date))") }
+        HStack(spacing: NoopTheme.Layout.s) {
+            Text("Today")
+                .noopFont(.rowTitle)
+            Spacer(minLength: 0)
+            if let updated {
+                Text("Updated \(WidgetStyle.timeLabel(updated, now: entry.date))")
+                    .noopFont(.widgetCaption, color: false)
+                    .foregroundStyle(NoopWidgetArt.timestamp)
+                    .minimumScaleFactor(0.8)
+            }
         }
+        .lineLimit(1)
     }
 
     /// Order is the round-4 trio: Sleep · Recovery · Strain. Each cell is a dash over an empty track until scored.
@@ -242,10 +253,20 @@ struct NOOPWidgetView: View {
     private func scoreCell(label: LocalizedStringKey, text: String?, fraction: Double?, tint: Color, outOf: Int,
                            diameter: CGFloat, lineWidth: CGFloat) -> some View {
         VStack(spacing: NoopTheme.Layout.s) {
-            WidgetRing(fraction: fraction, tint: tint, diameter: diameter, lineWidth: lineWidth, text: text)
+            ZStack {
+                NoopWidgetScoreRing(fraction: fraction, tint: tint, diameter: diameter, lineWidth: lineWidth,
+                                    decorated: renderingMode == .fullColor)
+                Text(verbatim: text ?? "—")
+                    .font(WidgetStyle.numberFont(size: diameter * 0.4))
+                    .tracking(NoopType.widgetNumber.tracking * diameter / 100)
+                    .foregroundStyle(text == nil ? NoopTheme.textTertiary : NoopTheme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(.horizontal, lineWidth + 2)
+            }
             Text(label)
-                .noopFont(.widgetCaption, color: false)
-                .foregroundStyle(WidgetStyle.ringLabel)
+                .noopFont(.widgetLabel, color: false)
+                .foregroundStyle(NoopWidgetArt.caption)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -292,7 +313,7 @@ struct NOOPWidget: Widget {
         StaticConfiguration(kind: kind, provider: NOOPProvider()) { entry in
             if #available(iOS 17.0, *) {
                 NOOPWidgetView(entry: entry)
-                    .containerBackground(WidgetStyle.background, for: .widget)
+                    .containerBackground(for: .widget) { ScoreWidgetBackground(snapshot: entry.snapshot) }
             } else {
                 NOOPWidgetView(entry: entry)
                     .background(WidgetStyle.background)
@@ -307,6 +328,30 @@ struct NOOPWidget: Widget {
         // The round-4 layouts carry their own 18 pt padding (`WidgetStyle.padding`) on the Home Screen
         // families; the Lock Screen accessories have no system margin to lose.
         .contentMarginsDisabled()
+    }
+}
+
+/// WidgetKit owns background removal and tinting. Artwork is only meaningful in full colour;
+/// the Lock Screen and tinted Home Screen keep the system's simpler treatment.
+struct ScoreWidgetBackground: View {
+    @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var renderingMode
+    let snapshot: WidgetSnapshot
+
+    var body: some View {
+        if renderingMode == .fullColor && (family == .systemSmall || family == .systemMedium || family == .systemLarge) {
+            NoopWidgetBackdrop(colors: colors)
+        } else {
+            WidgetStyle.background
+        }
+    }
+
+    private var colors: [Color] {
+        let recovery = snapshot.recovery.map { NoopTheme.recoveryColor(for: $0) } ?? NoopTheme.textTertiary
+        if family == .systemSmall { return [recovery] }
+        return [snapshot.rest == nil ? NoopTheme.textTertiary : NoopTheme.sleep,
+                recovery,
+                snapshot.effort == nil ? NoopTheme.textTertiary : NoopTheme.strain]
     }
 }
 
@@ -371,6 +416,7 @@ enum WidgetStyle {
 struct WidgetHeader<Trailing: View>: View {
     let title: LocalizedStringKey
     let tint: Color
+    var trailingColor: Color = WidgetStyle.headerTrailing
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
@@ -382,7 +428,7 @@ struct WidgetHeader<Trailing: View>: View {
             Spacer(minLength: 0)
             trailing()
                 .noopFont(.widgetCaption, color: false)
-                .foregroundStyle(WidgetStyle.headerTrailing)
+                .foregroundStyle(trailingColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }

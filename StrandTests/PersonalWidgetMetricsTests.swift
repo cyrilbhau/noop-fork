@@ -24,6 +24,21 @@ final class PersonalWidgetMetricsTests: XCTestCase {
         XCTAssertNil(reading?.observedAt)
     }
 
+    func testHealthStepsKeepTheirSourceAndExpireAtLocalMidnight() throws {
+        let steps = PersonalStepReading.health(value: 6500, day: "2026-10-29")
+        let metrics = PersonalWidgetMetrics(steps: steps, stepGoal: 8000)
+        let decoded = try JSONDecoder().decode(PersonalWidgetMetrics.self, from: JSONEncoder().encode(metrics))
+        let today = date("2026-10-29T18:29:00Z")
+        let midnight = date("2026-10-29T18:30:00Z")
+        let reading = decoded.todaySteps(now: today, calendar: calendar("Asia/Kolkata"))
+        XCTAssertEqual(reading?.count, 6500)
+        XCTAssertEqual(reading?.source, .appleHealth)
+        XCTAssertNil(reading?.observedAt)
+        XCTAssertNil(decoded.todaySteps(now: midnight, calendar: calendar("Asia/Kolkata")))
+        XCTAssertEqual(PersonalStepReading.health(value: 0, day: "2026-10-29")?.count, 0)
+        XCTAssertNil(PersonalStepReading.health(value: -1, day: "2026-10-29"))
+    }
+
     func testGoalRequiresExplicitValidPreferenceEvenWithoutSteps() {
         XCTAssertNil(PersonalWidgetMetrics().stepGoal)
         for goal in [0, -1, 50_001, Int.max] {

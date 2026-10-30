@@ -1,7 +1,11 @@
 package com.noop.analytics
 
 import com.noop.data.DailyMetric
+import com.noop.data.AppleDaily
+import com.noop.data.GravitySample
 import com.noop.data.GravityWitness
+import com.noop.data.MetricSeriesRow
+import com.noop.data.PairedDeviceRow
 import com.noop.data.WhoopDao
 import com.noop.data.WhoopRepository
 import java.lang.reflect.InvocationTargetException
@@ -96,6 +100,7 @@ class IntelligenceEngineJacocoBudgetTest {
             "Vitality upsert" to Regex("""\brepo\s*\.\s*upsertMetricSeries\s*\(\s*listOf\s*\("""),
             "Apple Health read" to Regex("""\brepo\s*\.\s*appleDaily\s*\(\s*WhoopRepository\s*\.\s*APPLE_HEALTH_SOURCE\b"""),
             "Health Connect read" to Regex("""\brepo\s*\.\s*appleDaily\s*\(\s*WhoopRepository\s*\.\s*HEALTH_CONNECT_SOURCE\b"""),
+            "confirmed owner registry" to Regex("""\brepo\s*\.\s*pairedDevices\s*\("""),
             "gravity samples" to Regex("""\brepo\s*\.\s*gravitySamplesForDevice\s*\("""),
             // The motion-cache readout sits between the gravity reads it reports on and the fit that consumes
             // them, so it names the pass that just happened rather than one still running.
@@ -166,8 +171,9 @@ class IntelligenceEngineJacocoBudgetTest {
         assertEquals(60, events.count { it == "gravity" })
         // Each day asks for the witness BEFORE the read it might skip; a read that came first would make
         // the cache pointless while still passing a count.
-        assertEquals("gravityFp", events[3])
-        assertEquals("gravity", events[4])
+        assertEquals("registry", events[3])
+        assertEquals("gravityFp", events[4])
+        assertEquals("gravity", events[5])
         // Three diagnostics now: the fitness gate first, the motion-cache readout once the reads are done,
         // and the phase line last of all.
         assertEquals(3, events.count { it == "diag" })
@@ -231,9 +237,91 @@ class IntelligenceEngineJacocoBudgetTest {
         assertEquals(60, second.count { it == "gravityFp" })
     }
 
+    @Test
+    fun healthPositiveDayPersistsIndependentOwnerAttributedEstimateAndMatchingTrace() {
+        val events = arrayListOf<String>()
+        val writes = arrayListOf<MetricSeriesRow>()
+        val traces = arrayListOf<String>()
+        val health = listOf(AppleDaily("apple-health", "1970-01-01", steps = 2000))
+        val gravity = listOf(
+            GravitySample("strap", 1, 0.0, 0.0, 1.0),
+            GravitySample("strap", 2, 10.0, 0.0, 1.0),
+        )
+        invokeExtractedBlock(
+            repo = recordingRepository(events, appleRows = health, gravity = gravity, writes = writes),
+            diag = {}, persistCalibration = {}, trace = { traces.add(it) },
+            dailies = listOf(DailyMetric("engine-noop", "1970-01-01")),
+            computedId = "engine-noop",
+        )
+        assertEquals(listOf(MetricSeriesRow("strap-noop", "1970-01-01", "steps_est", 15.0)), writes)
+        assertTrue(traces.any { it.startsWith("stepsEst day=1970-01-01 steps=15 ") })
+        assertEquals(2000, health.single().steps)
+    }
+
+    @Test
+    fun nonFourPointZeroAndUnknownOwnersNeverCreateMotionEstimates() {
+        for ((model, brand) in listOf(null to "WHOOP", "WHOOP" to "WHOOP", "5.0" to "WHOOP", "4.0" to "Oura")) {
+            val events = arrayListOf<String>()
+            val writes = arrayListOf<MetricSeriesRow>()
+            val previousSink = IntelligenceEngine.stepsHasMotionSink
+            var motionStateWrites = 0
+            IntelligenceEngine.stepsHasMotionSink = { motionStateWrites++ }
+            try {
+                invokeExtractedBlock(
+                    repo = recordingRepository(events, writes = writes, ownerModel = model, ownerBrand = brand),
+                    diag = {}, persistCalibration = { fail("An unidentified 4.0 must preserve saved calibration") }, trace = {},
+                    dailies = listOf(DailyMetric("engine-noop", "1970-01-01")),
+                )
+            } finally {
+                IntelligenceEngine.stepsHasMotionSink = previousSink
+            }
+            assertTrue(writes.isEmpty())
+            assertEquals(0, motionStateWrites)
+            assertEquals(0, events.count { it == "gravity" || it == "gravityFp" })
+        }
+    }
+
+    @Test
+    fun confirmedFourPointZeroModelSpellingsAgreeWithSwiftRegistryGate() {
+        for (model in listOf("4.0", "WHOOP 4.0", "whoop 4.0")) {
+            val writes = arrayListOf<MetricSeriesRow>()
+            invokeExtractedBlock(
+                repo = recordingRepository(arrayListOf(), ownerModel = model, ownerBrand = "whoop", writes = writes,
+                    gravity = listOf(GravitySample("strap", 1, 0.0, 0.0, 1.0), GravitySample("strap", 2, 10.0, 0.0, 1.0))),
+                diag = {}, persistCalibration = {}, trace = {},
+                dailies = listOf(DailyMetric("engine-noop", "1970-01-01")), computedId = "engine-noop",
+            )
+            assertEquals(listOf(MetricSeriesRow("strap-noop", "1970-01-01", "steps_est", 15.0)), writes)
+        }
+    }
+
+    @Test
+    fun failedMotionReadAbortsBeforeEstimateOrCalibrationWrites() {
+        val events = arrayListOf<String>()
+        val writes = arrayListOf<MetricSeriesRow>()
+        val failure = IllegalStateException("gravity read failed")
+        try {
+            invokeExtractedBlock(
+                repo = recordingRepository(events, gravityFailure = failure, writes = writes),
+                diag = {}, persistCalibration = { fail("Failed read must not replace calibration") }, trace = {},
+                dailies = listOf(DailyMetric("engine-noop", "1970-01-01")),
+            )
+            fail("Motion read failure must propagate")
+        } catch (caught: InvocationTargetException) {
+            assertSame(failure, caught.cause)
+        }
+        assertTrue(writes.isEmpty())
+    }
+
     private fun recordingRepository(
         events: MutableList<String>,
         appleFailure: RuntimeException? = null,
+        appleRows: List<AppleDaily> = emptyList(),
+        gravity: List<GravitySample> = emptyList(),
+        gravityFailure: RuntimeException? = null,
+        writes: MutableList<MetricSeriesRow> = arrayListOf(),
+        ownerModel: String? = "4.0",
+        ownerBrand: String = "WHOOP",
     ): WhoopRepository {
         val dao = Proxy.newProxyInstance(
             WhoopDao::class.java.classLoader,
@@ -243,11 +331,23 @@ class IntelligenceEngineJacocoBudgetTest {
                 "appleDaily" -> {
                     events.add("apple:${arguments!![0]}")
                     if (appleFailure != null) throw appleFailure
-                    emptyList<Any>()
+                    if (arguments!![0] == "apple-health") appleRows else emptyList<Any>()
                 }
                 "gravitySamples" -> {
                     events.add("gravity")
-                    emptyList<Any>()
+                    if (gravityFailure != null) throw gravityFailure
+                    gravity
+                }
+                "upsertMetricSeries" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    writes.addAll(arguments!![0] as List<MetricSeriesRow>)
+                    Unit
+                }
+                "pairedDevices" -> {
+                    events.add("registry")
+                    if (ownerModel == null) emptyList() else listOf(PairedDeviceRow(id = "strap", brand = ownerBrand, model = ownerModel,
+                        nickname = null, sourceKind = "liveBLE", capabilities = "hr,hrv",
+                        status = "active", addedAt = 0, lastSeenAt = 0))
                 }
                 // The motion cache's witness: one aggregate returning both the count and the newest
                 // timestamp, so the sequence below says exactly which reads the helper makes, in order.
@@ -279,6 +379,8 @@ class IntelligenceEngineJacocoBudgetTest {
         persistCalibration: (StepsEstimateEngine.Calibration) -> Unit,
         trace: (String) -> Unit,
         coldCache: Boolean = true,
+        dailies: List<DailyMetric> = emptyList(),
+        computedId: String = "strap-noop",
     ) {
         val method = IntelligenceEngine::class.java.declaredMethods.single {
             it.name == "persistFitnessVitalityAndSteps"
@@ -292,15 +394,18 @@ class IntelligenceEngineJacocoBudgetTest {
         val result = method.invoke(
             IntelligenceEngine,
             repo,
-            emptyList<DailyMetric>(),
+            dailies,
             emptyList<DailyMetric>(),
             UserProfile(),
-            "strap-noop",
+            computedId,
             "1970-01-01",
             diag,
             0L,
             0L,
-            null,
+            object : IntelligenceEngine.DayOwnerSource {
+                override suspend fun candidatePriorities() = listOf("strap" to 0)
+                override suspend fun lockedOwner(day: String): String? = null
+            },
             listOf("strap" to 0),
             "strap",
             1.5,

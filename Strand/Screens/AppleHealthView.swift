@@ -206,14 +206,19 @@ struct AppleHealthView: View {
                        // (the scaffold stack is 20pt), so the lazy win is partial until those sections are
                        // promoted to direct children — kept as one node here to stay pixel-identical.
                        lazy: true) {
-            if loaded && showsWorkoutsOnly {
+            if loaded && showsActivityOnly {
                 VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
                     #if os(iOS)
                     liveSyncCard
                     #endif
+                    statTile(key: "steps", label: "Steps",
+                             accent: StrandPalette.metricCyan, fmt: { intString($0) })
+                    chartCard(title: "Steps", key: "steps",
+                              gradient: cyanGradient, fallback: 0...12000,
+                              fmt: { intString($0) })
                     workoutsTile
                     NavigationLink("Workouts") { WorkoutsView() }
-                    Text("Workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text.")
+                    Text("Steps and workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text.")
                         .font(StrandFont.caption)
                         .foregroundStyle(StrandPalette.textSecondary)
                 }
@@ -267,9 +272,9 @@ struct AppleHealthView: View {
         windowedRowsCache = computeWindowedRows()
     }
 
-    private var showsWorkoutsOnly: Bool {
+    private var showsActivityOnly: Bool {
         #if os(iOS)
-        return health.readsWorkoutsOnly
+        return health.readsActivityOnly
         #else
         return false
         #endif
@@ -342,7 +347,7 @@ struct AppleHealthView: View {
 
     /// Header subtitle reflects the windowed (visible) per-day span.
     private var spanSubtitle: String? {
-        if showsWorkoutsOnly { return String(localized: "Workouts") }
+        if showsActivityOnly { return String(localized: "Steps and workouts") }
         let rows = loaded ? windowedRows : appleRows
         guard let first = rows.first?.day, let last = rows.last?.day,
               let lo = date(first), let hi = date(last) else {
@@ -435,7 +440,7 @@ struct AppleHealthView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                 case .unknown, .denied:
-                    Text("Import workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build.")
+                    Text("Import steps and workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build.")
                         .font(StrandFont.caption)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -446,7 +451,7 @@ struct AppleHealthView: View {
                                 sync: { await health.sync() },
                                 refresh: {
                                     await model.refreshAfterAppleHealthSync(
-                                        authorized: health.auth == .authorized, workoutsOnly: health.readsWorkoutsOnly)
+                                        authorized: health.auth == .authorized, activityOnly: health.readsActivityOnly)
                                 }
                             )
                             await load()
@@ -469,7 +474,7 @@ struct AppleHealthView: View {
                             .font(StrandFont.subhead)
                             .foregroundStyle(StrandPalette.textSecondary)
                     } else {
-                        Text("Workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text.")
+                        Text("Steps and workout summaries refresh when NOOP opens and when iOS delivers Health updates. Full lifting details come from CSV or pasted text.")
                             .font(StrandFont.subhead)
                             .foregroundStyle(StrandPalette.textSecondary)
                     }
@@ -479,7 +484,7 @@ struct AppleHealthView: View {
                                 sync: { await health.sync() },
                                 refresh: {
                                     await model.refreshAfterAppleHealthSync(
-                                        authorized: health.auth == .authorized, workoutsOnly: health.readsWorkoutsOnly)
+                                        authorized: health.auth == .authorized, activityOnly: health.readsActivityOnly)
                                 }
                             )
                             await load()

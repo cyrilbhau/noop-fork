@@ -120,15 +120,20 @@ extension WidgetSnapshot {
         saveAndReloadIfChanged(snap)
     }
 
-    // These iOS-only widgets consume existing analytics; they never mix phone steps into the band
-    // estimate, infer a default goal, or label a publication timestamp as a measurement timestamp.
+    // Prefer Health steps to the band estimate, preserving source attribution rather than adding
+    // the two counts. Publication time is never presented as a measurement timestamp.
     @MainActor
     private static func personalMetrics(from model: AppModel, now: Date) async -> PersonalWidgetMetrics {
         let calendar = Calendar.current
         let today = PersonalWidgetMetrics.dayKey(now, calendar: calendar)
         let store = await model.repo.storeHandle()
         var steps: PersonalStepReading?
-        if let store, let registry = model.deviceRegistry {
+        if let store,
+           let rows = try? await store.appleDaily(deviceId: Repository.appleHealthSource, from: today, to: today),
+           let count = rows.first?.steps {
+            steps = .health(value: count, day: today)
+        }
+        if steps == nil, let store, let registry = model.deviceRegistry {
             let from = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
             let to = Int(now.timeIntervalSince1970)
             let owner = await IntelligenceEngine.resolveDayOwner(

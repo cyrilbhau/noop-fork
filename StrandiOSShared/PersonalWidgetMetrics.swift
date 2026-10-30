@@ -40,18 +40,23 @@ public struct PersonalWidgetMetrics: Codable, Equatable {
 }
 
 public struct PersonalStepReading: Codable, Equatable {
-    public enum Source: String, Codable { case whoop4MotionEstimate }
+    public enum Source: String, Codable { case whoop4MotionEstimate, appleHealth }
 
     public let count: Int
     public let day: String
     public let source: Source
-    // The daily estimate has no durable calculation timestamp. nil deliberately means unknown,
+    // Daily totals have no durable measurement/calculation timestamp here. nil means unknown,
     // never the publication time or the newest motion row that MAY not have been scored yet.
     public let observedAt: Date?
 
     public static func estimate(value: Double, day: String) -> Self? {
         guard value.isFinite, value >= 0, value.rounded() < Double(Int.max) else { return nil }
         return Self(count: Int(value.rounded()), day: day, source: .whoop4MotionEstimate, observedAt: nil)
+    }
+
+    public static func health(value: Int, day: String) -> Self? {
+        guard value >= 0 else { return nil }
+        return Self(count: value, day: day, source: .appleHealth, observedAt: nil)
     }
 }
 

@@ -109,3 +109,9 @@ Documentation checks cover relative links, issue-template YAML, ignore rules, pr
 texts, and whitespace. Source helper commands and feature claims were checked against the
 committed baseline. No new application build, installation, or Bluetooth validation was performed.
 The existing dirty app/test/personal-note changes were left separate from this preparation.
+
+The later [30 October source checkpoint](https://github.com/cyrilbhau/noop-fork/commit/158a5de303be6143a23e725e9b6523088c71fed8)
+integrates those app/test changes and updates current setup and status documentation for Health
+Steps support. This report's source-lineage and historical privacy audit remains scoped to
+`e600df6a`; the integration is not a new history audit or permission decision. Merging documentation
+into the private development branch does not change repository visibility or publish a release.

@@ -3384,7 +3384,8 @@ final class Repository: ObservableObject {
             to: Self.dayString(now.addingTimeInterval(86_400)))) ?? []
     }
 
-    /// Workout imports do not change daily/vital caches, so refresh() alone can leave their views stale.
+    /// Activity-only Health imports do not change daily/vital caches. Invalidate the source page and
+    /// notify Today/widgets when steps or workouts land, even if refresh() finds no vital changes.
     func invalidateWorkoutViews() {
         appleHealthCache = nil
         appleHealthLoadedSeq = -1

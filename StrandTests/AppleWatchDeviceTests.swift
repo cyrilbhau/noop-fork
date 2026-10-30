@@ -43,6 +43,84 @@ final class AppleWatchDeviceTests: XCTestCase {
         XCTAssertNil(AppleWatchDevice.device(daily: [daily("2026-06-20")], apple: [], authorized: true))
     }
 
+    func testActivityOnlyPhoneStepsDoNotCreateWatch() {
+        let d = [daily("2026-06-20", steps: 8000)]
+        let a = [apple("2026-06-20", steps: 8000)]
+        XCTAssertNil(AppleWatchDevice.device(daily: d, apple: a, authorized: true, activityOnly: true))
+    }
+
+    func testActivityOnlyDoesNotMistakeOldImportsForWatch() {
+        let d = [daily("2026-06-20", restingHr: 52, avgHrv: 45, totalSleepMin: 420)]
+        XCTAssertNil(AppleWatchDevice.device(daily: d, apple: [], authorized: true, activityOnly: true))
+    }
+
+    @MainActor
+    func testActivityOnlyHealthSyncDoesNotRegisterWatch() async throws {
+        let store = try await WhoopStore.inMemory()
+        let registry = DeviceRegistry(store: DeviceRegistryStore(dbQueue: store.registryWriter))
+        registry.reload()
+        let today = Repository.localDayKey(Date())
+        _ = try await store.upsertDailyMetrics([daily(today, steps: 8000)], deviceId: "apple-health")
+        await AppleWatchDevice.registerIfAuthorized(registry: registry, store: store, authorized: true, activityOnly: true)
+        XCTAssertFalse(registry.devices.contains { $0.id == "apple-health" })
+        XCTAssertEqual(registry.activeDeviceId, "my-whoop")
+    }
+
+    @MainActor
+    func testWatchRepairRepointsCachedRegistryToWhoop() async throws {
+        let store = try await WhoopStore.inMemory()
+        let registry = DeviceRegistry(store: DeviceRegistryStore(dbQueue: store.registryWriter))
+        registry.reload()
+        registry.add(PairedDevice(id: "whoop-real", brand: "WHOOP", model: "WHOOP 4.0",
+                                 peripheralId: "11111111-2222-3333-4444-555555555555",
+                                 sourceKind: .liveBLE, capabilities: [.hr], status: .paired,
+                                 addedAt: 1, lastSeenAt: 1))
+        registry.add(PairedDevice(id: "apple-health", brand: "Apple", model: "Apple Watch",
+                                 sourceKind: .liveAppleWatch, capabilities: [.steps], status: .paired,
+                                 addedAt: 2, lastSeenAt: 2))
+        registry.setActive("apple-health")
+        XCTAssertEqual(registry.activeDeviceId, "apple-health")
+        XCTAssertTrue(registry.removeActivityOnlyWatchPairing())
+        XCTAssertEqual(registry.activeDeviceId, "whoop-real")
+        XCTAssertFalse(registry.devices.contains { $0.id == "apple-health" })
+        XCTAssertFalse(registry.removeActivityOnlyWatchPairing())
+        XCTAssertEqual(registry.activeDeviceId, "whoop-real")
+    }
+
+    // MARK: - Source-scoped removal
+
+    private func paired(_ id: String, kind: SourceKind, brand: String, peripheral: String? = nil) -> PairedDevice {
+        PairedDevice(id: id, brand: brand, model: brand, peripheralId: peripheral,
+                     sourceKind: kind, capabilities: [.steps], status: .paired, addedAt: 1, lastSeenAt: 1)
+    }
+
+    @MainActor
+    func testRemovingHealthOrOtherSourcesNeverReleasesWhoop() {
+        for kind in [SourceKind.liveAppleWatch, .fileImport, .cloudImport, .oura, .ftms] {
+            let d = paired("apple-health", kind: kind, brand: "Apple")
+            XCTAssertFalse(DeviceRegistry.shouldReleaseWhoop(d, activeDeviceId: d.id,
+                connectedPeripheralId: "11111111-2222-3333-4444-555555555555"))
+        }
+        let generic = paired("polar", kind: .liveBLE, brand: "Polar")
+        XCTAssertFalse(DeviceRegistry.shouldReleaseWhoop(generic, activeDeviceId: "polar", connectedPeripheralId: nil))
+    }
+
+    @MainActor
+    func testWhoopRemovalTargetsOnlyItsPeripheral() {
+        let current = "11111111-2222-3333-4444-555555555555"
+        let other = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        let d = paired("whoop-real", kind: .liveBLE, brand: "WHOOP", peripheral: current)
+        XCTAssertTrue(DeviceRegistry.shouldReleaseWhoop(d, activeDeviceId: d.id, connectedPeripheralId: current))
+        XCTAssertFalse(DeviceRegistry.shouldReleaseWhoop(d, activeDeviceId: "other", connectedPeripheralId: other))
+        XCTAssertFalse(DeviceRegistry.shouldReleaseWhoop(d, activeDeviceId: "other", connectedPeripheralId: nil))
+        let unadopted = paired("my-whoop", kind: .liveBLE, brand: "WHOOP")
+        XCTAssertFalse(DeviceRegistry.shouldReleaseWhoop(unadopted, activeDeviceId: "my-whoop", connectedPeripheralId: current))
+        XCTAssertTrue(DeviceRegistry.shouldReleaseWhoop(unadopted, activeDeviceId: "my-whoop", connectedPeripheralId: nil))
+        XCTAssertFalse(DeviceRegistry.shouldReleaseWhoop(unadopted, activeDeviceId: "whoop-real", connectedPeripheralId: current))
+        let invalid = paired("whoop-bad", kind: .liveBLE, brand: "WHOOP", peripheral: "invalid")
+        XCTAssertFalse(DeviceRegistry.shouldReleaseWhoop(invalid, activeDeviceId: invalid.id, connectedPeripheralId: current))
+    }
+
     // MARK: - Registered + trimmed
 
     /// A modern watch week (HR, HRV, sleep, steps, SpO₂, wrist temp all present) → the full set.
