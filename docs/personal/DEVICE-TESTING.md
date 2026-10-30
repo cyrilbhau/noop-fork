@@ -9,8 +9,8 @@ these dates are planning targets, not evidence that the app is ready.
 
 **Steps are a release gate.** At the pinned baseline, WHOOP 4.0 steps are estimated from sparse
 motion and calibrated against phone counts; they are not a decoded band pedometer count. A phone-free
-walk therefore tests the estimate's fitness for this requirement, and may establish that this band
-cannot satisfy it. WHOOP-app agreement or an attractive dashboard does not prove accuracy.
+walk therefore tests the current NOOP estimate's fitness for this requirement. A failed result does
+not establish a hardware limitation. WHOOP-app agreement or a dashboard does not prove accuracy.
 
 ## Before testing
 
@@ -48,14 +48,20 @@ A plausible score is not proof of accuracy. Report unavailable or rejected input
 
 ## Short test sequence
 
-1. **Phone-free walk.** After sync completes, note the app's step total/source and calibration state.
-   Leave the phone behind. Manually count 500–1,000 normal walking steps using a tally counter or
-   written batches. Return, finish sync/offload, and note the new total. Subtract the starting total;
-   report `100 × (app delta − counted steps) / counted steps`. Repeat on another route/session.
-   Do not include imported iPhone steps from carrying the phone to and from the test area.
-   Confirm that the displayed value is this day's `steps_est`, not a phone total. At this baseline,
-   any positive imported phone-step reference for a day suppresses the estimate for that day;
-   a partial-phone day can therefore make this test unevaluable. Report that condition explicitly.
+1. **Phone-free walk.** The installed strap-estimate repair adds **Today → Steps → Phone-free walk
+   check** (also accessible from the Profile step settings). After ordinary sync completes, tap
+   **Start walk**, leave the phone behind, and manually count 500–1,000 normal walking steps using a
+   tally counter or written batches. Return, enter the count and tap **Finish walk**. Let ordinary
+   sync/offload finish, then tap **Check synced motion**. The local trial fixes its strap identity,
+   time window and calibration at the start; Health counts never enter its result. It reports
+   absolute error and motion sample/gap diagnostics. Signed error is also available in the result
+   model as `100 × (estimated steps − counted steps) / counted steps`.
+   A scored trial requires usable motion through both boundaries and no gap exceeding five seconds;
+   this is an explicit continuity policy, not a claimed sensor cadence. Missing, corrupt or incomplete
+   input gives an incomplete result rather than zero. This screen does not start a sensor-capture
+   command or change calibration. Repeat on another route/session, and retain both trials. Passing
+   one walk does not validate a daily pedometer or sedentary behavior. The repair also preserves the
+   separate daily estimate when Health has a positive count, without adding the two readings.
    Keep the calibration days and all health data intact; do not delete records to force an estimate.
 2. **False steps.** Sync before and after a 30-minute seated period. Note whether tapping, eating,
    typing, or arm movement caused increments. A zero value with no stored motion is missing data,
@@ -73,9 +79,14 @@ A plausible score is not proof of accuracy. Report unavailable or rejected input
    observe whether it reconnects, then open it if needed. Record automatic versus foreground-assisted
    success separately. Verify backfilled timestamps, not just an open connection. Repeat once with
    a normally locked phone and once after an ordinary app relaunch; do not use a band reset.
-6. **Apple Health.** The current personal build reads workout summaries only and blocks Health
-   writes. Verify imported workout source/time and repeat-sync deduplication under that mode. The
-   following broader writeback procedure is a future scope change, not an instruction to enable it:
+6. **Apple Health.** The installed 29 October combined update reads Steps and workout summaries.
+   Grant **Steps** read access when the foreground sync requests it. Compare today's total
+   and two prior local dates with Health, open the step detail/source history, and verify that the
+   steps widget labels the total **Apple Health**. Repeat sync to confirm replacement rather than
+   addition, check midnight rollover, then confirm the workout source/time and deduplication still
+   work. Real Health access and background refresh remain device checks. Health writes stay blocked;
+   vitals and sleep are not added to the read set. The following broader writeback procedure is a
+   future scope change, not an instruction to enable it:
    initial collection testing keeps all write types off. Existing writeback
    reconciles this app's own samples through deletion and replacement; obtain the owner's explicit
    approval for that behavior before enabling one intended write type at a time. No cleanup is

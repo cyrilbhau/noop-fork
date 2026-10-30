@@ -1,13 +1,12 @@
 ---
 name: Feature request
-about: Suggest an idea or improvement for NOOP
-labels: enhancement
+about: Suggest an idea or improvement for NOOP for iPhone
 ---
 
 <!--
-NOOP stays fully offline and on-device by design. Requests that would require
-a server, an account, cloud sync, or sending data off the device are out of
-scope — see the README and DISCLAIMER for what NOOP is and isn't.
+This tracker is for the iPhone adaptation. Collection and analytics stay on-device.
+Optional provider requests require explicit setup and consent; see README.md and
+docs/PRIVACY_SECURITY.md. Keep personal health data and credentials out of examples.
 -->
 
 ## The problem

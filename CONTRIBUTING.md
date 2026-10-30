@@ -1,141 +1,67 @@
-# Contributing to NOOP
+# Contributing to NOOP for iPhone
 
-Thanks for your interest in contributing. NOOP is a standalone, fully **offline**
-companion app for WHOOP 4.0 and 5.0 / MG straps — it pairs over Bluetooth, stores
-everything on-device in SQLite, and computes recovery / strain / HRV / sleep
-locally. No servers, no accounts, no data leaving the device.
+This repository develops an iPhone adaptation of [NOOP](https://github.com/ryanbr/noop).
+Read [AGENTS.md](AGENTS.md) for repository rules and the
+[extended contributor guide](docs/CONTRIBUTING.md) for architecture, Bluetooth safety, design
+tokens, and cross-platform contracts. [Getting started](docs/GETTING_STARTED.md) covers a local
+iPhone build with a separate app identity.
 
-This file is a quick orientation. The **full contributing guide** —
-repository layout, the design-system rules, the BLE safety contract, how to add a
-metric / screen / command / migration, and the commit conventions — lives in
-[`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md). Read that before opening a
-non-trivial PR.
+## Scope
 
-> NOOP is not affiliated with, endorsed by, or connected to WHOOP, Inc., and is
-> not a medical device. See [`DISCLAIMER.md`](DISCLAIMER.md).
+The adaptation focuses on iPhone UI, workout workflows, Coach, and widgets. The inherited macOS
+and Android implementations remain in the tree. Shared Apple sources must compile for both
+Apple targets. Protocol, analytics, persistence, and backup changes must preserve the applicable
+Swift/Kotlin parity contracts.
 
----
+Keep upstream and third-party credits intact. Contributions retain the repository's
+[PolyForm Noncommercial 1.0.0 terms](LICENSE); dependency code retains its own license.
+New copied code, assets, fonts, or protocol references need an identified origin and applicable
+terms. See [ATTRIBUTION.md](ATTRIBUTION.md) and [NOTICE](NOTICE).
 
-## Quick start
+## Validate the change
 
-The codebase is reusable Swift packages (`Packages/`) plus a thin macOS app
-(`Strand/`) and a full Android app (`android/`). The fastest feedback loop is the
-packages — they build and test on their own, no Xcode project and no strap needed.
+Use checks that cover the code changed. Run package tests for package changes, compile **NOOPiOS**
+for iPhone code, and compile **Strand** when shared Apple sources change. Android logic needs its
+corresponding JVM checks. Package tests alone do not compile the apps.
 
-### Swift packages
-
-```bash
-# Test just the package you touched (substitute the name):
-cd Packages/WhoopProtocol && swift build && swift test
-```
-
-The five packages are `WhoopProtocol` (BLE framing / decode), `WhoopStore`
-(SQLite persistence), `StrandAnalytics` (recovery / strain / HRV / sleep math),
-`StrandImport` (WHOOP CSV + Apple Health importers), and `StrandDesign` (the
-SwiftUI design system).
-
-### macOS app
-
-The Xcode project is generated from `project.yml` and is **not** committed.
+For a quick protocol check:
 
 ```bash
-brew install xcodegen
-xcodegen generate         # regenerate after any project.yml or file add/remove
-open Strand.xcodeproj     # build and run from Xcode
+cd Packages/WhoopProtocol
+swift build
+swift test
 ```
 
-For a runnable, ad-hoc-signed `NOOP.app` without an Apple ID, see
-[`docs/BUILD.md`](docs/BUILD.md).
-
-### Android app
+For the local unsigned iPhone Simulator build, after configuring the unique app identity:
 
 ```bash
-cd android
-./gradlew assembleFullDebug      # the real app (full flavour); JDK 17 required
-./gradlew assembleDemoDebug      # demo flavour — 120 days of synthetic data, no strap
-./gradlew testFullDebugUnitTest  # unit tests
+bash Tools/personal/ios.sh build
 ```
 
-**After switching branches, add `--no-build-cache --rerun-tasks`:**
+The existing workflow files contain upstream `main` branch filters. Until those filters are adapted
+to this repository's default branch, a pull request here may not trigger all checks. Record the
+commands actually run and their results; an absent check is not a passing check.
 
-```bash
-./gradlew testFullDebugUnitTest --no-build-cache --rerun-tasks
-```
+Bluetooth, background delivery, widget freshness, and backup/restore require real-device checks.
+State what was observed and what remains unverified. Scoring changes need the evidence described in
+[the validation protocol](docs/VALIDATION_PROTOCOL.md).
 
-Gradle's cache is keyed on inputs it can see, and a branch switch can leave generated sources (Room
-DAOs, KSP output) from the previous branch in place, so the suite can run against code that is not the
-code you have checked out.
+## Send a change or report a problem
 
-If a failure looks unrelated to your change, re-run with those flags before concluding it is
-pre-existing on `main`. CI always builds clean, so a red test only you can see is worth one clean
-re-run before you write a note about it: several such failures have turned out not to reproduce.
+Keep each pull request focused and fill in the [PR template](.github/PULL_REQUEST_TEMPLATE.md).
+Describe the resulting behavior, verification, and known limitations. Reference upstream issues
+with full URLs so a local issue number is not mistaken for an upstream report.
 
----
+Use [this repository's issues](https://github.com/cyrilbhau/noop-fork/issues) for the adaptation.
+Include the source commit, iOS version, strap model, steps to reproduce, and whether the redesigned
+or classic interface is active. A minimal reproduction or synthetic example is preferable to a
+personal data export. Review diagnostic excerpts for tokens, device identifiers, names, locations,
+and health data before sharing. Full health exports, backups, and unreviewed logs do not belong in
+public issues. See [SECURITY.md](SECURITY.md) for sensitive findings.
 
-## What CI checks
+Upstream NOOP maintains its own community and release channels. Contributors to this adaptation
+should not expect upstream maintainers to support its additions.
 
-Some GitHub Actions workflows run on *every* PR; others are path-filtered and only run when
-you touch what they cover. All of them compile and run unit tests only — no code signing, no
-secrets, no release. The table is the source of truth, deliberately — the section this
-replaced led with a count, and a count in prose is what goes stale while the list below it
-looks fine.
-
-The check names GitHub shows you are **job** names, which do not resemble the workflow
-names. That column is why this table exists:
-
-| Check you see | Workflow | Runs when |
-|---|---|---|
-| `check` | **i18n Coverage** (`i18n-coverage.yml`) | every PR |
-| `doc-comments` | **Source Hygiene** (`source-hygiene.yml`) | every PR |
-| `linux-capture` | **Tools Python CI** (`tools-python.yml`) | every PR |
-| `windows-capture` | **Tools Python CI (Windows)** (`tools-python-windows.yml`) | `Tools/linux-capture/**` |
-| `build-and-test` | **Android CI** (`android.yml`) | `android/**`, the protocol/store test resources, `Strand/Resources/Localizable.xcstrings` |
-| `test (…)`, `tools (…)` | **Swift Packages CI** (`swift-packages.yml`) | `Packages/**`, the `Tools/SleepBench`, `Tools/SleepPSG` and `Tools/Backfill` packages, `android/app/src/test/resources/**`, `Strand/Liquid/LiquidCore.swift` |
-| `build (Strand, …)`, `build (NOOPiOS, …)` | **App build** (`app-build.yml`) | `Strand/**`, `StrandTests/**`, `StrandiOS/**`, `StrandiOSShared/**`, `StrandiOSWidgets/**`, `NOOPWatch/**`, `NOOPWatchComplications/**`, `Packages/**`, `project.yml`, its own workflow file |
-
-Read that as a worked example: an Android-only PR runs Android CI plus the three that always
-run, so a short list of checks does not mean little was checked.
-
-**App build** compiles both Apple app targets and runs `StrandTests` on its macOS leg;
-the iOS leg is compile-only. It is active on relevant PRs. Package checks alone do not
-validate app-target Swift: build locally or verify the Apple app checks passed on the
-current PR head. Android CI compiles Compose screens and runs Android unit tests.
-App build has no push trigger, so a direct non-release commit to `main` needs a manual
-dispatch. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#what-ci-gates--and-what-it-deliberately-doesnt)
-for the validation limits and checks gated at release time.
-
-If CI fails on your PR, fix the cause rather than working around it. Never commit
-generated output (`Strand.xcodeproj/`) or any secrets, keystores, or `local.properties`.
-
----
-
-## Submitting a PR
-
-1. One concern per PR where practical (keep protocol, schema, UI, and Android
-   changes separate).
-2. Fill in the [PR template](.github/PULL_REQUEST_TEMPLATE.md).
-3. For anything on the BLE path, state what you tested **on real hardware** and on
-   which strap. A green build is not proof a command behaves correctly.
-4. For analytics changes, add a test and cite the method. If the change alters a
-   scoring output, follow [`docs/VALIDATION_PROTOCOL.md`](docs/VALIDATION_PROTOCOL.md)
-   and paste its checklist into the PR — a scoring change with no held-out number
-   may ship behind a flag, but may not be described as an improvement.
-5. For UI changes, use `StrandDesign` tokens only — no hardcoded colors, fonts,
-   or spacing.
-
-By opening a pull request you agree your contribution is licensed under the same
-terms as the project — see [`LICENSE`](LICENSE).
-
----
-
-## Reporting issues
-
-- **Bugs and feature requests:** open an issue using the templates in
-  [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE). NOOP is on-device, so please
-  leave out anything that identifies you.
-- **Security issues:** see [`SECURITY.md`](SECURITY.md).
-
-## Code of conduct
-
-This project follows a [Code of Conduct](CODE_OF_CONDUCT.md). Be respectful and
-keep discussion focused on the technical work.
+Do not commit generated Xcode projects, build output, local signing configuration, private keys,
+provisioning profiles, databases, or personal exports. The committed Swift package lockfile is
+intentional. Follow the [Code of Conduct](CODE_OF_CONDUCT.md) in project discussions.

@@ -1,5 +1,42 @@
 # Attribution
 
+## Direct upstream and iPhone adaptation
+
+**NOOP for iPhone** is maintained in
+[`cyrilbhau/noop-fork`](https://github.com/cyrilbhau/noop-fork) and derives from
+**[NOOP by @ryanbr and its contributors](https://github.com/ryanbr/noop)**. The inherited baseline is
+[`8e4b0c16e7640607600fa6bde5424095eba6034e`](https://github.com/ryanbr/noop/commit/8e4b0c16e7640607600fa6bde5424095eba6034e).
+The retained history preserves upstream authorship and subsequent contributions.
+
+Upstream provides the app foundation, Bluetooth collection, protocol packages, storage, analytics,
+importers, and platform implementations. The iPhone adaptation adds the redesigned interface,
+navigation, workout text/Hevy import workflows, widgets and Live Activity presentation, optional
+ChatGPT subscription Coach integration, and supporting fixes and tests. Those additions do not
+replace upstream authorship or its required copyright notice.
+
+[`LICENSE`](LICENSE) retains the PolyForm Noncommercial 1.0.0 terms and
+`Required Notice: Copyright 2026 NoopApp`. Dependencies retain their own terms;
+[`NOTICE`](NOTICE) and [`LICENSES/README.md`](LICENSES/README.md) identify the Apple dependency
+set and preserve its license texts.
+
+### Inherited provenance discrepancy
+
+Source comparisons confirm code inherited through `ryanbr/noop` from
+[`johnmiddleton12/wearable`](https://github.com/johnmiddleton12/wearable), formerly `my-whoop`.
+Three current source files have identical Git blobs, with further matches in the initial NOOP import.
+The vendored/adapted credits below reflect that lineage; earlier `NOTICE` text saying only protocol
+facts were used and no source was redistributed was inaccurate for this code.
+
+A redistribution license or separate permission for that earlier source has not been verified.
+The project license does not relicense third-party source. See the
+[publication review](docs/PUBLICATION_REVIEW.md#inherited-source-permission) for the compared files,
+source revision, and permission question to resolve before public source or binary redistribution.
+
+## Earlier upstream credits
+
+The following credits are inherited from NOOP. Statements about individual research paths describe
+upstream's account of that work; they do not override the discrepancy above.
+
 NOOP is an independent, unofficial, local-first app for macOS, Android and iOS. It is not affiliated
 with, endorsed by, or connected to WHOOP, Inc. "WHOOP" is used nominatively only to
 identify the hardware the app interoperates with.
