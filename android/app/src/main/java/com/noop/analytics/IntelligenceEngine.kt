@@ -2151,13 +2151,13 @@ object IntelligenceEngine {
         }
 
         postLoop.mark("weekly")
-        // ── Steps ESTIMATE (WHOOP 4.0) , DAILY, keyed to each strap-only day ──
-        // A WHOOP 4.0 sends no step count over BLE, so for days the phone DIDN'T also count steps we
-        // estimate them: calibrate the strap's daily MOTION VOLUME against the phone's real step count on
-        // the days both exist, then apply that personal coefficient to the strap-only days. Engine =
+        // ── Independent Steps ESTIMATE (WHOOP 4.0), DAILY ──
+        // NOOP has no validated WHOOP 4.0 native step field. Calibrate daily MOTION VOLUME against
+        // reference steps on overlapping days, then retain the separate estimate for every scored
+        // WHOOP 4.0 day, including reference days. Engine =
         // StepsEstimateEngine (fully unit-tested); this block is pure orchestration , gather points, fit,
         // store under the same "-noop" source, and hand the fit back to the caller for ProfileStore.
-        // Idempotent: re-upserts the same (computedId, day, "steps_est") rows. Inert until there's a
+        // Idempotent: re-upserts the same (resolved owner + "-noop", day, "steps_est") rows. Inert until there's a
         // calibration , a single-source / no-phone user sees no estimate until they set a manual `k`.
         // Mirrors the Swift IntelligenceEngine steps-estimate block byte-for-byte (60-day window, the
         // apple-health daily `steps` reference, the [localMidnight,+24h) motion volume).
@@ -2187,6 +2187,8 @@ object IntelligenceEngine {
         // is a COUNT/MAX aggregate over the same (deviceId, ts) index the read walks, so a hit replaces a
         // read capped at STREAM_LIMIT rows with one that returns a single row.
         val motionByDay = HashMap<String, Double>()
+        val stepInputsByDay = HashMap<String, StepsEstimatePersistence.DayInput>()
+        val stepsRegisteredDevices = repo.pairedDevices().associateBy { it.id }
         var motionReused = 0
         var motionFolded = 0
         val motionWindow = HashSet<String>()
@@ -2196,6 +2198,8 @@ object IntelligenceEngine {
             val dayKey = AnalyticsEngine.dayString(dayMid, tzOffsetSeconds)
             motionWindow.add(dayKey)
             val owner = resolveDayOwner(repo, ownerSource, candidatePriorities, dayKey, dayMid, dayEnd, importedDeviceId)
+            val ownerDevice = stepsRegisteredDevices[owner]
+            if (DeviceFamily.confirmedRegistryFamily(ownerDevice?.model, ownerDevice?.brand) != DeviceFamily.WHOOP4) continue
             // Unlike the Swift twin there is no soft-failure branch here, and that is deliberate rather
             // than an omission. Swift's store reads throw and this whole block wraps them in `try?`, so it
             // has to say what a read it could not make means: a witness it cannot read bypasses the cache
@@ -2219,10 +2223,8 @@ object IntelligenceEngine {
                 // the window on exactly the sparse libraries this is worst for.
                 stepsMotionCache[dayKey] = key to m
             }
-            // Unchanged: only a positive volume becomes a calibration/estimation input. The cache holds the
-            // fold, this holds the filter, so [motionByDay] is byte-identical to the old loop's — and #1816's
-            // stepsHasMotionSink, which reads its emptiness, is untouched.
             if (m > 0) motionByDay[dayKey] = m
+            stepInputsByDay[dayKey] = StepsEstimatePersistence.DayInput(owner, DeviceFamily.WHOOP4, m)
         }
         stepsMotionCache.keys.retainAll(motionWindow)
         diag(StepsMotionCache.logLine(motionReused, motionFolded, stepsMotionCache.size))
@@ -2231,20 +2233,19 @@ object IntelligenceEngine {
         // "No motion synced yet" (the motion half is the blocker, and no number of phone-step days will
         // move the estimate or the fit). A step estimate is `motion * coefficient`, so with the motion
         // half missing the caption that names only the phone half is a lie.
-        stepsHasMotionSink?.invoke(motionByDay.isNotEmpty())
+        if (stepInputsByDay.isNotEmpty()) stepsHasMotionSink?.invoke(motionByDay.isNotEmpty())
         // Build calibration points only for days with BOTH a motion volume and a real phone step count.
         val calPoints = motionByDay.mapNotNull { (day, motion) ->
             refStepsByDay[day]?.let { StepsEstimateEngine.CalibrationPoint(motion = motion, steps = it) }
         }
-        val stepsCal = StepsEstimateEngine.calibrate(calPoints, manualOverride = manualStepCoefficient)
+        val stepsCal = if (stepInputsByDay.isNotEmpty())
+            StepsEstimateEngine.calibrate(calPoints, manualOverride = manualStepCoefficient) else null
+        val stepEstimates = StepsEstimatePersistence.plan(dailies.map { it.day }, stepInputsByDay, stepsCal)
         if (stepsCal != null) {
-            // Estimate + upsert for each recent scored day that has motion but NO real phone step count.
-            val estRows = ArrayList<MetricSeriesRow>()
-            for (dm in dailies) {
-                if (refStepsByDay.containsKey(dm.day)) continue
-                val motion = motionByDay[dm.day] ?: continue
-                val est = StepsEstimateEngine.estimate(motion, stepsCal) ?: continue
-                estRows.add(MetricSeriesRow(deviceId = computedId, day = dm.day, key = "steps_est", value = est.toDouble()))
+            // Health stays independent. Attribute each estimate to its resolved strap owner's namespace.
+            val estRows = stepEstimates.map { estimate ->
+                MetricSeriesRow(deviceId = estimate.deviceId, day = estimate.day,
+                    key = "steps_est", value = estimate.steps.toDouble())
             }
             if (estRows.isNotEmpty()) repo.upsertMetricSeries(estRows)
             // Hand the fit back so the caller mirrors it into ProfileStore for the Settings/Steps screen.
@@ -2254,20 +2255,15 @@ object IntelligenceEngine {
         // manual / withheld calibration state) and a per-day estimate line, tagged .steps. Only when the mode
         // is on (the sink is non-null), so the default path emits zero .steps lines here. The trace reuses
         // StepsEstimateEngine.calibrate/estimate VERBATIM, so it cannot diverge from the coefficient + steps_est.
-        if (stepsTraceSink != null) {
+        if (stepsTraceSink != null && stepInputsByDay.isNotEmpty()) {
             for (line in StepsEstimateEngineTrace.calibrationTrace(calPoints, manualStepCoefficient)) {
                 stepsTraceSink(line)
             }
-            if (stepsCal != null) {
-                for (dm in dailies) {
-                    if (refStepsByDay.containsKey(dm.day)) continue
-                    val motion = motionByDay[dm.day] ?: continue
-                    val est = StepsEstimateEngine.estimate(motion, stepsCal) ?: continue
-                    stepsTraceSink(
-                        "stepsEst day=${dm.day} steps=$est " +
-                            "motion=${Math.round(motion * 100.0) / 100.0} (motion-volume estimate)",
-                    )
-                }
+            for (estimate in stepEstimates) {
+                stepsTraceSink(
+                    "stepsEst day=${estimate.day} steps=${estimate.steps} " +
+                        "motion=${Math.round(estimate.motion * 100.0) / 100.0} (motion-volume estimate)",
+                )
             }
         }
         postLoop.mark("steps")
