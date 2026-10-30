@@ -38,6 +38,10 @@ private struct PersonalStepsWidgetView: View {
     let entry: PersonalMetricsEntry
 
     private var reading: PersonalStepReading? { entry.metrics?.todaySteps(now: entry.date) }
+    private var sourceCaption: String {
+        guard let reading else { return String(localized: "No step data for today") }
+        return reading.source == .appleHealth ? "Apple Health" : String(localized: "Estimated • WHOOP 4.0")
+    }
     private var goal: Int? { entry.metrics?.stepGoal.flatMap { (1...50_000).contains($0) ? $0 : nil } }
 
     var body: some View {
@@ -55,7 +59,7 @@ private struct PersonalStepsWidgetView: View {
             }
             Spacer(minLength: 0)
             WidgetNumber(value: reading.map { $0.count.formatted() })
-            Text(LocalizedStringKey(reading == nil ? "No estimate for today" : "Estimated • WHOOP 4.0"))
+            Text(sourceCaption)
                 .noopFont(.widgetCaption)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -91,7 +95,7 @@ private struct PersonalStepsWidgetView: View {
             Text(verbatim: reading.map { countText($0.count) } ?? "—")
                 .font(WidgetStyle.numberFont(size: NoopType.rowNumber.size))
                 .foregroundStyle(.primary)
-            Text(LocalizedStringKey(reading == nil ? "Band estimate unavailable" : "Estimated • WHOOP 4.0"))
+            Text(sourceCaption)
                 .noopFont(.widgetCaption, color: false)
                 .foregroundStyle(.secondary)
         }
@@ -192,8 +196,8 @@ struct PersonalStepsWidget: Widget {
             PersonalStepsWidgetView(entry: entry)
                 .containerBackground(WidgetStyle.background, for: .widget)
         }
-        .configurationDisplayName("Band Steps")
-        .description("Today's band-motion estimate and chosen goal. Estimates are labelled; refresh timing is controlled by iOS.")
+        .configurationDisplayName("Steps")
+        .description("Today's Apple Health steps or labelled band estimate, with your chosen goal. Refresh timing is controlled by iOS.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
         .contentMarginsDisabled()
     }

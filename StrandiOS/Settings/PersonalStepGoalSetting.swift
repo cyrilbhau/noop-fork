@@ -6,6 +6,7 @@ import StrandDesign
 struct PersonalStepGoalSetting: View {
     @EnvironmentObject private var model: AppModel
     @AppStorage(PersonalWidgetMetrics.stepGoalKey) private var goal = 0
+    @State private var showStepSources = false
 
     private let choices = [0, 2_000, 3_000, 5_000, 7_500, 10_000, 12_500, 15_000, 20_000]
 
@@ -25,6 +26,10 @@ struct PersonalStepGoalSetting: View {
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            Button("Step sources") { showStepSources = true }
+        }
+        .sheet(isPresented: $showStepSources) {
+            PersonalStepSourcesView(day: Repository.localDayKey(Date()))
         }
         .onChange(of: goal) { _, _ in
             Task { await WidgetSnapshot.publish(from: model) }

@@ -3185,6 +3185,14 @@ final class TodayDayModel: ObservableObject {
         for r in sparkRows { if let k = r.activeKcalEst { winOnDeviceKcal[r.day] = k } }
         let energyKcalSpark: [(String, Double)] = Set(winImportedKcal.keys).union(winOnDeviceKcal.keys).sorted()
             .compactMap { day in (winImportedKcal[day] ?? winOnDeviceKcal[day]).map { (day, $0) } }
+        // Match the count's measured-strap → Apple Health precedence for each day's trend as well.
+        var stepSparkByDay: [String: Double] = [:]
+        for row in appleRowsForSpark where row.day >= sparkCutoff && row.day <= selectedDayKey(repo: repo) {
+            if let count = row.steps { stepSparkByDay[row.day] = Double(count) }
+        }
+        for row in sparkRows {
+            if let count = row.steps { stepSparkByDay[row.day] = Double(count) }
+        }
         kSparks = [
             "recovery": sparkRows.compactMap { r in r.recovery.map { (r.day, $0) } },
             "strain": sparkRows.compactMap { r in r.strain.map { (r.day, $0) } },
@@ -3196,7 +3204,7 @@ final class TodayDayModel: ObservableObject {
             // loaded on `sparkRows` (`daysSnapshot`), same as every other DailyMetric-column tile above.
             "skin_temp": sparkRows.compactMap { r in r.skinTempDevC.map { (r.day, $0) } },
             "resp_rate": sparkRows.compactMap { r in r.respRateBpm.map { (r.day, $0) } },
-            "steps": sparkRows.compactMap { r in r.steps.map { (r.day, Double($0)) } },
+            "steps": stepSparkByDay.sorted { $0.key < $1.key }.map { ($0.key, $0.value) },
             // #616: the Calories tile drew no trend line — this dict had no matching entry, so windowedSpark
             // returned []. Bank the imported-first calorie series (built above) so the sparkline matches the
             // tile's imported-first number and a Health-Connect / Apple-only user gets a trend.

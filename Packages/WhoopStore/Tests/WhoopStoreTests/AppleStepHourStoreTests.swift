@@ -3,6 +3,39 @@ import GRDB
 @testable import WhoopStore
 
 final class AppleStepHourStoreTests: XCTestCase {
+    func testDailyStepImportUpdatesTotalsAndChartsWithoutReplacingOtherHealthData() async throws {
+        let store = try await WhoopStore.inMemory()
+        let day = "2026-10-29"
+        let original = AppleDaily(day: day, steps: 100, activeKcal: 300, basalKcal: 1600,
+                                  vo2max: 42, avgHr: 70, maxHr: 130, walkingHr: 95, weightKg: 75)
+        try await store.upsertAppleDaily([original], deviceId: "apple-health")
+        try await store.upsertMetricSeries([MetricPoint(day: day, key: "weight", value: 75)], deviceId: "apple-health")
+        try await store.upsertAppleDailySteps([(day: day, steps: 6400)], deviceId: "apple-health")
+        try await store.upsertAppleDailySteps([(day: day, steps: 6500)], deviceId: "apple-health")
+
+        let rows = try await store.appleDaily(deviceId: "apple-health", from: day, to: day)
+        XCTAssertEqual(rows, [AppleDaily(day: day, steps: 6500, activeKcal: 300, basalKcal: 1600,
+                                       vo2max: 42, avgHr: 70, maxHr: 130, walkingHr: 95, weightKg: 75)])
+        let points = try await store.metricSeries(deviceId: "apple-health", key: "steps", from: day, to: day)
+        XCTAssertEqual(points.map(\.value), [6500])
+        let weight = try await store.metricSeries(deviceId: "apple-health", key: "weight", from: day, to: day)
+        XCTAssertEqual(weight.map(\.value), [75])
+    }
+
+    func testEmptyStepImportPreservesHistoryAndZeroRemainsMeasured() async throws {
+        let store = try await WhoopStore.inMemory()
+        let day = "2026-10-29"
+        try await store.upsertAppleDailySteps([(day: day, steps: 0)], deviceId: "apple-health")
+        try await store.upsertAppleDailySteps([], deviceId: "apple-health")
+        try await store.upsertAppleDailySteps([(day: day, steps: 999)], deviceId: "another-source")
+        let rows = try await store.appleDaily(deviceId: "apple-health", from: day, to: day)
+        XCTAssertEqual(rows.map(\.steps), [0])
+        let points = try await store.metricSeries(deviceId: "apple-health", key: "steps", from: day, to: day)
+        XCTAssertEqual(points.map(\.value), [0])
+        let vitals = try await store.dailyMetrics(deviceId: "apple-health", from: day, to: day)
+        XCTAssertTrue(vitals.isEmpty, "Step-only access must not create physiological daily rows")
+    }
+
     func testUpsertIsIdempotentByNaturalKey() async throws {
         let store = try await WhoopStore.inMemory()
         let n1 = try await store.upsertAppleStepHours([(ts: 1_000, steps: 120)], deviceId: "apple-health")

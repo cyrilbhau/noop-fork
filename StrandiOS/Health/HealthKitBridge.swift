@@ -63,10 +63,12 @@ final class HealthKitBridge: ObservableObject {
     @Published private(set) var lastError: String?
 
     private let store = HKHealthStore()
-    // Personal iPhone build: workout summaries only. No Health writes or physiological imports.
-    private let importsWorkoutsOnly = true
-    var readsWorkoutsOnly: Bool { importsWorkoutsOnly }
-    private static let workoutReadRequestKey = "personal.health.workoutReadRequested"
+    // Personal iPhone build: steps and workout summaries. No Health writes or physiological imports.
+    static let activityImportsOnly = true
+    private var importsActivityOnly: Bool { Self.activityImportsOnly }
+    var readsActivityOnly: Bool { importsActivityOnly }
+    // Retain the workout-only key so existing read consent resumes before the step-scope refresh.
+    private static let activityReadRequestKey = "personal.health.workoutReadRequested"
     private let repo: Repository
     /// Source id imported HealthKit data lands under (matches `AppModel.appleDeviceId`).
     private let appleDeviceId: String
@@ -96,7 +98,11 @@ final class HealthKitBridge: ObservableObject {
     // MARK: - Types
 
     private var readTypes: Set<HKObjectType> {
-        if importsWorkoutsOnly { return [HKObjectType.workoutType()] }
+        if importsActivityOnly {
+            var types: Set<HKObjectType> = [HKObjectType.workoutType()]
+            if let steps = HKObjectType.quantityType(forIdentifier: .stepCount) { types.insert(steps) }
+            return types
+        }
         var s = Set<HKObjectType>()
         for id in HealthKitBridge.quantityReadIds { if let t = HKObjectType.quantityType(forIdentifier: id) { s.insert(t) } }
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { s.insert(sleep) }
@@ -110,7 +116,7 @@ final class HealthKitBridge: ObservableObject {
     }
 
     private var writeTypes: Set<HKSampleType> {
-        if importsWorkoutsOnly { return [] }
+        if importsActivityOnly { return [] }
         var s = Set<HKSampleType>()
         for id in HealthKitBridge.quantityWriteIds + HealthKitBridge.highResQuantityWriteIds
             where !HealthKitBridge.writeDenied.contains(id) {
@@ -212,7 +218,9 @@ final class HealthKitBridge: ObservableObject {
         do {
             try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
             persistAuthorizationTypeSignature()
-            if importsWorkoutsOnly { UserDefaults.standard.set(true, forKey: Self.workoutReadRequestKey) }
+            if importsActivityOnly { UserDefaults.standard.set(true, forKey: Self.activityReadRequestKey) }
+            // A newly requested type may have rejected background delivery before its permission sheet.
+            enableLiveDelivery()
         } catch {
             // Leave the signature unset so the next sync tries again. Not surfaced in `lastError`: the
             // user did not ask for this, and the rest of the sync is unaffected.
@@ -243,7 +251,7 @@ final class HealthKitBridge: ObservableObject {
             auth = .authorized
             // Record the current read and share sets — see `requestNewAuthorizationTypesIfNeeded`.
             persistAuthorizationTypeSignature()
-            if importsWorkoutsOnly { UserDefaults.standard.set(true, forKey: Self.workoutReadRequestKey) }
+            if importsActivityOnly { UserDefaults.standard.set(true, forKey: Self.activityReadRequestKey) }
         } catch {
             // A thrown error here is on a build that carries the entitlement (guarded above), so it's a
             // genuine denial / request failure — keep the normal `.denied` "enable in Settings" path,
@@ -265,9 +273,9 @@ final class HealthKitBridge: ObservableObject {
     /// status, so no system permission sheet is shown.
     func refreshAuthIfPreviouslyGranted() {
         guard auth == .unknown, HKHealthStore.isHealthDataAvailable() else { return }
-        if importsWorkoutsOnly {
+        if importsActivityOnly {
             // HealthKit hides read grants. Remember that consent was requested; never infer it from a write grant.
-            if UserDefaults.standard.bool(forKey: Self.workoutReadRequestKey) {
+            if UserDefaults.standard.bool(forKey: Self.activityReadRequestKey) {
                 auth = .authorized
                 enableLiveDelivery()
             }
@@ -326,10 +334,10 @@ final class HealthKitBridge: ObservableObject {
         guard auth == .authorized, HKHealthStore.isHealthDataAvailable() else { return }
 
         var types: [HKSampleType] = []
-        for id in (importsWorkoutsOnly ? [] : HealthKitBridge.liveQuantityIds) {
+        for id in (importsActivityOnly ? [.stepCount] : HealthKitBridge.liveQuantityIds) {
             if let t = HKObjectType.quantityType(forIdentifier: id) { types.append(t) }
         }
-        if !importsWorkoutsOnly, let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.append(sleep) }
+        if !importsActivityOnly, let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.append(sleep) }
         // Workouts, for the same reason the scored reads are here: without an observer a Watch workout
         // reached NOOP only at the next foreground open, or whenever an unrelated type happened to wake
         // the app, so up to an hour late and sometimes longer (#2265).
@@ -518,19 +526,45 @@ final class HealthKitBridge: ObservableObject {
         let end = Date()
         guard let start = cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: end)) else { return false }
 
-        if importsWorkoutsOnly {
+        if importsActivityOnly {
+            // Backfill daily totals as well as hourly history on the first successful step import.
+            // An empty read can mean access was declined; it must not consume the backfill flag.
+            let stepsBackfilled = UserDefaults.standard.bool(forKey: Self.hourlyStepsBackfilledKey)
+            let stepsStart = stepsBackfilled ? start
+                : (cal.date(byAdding: .day, value: -90, to: cal.startOfDay(for: end)) ?? start)
+            var stepRows: [(day: String, steps: Int)] = []
+            let stepsRead = await collect(.stepCount, unit: .count(), start: stepsStart, end: end,
+                                          op: .cumulativeSum) { day, value in
+                if value.isFinite, value >= 0, value.rounded() < Double(Int.max) {
+                    stepRows.append((day: day, steps: AppleHealthImport.stepsInt(value)))
+                }
+            }
+            guard stepsRead != .failed else {
+                lastSyncDays = 0
+                lastError = String(localized: "Apple Health sync failed: \(String(localized: "Steps"))")
+                return false
+            }
             guard let rows = await collectWorkouts(start: start, end: end) else {
+                lastSyncDays = 0
                 lastError = String(localized: "Couldn't read workouts from Apple Health.")
                 return false
             }
             do {
+                let hourlySteps = try await collectHourlySteps(start: stepsStart, end: end)
                 let prior = try await store.workouts(deviceId: appleDeviceId,
                                                      from: Int(start.timeIntervalSince1970), to: Int(end.timeIntervalSince1970), limit: 10_000)
+                // Step-only updates preserve unrelated metrics from earlier file imports.
+                try await store.upsertAppleDailySteps(stepRows, deviceId: appleDeviceId)
+                try await store.upsertAppleStepHours(hourlySteps, deviceId: appleDeviceId)
                 try await store.upsertWorkouts(HealthWorkoutReadMerge.merge(rows, prior: prior), deviceId: appleDeviceId)
-                if !rows.isEmpty { repo.invalidateWorkoutViews() }
+                if !stepRows.isEmpty || !rows.isEmpty { repo.invalidateWorkoutViews() }
+                if !stepRows.isEmpty, !hourlySteps.isEmpty {
+                    UserDefaults.standard.set(true, forKey: Self.hourlyStepsBackfilledKey)
+                }
                 lastSync = Date(); lastSyncDays = days; lastError = nil
                 return true
             } catch {
+                lastSyncDays = 0
                 lastError = String(localized: "Apple Health sync failed: \(error.localizedDescription)")
                 return false
             }
@@ -814,7 +848,7 @@ final class HealthKitBridge: ObservableObject {
     /// being dropped until the next app open.
     @discardableResult
     func writeBackAfterNewData() async -> Bool {
-        guard !importsWorkoutsOnly else { return true }
+        guard !importsActivityOnly else { return true }
         // A backfill routinely completes in a process that was never foregrounded (a background offload,
         // or a BLE relaunch) - the case this exists for. `auth` is still `.unknown` there, because the
         // only resume runs on scenePhase == .active, so without this the guard below would silently drop
@@ -868,7 +902,7 @@ final class HealthKitBridge: ObservableObject {
     ///
     /// Throws on save failure so the caller can decide whether to advance `lastSync`.
     private func writeBack(whoopStore: WhoopStore, days: Int = 14) async throws {
-        guard !importsWorkoutsOnly else { return }
+        guard !importsActivityOnly else { return }
         guard auth == .authorized else { return }
         let now = Date()
         guard let fromDate = Calendar.current.date(byAdding: .day, value: -days, to: now) else { return }
@@ -1696,7 +1730,7 @@ final class HealthKitBridge: ObservableObject {
         // a gigabyte of JSON through UserDefaults. `storeAll` applies the same eviction, once.
         var importedRoutes: [(route: WorkoutRoute, startTs: Int, sport: String)] = []
         for workout in workoutsAndRows {
-            if !importsWorkoutsOnly, let route = await Self.fetchWorkoutRoute(for: workout, store: store),
+            if !importsActivityOnly, let route = await Self.fetchWorkoutRoute(for: workout, store: store),
                route.count >= 2 {
                 let latLngs = route.map { RouteMath.LatLng($0.lat, $0.lon) }
                 let polyline = RouteMath.encode(latLngs)
@@ -1713,8 +1747,8 @@ final class HealthKitBridge: ObservableObject {
         for workout in workoutsAndRows {
             let startTs = Int(workout.startDate.timeIntervalSince1970)
             let endTs = max(Int(workout.endDate.timeIntervalSince1970), startTs)
-            let appleSamples = importsWorkoutsOnly ? [] : await Self.fetchWorkoutHeartRate(for: workout, store: store)
-            let steps = importsWorkoutsOnly ? nil : await Self.fetchWorkoutSteps(for: workout, store: store)
+            let appleSamples = importsActivityOnly ? [] : await Self.fetchWorkoutHeartRate(for: workout, store: store)
+            let steps = importsActivityOnly ? nil : await Self.fetchWorkoutSteps(for: workout, store: store)
             // Prefer the HR stream HealthKit associates with this workout (for example, Apple Watch).
             // If that stream is absent or too sparse to score, fall back to the locally stored strap
             // trace for this exact workout window — the same trace that backs the detail chart.

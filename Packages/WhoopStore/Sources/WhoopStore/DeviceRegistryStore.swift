@@ -62,6 +62,34 @@ public struct DeviceRegistryStore: Sendable {
         }
     }
 
+    /// Repair the synthetic Watch pairing left by aggregate Health imports in the personal iPhone
+    /// activity-only build. This removes pairing metadata only: source provenance, samples, workouts,
+    /// step buckets and ownership history are preserved. An already-active strap is never displaced.
+    @discardableResult
+    public func removeActivityOnlyWatchPairing() throws -> Bool {
+        try dbQueue.write { db in
+            guard try Row.fetchOne(db, sql: """
+                SELECT status FROM pairedDevice
+                WHERE id = 'apple-health' AND sourceKind = 'liveAppleWatch'
+                """) != nil else { return false }
+            try db.execute(sql: "DELETE FROM pairedDevice WHERE id = 'apple-health' AND sourceKind = 'liveAppleWatch'")
+            let hasActive = try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM pairedDevice WHERE status = 'active')") ?? false
+            if !hasActive {
+                // Prefer an adopted physical WHOOP to the empty migration seed; never resurrect a
+                // deliberately removed strap. The stable id and all of its recorded data stay intact.
+                if let whoopId = try String.fetchOne(db, sql: """
+                    SELECT id FROM pairedDevice
+                    WHERE status = 'paired' AND sourceKind IN ('liveBLE', 'historyBLE')
+                      AND (lower(brand) = 'whoop' OR id = 'my-whoop' OR id LIKE 'whoop-%')
+                    ORDER BY (peripheralId IS NOT NULL) DESC, lastSeenAt DESC, id ASC LIMIT 1
+                    """) {
+                    try db.execute(sql: "UPDATE pairedDevice SET status = 'active' WHERE id = ?", arguments: [whoopId])
+                }
+            }
+            return true
+        }
+    }
+
     /// Permanently remove a device's REGISTRY entry — both the `pairedDevice` row the Devices screen
     /// lists and its `device` provenance row — so a duplicate/stale strap can be purged entirely
     /// instead of lingering in the archived "Removed" list forever (issue #1193: today the only

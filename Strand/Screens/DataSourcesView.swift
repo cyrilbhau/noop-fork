@@ -1244,11 +1244,11 @@ extension DataSourcesView {
                     Text("Pairs directly with your strap over Bluetooth: no WHOOP app, no cloud.")
                         .noopFont(.footnote)
                 }
-                // Personal iPhone build: the Health bridge reads workout summaries only and never writes
-                // (`HealthKitBridge.importsWorkoutsOnly`). The export-file importer below is a separate path.
+                // Personal iPhone build: the Health bridge reads steps and workout summaries and never writes
+                // (`HealthKitBridge.importsActivityOnly`). The export-file importer below is a separate path.
                 dataSourceOverviewRow(icon: "heart.fill", tint: NoopTheme.heart, title: "Apple Health",
                                       badge: DataSourceBadge("Read only", tint: NoopTheme.textSecondary)) {
-                    Text("Import workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build.")
+                    Text("Import steps and workout summaries from Apple Health. NOOP does not write to Health or import Health vitals in this personal build.")
                         .noopFont(.footnote)
                 }
                 // Pasted workouts live in Lift Log with every set as written (WorkoutTextImportSheet).

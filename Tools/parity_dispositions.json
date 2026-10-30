@@ -300,6 +300,14 @@
       "platform": "kotlin",
       "rationale": "Swift Repository.refresh reads the same imported daily union (unionDailyMetrics) in the excluded app layer and hands it, still apart from the computed union, to ChargeBaselines.resolve (#2525); this disposition does not assert behavioral parity.",
       "twin_path": "Strand/Data/Repository.swift"
+    },
+    {
+      "type": "platform_specific",
+      "kind": "add-unpaired-function",
+      "identity": "swift\u0000Packages/WhoopStore/Sources/WhoopStore/DeviceRegistryStore.swift::removeActivityOnlyWatchPairing/0#1",
+      "identity_sha256": "7fc2e72e8ee1be2ff82e8f2714593b3780f4f4437e42f566ab97b89aaf6ffccb",
+      "platform": "swift",
+      "rationale": "Repairs only the synthetic Apple Watch pairing created by Apple Health imports in the personal iPhone activity-only build. Android has no HealthKit importer or liveAppleWatch pairing lifecycle to repair. The method removes pairing metadata while preserving recorded samples, source provenance and ownership history; it changes no shared schema or metric calculation."
     }
   ]
 }

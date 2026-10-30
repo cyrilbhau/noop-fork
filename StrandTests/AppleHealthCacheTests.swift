@@ -21,6 +21,24 @@ final class AppleHealthCacheTests: XCTestCase {
 
     private let appleSource = "apple-health"
 
+    func testStepOnlyImportReachesDailyTotalsDetailChartsAndInvalidatesEmptyCache() async throws {
+        let store = try await WhoopStore.inMemory()
+        let repo = Repository(deviceId: "my-whoop")
+        repo.setStoreForTesting(store)
+        let empty = await repo.performAppleHealthLoad(seriesKeys: ["steps"], allowCache: true)
+        XCTAssertFalse(empty.hasAnyData)
+        let day = Repository.localDayKey(Date())
+        try await store.upsertAppleDailySteps([(day: day, steps: 6500)], deviceId: appleSource)
+        repo.invalidateWorkoutViews()
+
+        let snapshot = await repo.performAppleHealthLoad(seriesKeys: ["steps"], allowCache: true)
+        XCTAssertEqual(snapshot.appleRows.first?.steps, 6500)
+        XCTAssertEqual(snapshot.series["steps"]?.map(\.value), [6500])
+        XCTAssertTrue(snapshot.hasAnyData)
+        let resolved = await repo.resolvedSeries(key: "steps", source: appleSource, from: day, to: day)
+        XCTAssertEqual(resolved.points.first?.value, 6500)
+    }
+
     /// Seed a handful of apple-health body-composition + vitals series days into an in-memory store and hand it
     /// to a fresh Repository. Body-comp keys (weight/body_fat/lean_mass/bmi/vo2max) are the ones that live ONLY
     /// in metricSeries, so they exercise the exact staleness path the invalidation fix guards.
