@@ -1,41 +1,103 @@
 # NOOP for iPhone
 
-An iPhone companion for an owned WHOOP strap, with local Bluetooth collection,
-on-device history, and an optional AI Coach.
+**A redesigned iPhone home for your WHOOP data.**
 
-This project builds on [NOOP by @ryanbr and its contributors](https://github.com/ryanbr/noop).
-It adds an iPhone-focused interface, workout workflows, widgets, and a ChatGPT
-subscription connection for Coach. The underlying protocol, storage, and independent
-recovery, strain, and sleep calculations come from NOOP.
+Sleep, Recovery, and Strain at a glance. A training log that keeps your lifting sets.
+An optional Coach alongside your daily numbers.
+
+Built on [NOOP](https://github.com/ryanbr/noop), this version focuses on the iPhone
+experience: redesigned screens, a customizable dashboard, workout imports, ChatGPT
+Coach, widgets, and Live Activities.
 
 [Build and run](docs/GETTING_STARTED.md) · [Project status](docs/PROJECT_STATUS.md) ·
-[Contribute](CONTRIBUTING.md) · [Credits](ATTRIBUTION.md) · [License](LICENSE)
+[Contributing](CONTRIBUTING.md) · [Credits](ATTRIBUTION.md)
 
-## What this version adds
+## A look at the app
 
-| Area | iPhone additions |
-|---|---|
-| Daily view | A redesigned Today screen with Sleep, Recovery, and Strain rings, source labels, metric details, and configurable cards. |
-| Navigation | Today, Sleep, Training, and Health tabs; a separate Coach tab; Profile access from the avatar. The earlier interface remains available through **Use classic Today**. |
-| Training | Workout text paste with preview before saving, set-level Hevy CSV import, and Apple Health workout summaries. Imported summaries and full lifting logs remain distinguishable. |
-| Coach | A native Coach view with optional ChatGPT subscription sign-in, alongside the existing API-key and Custom providers. Account access and consent to share health summaries are separate. |
-| Widgets | Revised Home Screen and Lock Screen presentation, estimated-step/goal and sleep widgets, and Live Activities. |
-| Accessibility | Larger Dynamic Type layouts, reduced-motion support, and shared score formatting across screens. |
+<table>
+  <tr>
+    <td align="center"><strong>Today</strong></td>
+    <td align="center"><strong>Sleep</strong></td>
+    <td align="center"><strong>Training</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/iphone/today.png" alt="Redesigned Today screen with Sleep, Recovery and Strain rings and source-labelled metric trends" width="230"></td>
+    <td><img src="docs/assets/iphone/sleep.png" alt="Sleep screen with a seven-night overview, sleep duration, need and source" width="230"></td>
+    <td><img src="docs/assets/iphone/training.png" alt="Training screen with weekly sessions, a consistency calendar and source-labelled workouts" width="230"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Health</strong></td>
+    <td align="center"><strong>Lifting</strong></td>
+    <td align="center"><strong>Your Cards</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/iphone/health.png" alt="Health screen comparing overnight vitals with personal baselines" width="230"></td>
+    <td><img src="docs/assets/iphone/lifting.png" alt="Lifting session showing exercises, sets, weights, repetitions and session controls" width="230"></td>
+    <td><img src="docs/assets/iphone/your-cards.png" alt="Your Cards editor with reordering, feature-state explanations and section placement" width="230"></td>
+  </tr>
+</table>
 
-These additions sit on top of upstream's Bluetooth collection, SQLite storage,
-importers, backup format, and analytics. The project retains upstream's macOS and
-Android source; the interface described here targets **iPhone**. Apple Watch is not
-embedded in this version's iPhone build.
+*Screenshots of this iPhone redesign, captured in Simulator with synthetic demo data.*
+[Capture details](docs/assets/iphone/README.md)
 
-## Get it running
+## The work in this version
 
-Distribution is currently **from source**. There is no signed iPhone download,
-TestFlight invitation, or App Store release for this adaptation. Upstream NOOP
-downloads contain upstream's app and interface.
+### A daily view built around the phone
 
-The build needs a Mac, Xcode 26 or newer, XcodeGen 2.45 or newer, and personal
-signing configuration. The app deployment target is iOS 17; the newer SDK is needed
-to compile the interface.
+Today brings the three daily rings, metric sparklines, recent activity, and data-source
+captions together. Open Recovery to see what shaped the result against a personal
+baseline, or Strain to explore the day's effort and heart-rate zones.
+
+Sleep has a seven-night overview, a sleep-need comparison, stages, and a detailed
+timeline. Health brings overnight vitals, baseline comparisons, and individual metric
+history into the same visual language.
+
+The navigation is organized around **Today, Sleep, Training, and Health**, with a
+separate Coach tab and Profile access from the avatar.
+
+### Make Today your own
+
+**Your Cards** lets you choose and reorder metrics and shortcuts, then move the section
+to the place that suits your day. The editor explains duplicate metrics, hidden sections,
+and cards that need an optional feature enabled. Key metric rows and cards share the
+same values and source labels.
+
+The redesign includes a dark palette, score-tinted backgrounds, consistent typography,
+and layouts adapted for larger text. Reduce Motion is respected. **Use classic Today**
+keeps the earlier interface available.
+
+### Keep the lifting details
+
+Training brings workout history, weekly sessions, consistency, and logged lifting volume
+into one place. Paste supported workout text, review the parsed result, then save the
+exercises, sets, repetitions, weights, and notes. Hevy CSV import brings existing lifting
+history into the same workflow.
+
+Apple Health workouts remain labelled **summary only**; pasted or Hevy imports retain
+full sets. CSV imports skip duplicate start times rather than reconciling later edits.
+No direct Hevy or Strava account sync is included.
+
+### Coach with a choice of connection
+
+The native Coach view adds **ChatGPT subscription sign-in** for eligible accounts,
+alongside the existing API-key and Custom providers. Sign-in, use of the account's plan
+allowance, and consent to share health summaries are separate choices.
+
+Conversations and summaries go directly to the selected provider. Coach can stay
+unconfigured while collection and local analytics continue. Subscription availability
+depends on provider authorization and account eligibility.
+
+### Useful beyond the main screen
+
+Home Screen and Lock Screen widgets present key readings, including estimated steps
+with a chosen goal and recent sleep. Live Activities cover heart rate, lifting, and
+sync. The redesign carries through to these surfaces, while keeping their existing
+identities and stored preferences.
+
+## Try it from source
+
+The development focus is **iPhone with an owned WHOOP 4.0 strap**. A Mac with
+**Xcode 26+** and **XcodeGen 2.45+** is needed; the app targets **iOS 17+**.
 
 ```bash
 git clone --branch personal/iphone-baseline https://github.com/cyrilbhau/noop-fork.git
@@ -43,97 +105,43 @@ cd noop-fork
 bash Tools/personal/ios.sh check
 ```
 
-Continue with the [setup guide](docs/GETTING_STARTED.md) to configure a unique app
-identity, sign the app and widgets, and run on an iPhone. The installed display name
-is currently **NOOP Cyril**; **NOOPiOS** is the Xcode scheme.
+Follow [Getting started](docs/GETTING_STARTED.md) to configure a unique signing identity
+and run the app and widgets. The Xcode scheme is **NOOPiOS** and the installed display
+name is currently **NOOP Cyril**. Distribution is from source; this adaptation has no
+signed public download or TestFlight release.
 
-An owned WHOOP strap is needed for live collection. Existing WHOOP exports and Apple
-Health export files can also be imported locally. Keep original exports and make an
-app backup before adding history to an existing installation.
+Collection, imports, storage, and analytics run on the device. Optional Coach requests
+have their own consent controls. The inherited automatic update check contacts GitHub
+and currently reports upstream NOOP releases; it can be disabled in Settings.
+See the [network inventory](docs/PRIVACY_SECURITY.md#11-network-paths-canonical-inventory).
 
-## What to expect
+## Current limits
 
-The development focus is **iPhone with WHOOP 4.0**. The inherited code also supports
-other devices, but that does not establish validation for this adaptation. See
-[project status](docs/PROJECT_STATUS.md) for the scope and remaining checks.
+This is a development project. Reliable phone-free step counting, multi-night
+background collection, widget freshness, and backup/restore still need device
+acceptance. WHOOP 4.0 steps are motion estimates, blood oxygen is not measured from
+that strap, and absolute skin-temperature accuracy is unsupported.
 
-- **Scores are NOOP's own calculations.** Familiar Sleep, Recovery, and Strain labels
-  do not make the results equivalent to WHOOP's proprietary scores. Sleep staging and
-  derived metrics are estimates.
-- **WHOOP 4.0 steps are estimated from motion.** Reliable phone-free counting remains
-  unproven; an imported pedometer total does not validate the strap estimate.
-- **WHOOP 4.0 blood oxygen is not measured by this app.** Historical imported values
-  are a separate source. Skin temperature is useful as a provisional trend rather
-  than a validated absolute measurement.
-- **Background and overnight behavior need device testing.** A successful build or
-  live heart-rate display does not establish complete stored history, sleep, or
-  recovery. Widget refresh and backup/restore also need real-device checks.
-- **HealthKit is limited to workout-summary reads in the shared baseline.** It does
-  not write to Apple Health. File imports are a separate path.
-- **Workout imports have limits.** Hevy CSV imports append and skip duplicate start
-  times; they do not reconcile later edits or deletions. There is no direct Hevy or
-  Strava account sync.
+Live HealthKit reads are limited to Steps and workout summaries, with no Health
+writes or physiological imports. Imported histories and computed readings keep their own sources.
+The familiar score labels use NOOP's independent calculations.
 
-## Data and privacy
-
-Strap collection, imports, storage, and analytics run on the device. This project
-operates no backend, health-data account, or telemetry service.
-
-Coach is optional. Requests go directly to the chosen provider and include
-conversation text; health summaries require separate consent. ChatGPT subscription
-access depends on provider authorization and the account's eligible plan access,
-and consumes that account's allowance. API-key and Custom providers remain available.
-
-The inherited release check is **on by default** and contacts GitHub without health
-data. It currently checks **upstream NOOP releases**, which do not describe this
-adaptation's updates. Turn off **Settings → About → Check automatically** to disable
-automatic checks. The app does not install updates itself.
-
-The [privacy and network inventory](docs/PRIVACY_SECURITY.md#11-network-paths-canonical-inventory)
-describes the network paths, consent controls, and platform-service boundaries.
-Keep health exports, databases, backups, credentials, and device logs outside Git.
-
-## Development
-
-[`project.yml`](project.yml) is the source of truth for the generated Xcode project.
-Core logic lives in Swift packages; platform app layers handle Bluetooth and UI.
-
-| Location | Purpose |
-|---|---|
-| `StrandiOS/`, `StrandiOSShared/`, `StrandiOSWidgets/` | iPhone app, shared widget models, and widget extension |
-| `Strand/` | macOS app and shared Apple app code |
-| `Packages/WhoopProtocol/`, `Packages/WhoopStore/` | Protocol decoding and local persistence |
-| `Packages/StrandAnalytics/`, `Packages/StrandImport/` | Analytics and file importers |
-| `Packages/StrandDesign/` | Shared SwiftUI design system and iPhone components |
-| `android/` | Inherited Android implementation |
-| `Tools/personal/ios.sh` | Local configuration and build helpers |
-
-A quick package check, without a strap:
-
-```bash
-cd Packages/WhoopProtocol
-swift build
-swift test
-```
-
-Package tests do not compile the app targets or validate Bluetooth. See
-[CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for the appropriate checks,
-cross-platform contracts, and safety requirements.
+[Project status](docs/PROJECT_STATUS.md) records the evidence and remaining checks.
+Permission for some earlier inherited source and the privacy of existing Git history
+still need resolving before public redistribution; see the
+[publication review](docs/PUBLICATION_REVIEW.md).
 
 ## Credits and license
 
-The direct upstream is [ryanbr/noop](https://github.com/ryanbr/noop), based here on
-commit [`8e4b0c16`](https://github.com/ryanbr/noop/commit/8e4b0c16e7640607600fa6bde5424095eba6034e).
-Credit belongs to its maintainers and contributors for the foundation, and to the
-earlier interoperability projects recorded in [ATTRIBUTION.md](ATTRIBUTION.md).
-The retained Git history records the upstream and iPhone work.
+This work builds on **[NOOP by @ryanbr and its contributors](https://github.com/ryanbr/noop)**,
+starting from [`8e4b0c16`](https://github.com/ryanbr/noop/commit/8e4b0c16e7640607600fa6bde5424095eba6034e).
+Their protocol, collection, storage, import, and analytics foundation makes this iPhone
+adaptation possible. The retained history and [attribution](ATTRIBUTION.md) preserve
+that authorship and earlier community credits.
 
-The source retains the [PolyForm Noncommercial 1.0.0 license](LICENSE), including
-the upstream required notice. It is source-available; it is not offered under an
-OSI open-source license. Dependencies retain their own terms; see [NOTICE](NOTICE)
-and the [Apple dependency license texts](LICENSES/README.md). Permission to redistribute
-some earlier inherited source has not been verified; public sharing remains pending that
-[permission review and the history privacy decision](docs/PUBLICATION_REVIEW.md).
+The source retains [PolyForm Noncommercial 1.0.0](LICENSE) and the upstream required
+notice. Dependencies retain their own terms; see [NOTICE](NOTICE) and
+[dependency licenses](LICENSES/README.md).
 
-NOOP for iPhone is independent of WHOOP, Inc. and OpenAI. It is not endorsed by
-either company and is not a medical device. See [DISCLAIMER.md](DISCLAIMER.md).
+Independent of WHOOP, Inc. and OpenAI. Not endorsed by either company and not a
+medical device. See [DISCLAIMER.md](DISCLAIMER.md).
