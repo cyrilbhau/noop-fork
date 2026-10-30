@@ -1,9 +1,10 @@
 # Project status
 
-Updated on **30 October 2026**. The earlier publication audit covered
-[`e600df6a`](https://github.com/cyrilbhau/noop-fork/commit/e600df6a). This status also reflects the
-subsequently integrated Health Steps, independent strap-estimate, device/sync and widget work.
-It is a development build, with no signed public iPhone release.
+Updated on **30 October 2026** against source checkpoint
+[`158a5de3`](https://github.com/cyrilbhau/noop-fork/commit/158a5de303be6143a23e725e9b6523088c71fed8),
+including Health Steps, independent strap-estimate, device/sync, and widget work. The earlier
+publication audit covered [`e600df6a`](https://github.com/cyrilbhau/noop-fork/commit/e600df6a).
+This is a development build, with no signed public iPhone release.
 
 ## Scope and evidence
 
@@ -31,15 +32,15 @@ These observations summarize earlier development records. They are not results o
 qualification during the publication cleanup. No new app build, installation, or hardware session
 was run for the documentation change.
 
-## WIP source checkpoint — 30 October 2026
+## Integrated source checkpoint — 30 October 2026
 
-The owner requested committing and pushing all current WIP, with further testing deferred.
 The checkpoint includes Health/Steps source repairs, independent owner-attributed estimates and
 their Android twins, the backfill idle policy, widget artwork, and the accompanying documentation.
 All 40 changed runtime/build-definition files match the frozen source of the previously signed
 and installed update. This is source identity evidence, not fresh Android or hardware validation.
 XcodeGen regeneration, whitespace, localization and detached-doc-comment checks passed; no new
 application build, test suite, installation or device session was run for this checkpoint.
+Further testing and acceptance remain deferred.
 
 The [HRV source-isolation document](personal/HRV-SOURCE-ISOLATION-PLAN.md) remains an implementation
 plan. The deferred Your Cards A3–A5 work and the acceptance checks below remain outstanding.

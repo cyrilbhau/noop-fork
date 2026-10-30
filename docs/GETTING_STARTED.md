@@ -131,6 +131,10 @@ Optional data sources are available under **Data sources**:
 - The iPhone **HealthKit connection reads Steps and workout summaries**. It does not write to
   Apple Health or read physiological HealthKit samples. Permissions are controlled in the
   Health app; an empty result does not prove that read permission was granted.
+- After granting Steps access, check the source label in Today's Steps detail and the steps widget.
+  Apple Health totals and the separate WHOOP motion estimate are not added together. A widget
+  can fall back to the labelled estimate when no Health total is available; refresh timing is
+  controlled by iOS.
 - Other import cards, including nutrition and workout files, are optional. No import is required
   to begin collecting from a strap.
 

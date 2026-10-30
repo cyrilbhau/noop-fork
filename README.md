@@ -89,9 +89,10 @@ depends on provider authorization and account eligibility.
 
 ### Useful beyond the main screen
 
-Home Screen and Lock Screen widgets present key readings, including estimated steps
-with a chosen goal and recent sleep. Live Activities cover heart rate, lifting, and
-sync. The redesign carries through to these surfaces, while keeping their existing
+Home Screen and Lock Screen widgets present key readings and recent sleep. The steps
+widget shows Apple Health totals when available, falling back to a labelled band
+estimate, with a chosen goal. Live Activities cover heart rate, lifting, and sync.
+The redesign carries through to these surfaces, while keeping their existing
 identities and stored preferences.
 
 ## Try it from source
@@ -123,8 +124,9 @@ acceptance. WHOOP 4.0 steps are motion estimates, blood oxygen is not measured f
 that strap, and absolute skin-temperature accuracy is unsupported.
 
 Live HealthKit reads are limited to Steps and workout summaries, with no Health
-writes or physiological imports. Imported histories and computed readings keep their own sources.
-The familiar score labels use NOOP's independent calculations.
+writes or physiological imports. Today’s Steps detail keeps the sources separate
+and offers a counted phone-free walk check; a passing trial applies to that walk,
+not general step accuracy. The familiar score labels use NOOP's independent calculations.
 
 [Project status](docs/PROJECT_STATUS.md) records the evidence and remaining checks.
 Permission for some earlier inherited source and the privacy of existing Git history
