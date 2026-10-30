@@ -1,45 +1,90 @@
-NOOP — third-party notices
-===========================
+NOOP for iPhone — third-party notices
+=====================================
 
 NOOP's own source code and documentation are licensed under the PolyForm
 Noncommercial License 1.0.0 (see LICENSE). That license covers NOOP's original
 work only. The components and prior work below keep their own terms.
 
-Bundled dependencies
---------------------
+Direct upstream
+---------------
+
+This repository derives from NOOP by ryanbr/noop and its contributors:
+  https://github.com/ryanbr/noop
+  Baseline: 8e4b0c16e7640607600fa6bde5424095eba6034e
+  Baseline commit: build: testing build 557 / 438
+
+The retained Git history records the upstream authors and subsequent changes.
+The original copyright, license and contributor credits remain applicable; the
+iPhone additions do not replace that authorship. See ATTRIBUTION.md.
+
+Apple dependencies
+------------------
+
+The Apple app targets resolve these direct and transitive Swift packages.
+LICENSES/README.md records the pinned versions and exact upstream revisions.
+This list does not cover the separate Android dependency set.
 
 GRDB.swift — https://github.com/groue/GRDB.swift
+  Version: 6.29.3
   License: MIT
   Used for: SQLite persistence (the on-device store).
+  Full text: LICENSES/GRDB.swift-LICENSE.txt
 
 ZIPFoundation — https://github.com/weichsel/ZIPFoundation
+  Version: 0.9.20
   License: MIT
   Used for: reading WHOOP / Apple Health export archives during import.
+  Full text: LICENSES/ZIPFoundation-LICENSE.txt
 
-The MIT license is permissive: these components may be used, modified, and
-redistributed (including commercially) on their own terms. When they are used as
-part of NOOP's combined work, the combined work as a whole is governed by NOOP's
-PolyForm Noncommercial license.
+MarkdownUI — https://github.com/gonzalezreal/swift-markdown-ui
+  Version: 2.4.1
+  License: MIT
+  Used for: rendering the Coach's Markdown replies.
+  Full text: LICENSES/MarkdownUI-LICENSE.txt
+
+NetworkImage — https://github.com/gonzalezreal/NetworkImage
+  Version: 6.0.1
+  License: MIT
+  Used by: MarkdownUI (transitive dependency).
+  Full text: LICENSES/NetworkImage-LICENSE.txt
+
+swift-cmark — https://github.com/swiftlang/swift-cmark
+  Version: 0.8.0
+  License: cmark redistribution terms and additional component notices.
+  Used by: MarkdownUI (transitive dependency).
+  Full text: LICENSES/swift-cmark-COPYING.txt
 
 JOSESwift — https://github.com/airsidemobile/JOSESwift
+  Version: 3.0.0
   License: Apache License 2.0
   Used for: verifying ChatGPT OpenID token signatures and public signing keys.
-  The dependency retains its own license and copyright notices.
+  Full text: LICENSES/JOSESwift-LICENSE.txt
+
+Dependency source retains its own license and copyright notices. NOOP's license
+does not relicense these components. Include the required notices with any
+distribution containing them.
 
 Prior reverse-engineering research
 ----------------------------------
 
-NOOP builds on two community reverse-engineering efforts. Neither states a
-license; NOOP does not redistribute their code. NOOP uses only the uncopyrightable
-factual protocol information they document (BLE service/characteristic identifiers,
-frame layouts, CRC parameters, command/event/packet numbers, byte offsets) and
-re-implements those facts as original code — it does not copy their source.
+NOOP credits the following community interoperability projects. Source comparison
+confirms that some implementations were inherited, rather than facts-only.
 
-  johnmiddleton12/my-whoop — https://github.com/johnmiddleton12/my-whoop
-    WHOOP 4.0 BLE protocol facts.
+  johnmiddleton12/wearable (formerly my-whoop)
+    https://github.com/johnmiddleton12/wearable
+    WHOOP 4.0 BLE protocol, Swift packages and collection work, as credited in
+    ATTRIBUTION.md.
 
   b-nnett/goose — https://github.com/b-nnett/goose
     WHOOP 5.0 / MG ("puffin") BLE protocol facts.
+
+Source comparison confirms my-whoop implementation lineage through ryanbr/noop,
+including identical current Schema.swift, Values.swift and Cursors.swift blobs.
+Earlier NOTICE text saying no code was redistributed was inaccurate for this code.
+A redistribution license or separate permission for the earlier source has not
+been verified. Resolve that question before public source or binary redistribution;
+NOOP's license does not establish permission to relicense third-party code.
+See docs/PUBLICATION_REVIEW.md for source revisions and comparison evidence.
 
 See ATTRIBUTION.md for fuller credit and DISCLAIMER.md for the interoperability and
 fair-use rationale.

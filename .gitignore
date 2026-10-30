@@ -69,6 +69,15 @@ android/app/release/
 # ── Misc / secrets (never commit) ───────────────────────────────
 *.log
 .env
+.env.*
+!.env.example
+!.env.*.example
+# Exported signing material belongs outside source control.
+*.p12
+*.pfx
+*.mobileprovision
+*.provisionprofile
+*.private-key
 # Deployment credentials (PAT / signing / endpoints) — never commit. `.env` above
 # won't match `deploy.env`, so list it (and any `deploy.env.<stage>`) explicitly.
 deploy.env
@@ -91,6 +100,10 @@ export.zip
 *.noopbak
 *.noopbak.*
 /PersonalData/
+
+# Local agent checkouts and settings can contain private working copies.
+/.claude/worktrees/
+/.claude/settings.local.json
 
 # Python bytecode
 __pycache__/

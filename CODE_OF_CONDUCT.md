@@ -35,10 +35,10 @@ representing the project in public spaces.
 
 ## Enforcement
 
-NOOP is maintained anonymously, so there is no private contact address. Instances
-of abusive, harassing, or otherwise unacceptable behaviour may be reported by
-opening an issue. If the report itself is sensitive, keep it factual and avoid
-restating the abusive content in detail.
+Instances of abusive, harassing, or otherwise unacceptable behaviour in this adaptation's spaces
+may be reported through this repository's issues. If the report itself is sensitive, open a minimal
+request for a private reporting route; avoid publishing personal details or restating abusive
+content in detail. Upstream NOOP's maintainers do not moderate this adaptation's spaces.
 
 The maintainer is responsible for clarifying the standards of acceptable
 behaviour and will take appropriate corrective action in response to any conduct
