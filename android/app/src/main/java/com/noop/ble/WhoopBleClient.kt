@@ -8523,12 +8523,17 @@ class WhoopBleClient(
                     }
                     if (backfilling) {
                         // Historical offload: route ONLY genuine offload frames (47/48/49/50) through
-                        // the serial drain (preserves chunk order) + re-arm the idle watchdog on them.
+                        // the serial drain (preserves chunk order). Only intact history data/metadata
+                        // extends the watchdog; live event/console chatter cannot keep a sync alive.
                         // The live type-40/43 flood is dropped here (extractHistoricalStreams ignores
                         // it; feeding it only delays each chunk's insert->trim-ack and stalls the strap).
                         if (isOffloadFrame(frame, connectedFamily)) {
                             offloadFramesThisSession++
-                            armBackfillTimeout()
+                            val typeIndex = if (connectedFamily == DeviceFamily.WHOOP5) 8 else 4
+                            if (BackfillIdlePolicy.shouldExtendTimeout(
+                                    frame[typeIndex].toInt() and 0xFF, parsed.ok)) {
+                                armBackfillTimeout()
+                            }
                             routeBackfillFrame(frame)
                         }
                     } else {
@@ -11093,8 +11098,8 @@ class WhoopBleClient(
     }
 
     /**
-     * Re-arm the idle watchdog. Called on every offload frame during backfill; if the strap goes
-     * silent the timer fires and we exit the session. Port of `armBackfillTimeout`.
+     * Re-arm the idle watchdog on intact history records or metadata. Live event/console chatter
+     * cannot extend it. If historical progress stops, exit the session. Port of `armBackfillTimeout`.
      */
     private fun armBackfillTimeout() {
         handler.removeCallbacks(backfillTimeoutRunnable)

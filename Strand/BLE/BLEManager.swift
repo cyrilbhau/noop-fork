@@ -2641,8 +2641,8 @@ public final class BLEManager: NSObject, ObservableObject {
         }
     }
 
-    /// Re-arm the idle watchdog. Called on every offload frame during backfill so the timer resets
-    /// as long as the strap keeps sending HISTORY; if the strap goes silent the timer fires and we
+    /// Re-arm the idle watchdog on intact history records or metadata, not live events/console
+    /// chatter. If historical progress stops the timer fires and we
     /// exit the session (the durable strap_trim cursor means the next session resumes where we left
     /// off). Timeout is generous (60 s, not 20 s): the unstoppable ~2/s type-43 raw flood eats BLE
     /// airtime, so genuine offload frames can arrive in bursts with multi-second lulls between chunks
@@ -7402,8 +7402,11 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
                     // criterion reads blind in exactly the traffic where an emptied-then-acked section
                     // is a permanent loss. The verdict is formed once here, from the verifier, and
                     // handed to the counter — no parse on this path, which is why it was skipped.
-                    router.noteOffloadFrameVerdict(verifyFrame(frame, family: .whoop4))
-                    armBackfillTimeout()
+                    let verdict = verifyFrame(frame, family: .whoop4)
+                    router.noteOffloadFrameVerdict(verdict)
+                    if BackfillIdlePolicy.shouldExtendTimeout(packetType: Int(frame[4]), integrityOK: verdict.ok) {
+                        armBackfillTimeout()
+                    }
                     routeBackfillFrame(frame)
                     // …but a REAL-TIME physical gesture (double-tap / wrist) must still fire even mid-
                     // offload (#69). Gated on ts≈now so replayed historical EVENTs (old ts) are ignored.
@@ -7542,8 +7545,11 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
                         // Same tally hand-off as the WHOOP 4.0 loop, and for the same reason (D3):
                         // the router counts rejections, so a frame that skips it would be invisible
                         // to the counter the hardware run is judged on. One verdict, no parse.
-                        router.noteOffloadFrameVerdict(verifyFrame(frame, family: .whoop5))
-                        armBackfillTimeout()
+                        let verdict = verifyFrame(frame, family: .whoop5)
+                        router.noteOffloadFrameVerdict(verdict)
+                        if BackfillIdlePolicy.shouldExtendTimeout(packetType: Int(frame[8]), integrityOK: verdict.ok) {
+                            armBackfillTimeout()
+                        }
                         routeBackfillFrame(frame)
                         // A real-time double-tap / wrist gesture still fires during a 5/MG offload (which
                         // runs for minutes, #69); the ts≈now gate rejects replayed historical EVENTs.
