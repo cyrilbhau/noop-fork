@@ -482,7 +482,7 @@ object WeeklyDigestEngine {
         return intArrayOf(y, m, d)
     }
 
-    private fun formatYMD(y: Int, m: Int, d: Int): String {
+    internal fun formatYMD(y: Int, m: Int, d: Int): String {
         val yy = if (y < 1000) y.toString().padStart(4, '0') else y.toString()
         val mm = if (m < 10) "0$m" else "$m"
         val dd = if (d < 10) "0$d" else "$d"
@@ -490,7 +490,7 @@ object WeeklyDigestEngine {
     }
 
     /** Proleptic-Gregorian date → Julian Day Number (integer-only date arithmetic). */
-    private fun julianDayNumber(y: Int, m: Int, d: Int): Int {
+    internal fun julianDayNumber(y: Int, m: Int, d: Int): Int {
         val a = (14 - m) / 12
         val yy = y + 4800 - a
         val mm = m + 12 * a - 3
@@ -498,7 +498,7 @@ object WeeklyDigestEngine {
     }
 
     /** Inverse of [julianDayNumber] → [y, m, d]. */
-    private fun fromJulianDayNumber(jdn: Int): IntArray {
+    internal fun fromJulianDayNumber(jdn: Int): IntArray {
         val a = jdn + 32044
         val b = (4 * a + 3) / 146097
         val c = a - (146097 * b) / 4

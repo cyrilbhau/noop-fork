@@ -432,6 +432,8 @@ public enum CutScorecard {
     // MARK: Public surface
 
     /// Evaluate the scorecard. Total: never throws and never traps, for any input.
+    ///
+    /// Kotlin twin: `CutScorecard.evaluate`.
     public static func evaluate(_ input: CutScorecardInput) -> CutScorecardResult {
         let p = input.parameters
         guard parametersAreValid(p) else { return invalidResult(.parameters, p) }
@@ -959,6 +961,8 @@ public enum CutScorecard {
     /// The Monday of the week containing `day`. Forwards to `WeeklyDigestEngine.mondayOfWeek`.
     ///
     /// Nil unless `day` is a canonical "yyyy-MM-dd" key of a real date in years 0001 to 9999.
+    ///
+    /// Kotlin twin: `CutScorecard.weekStart`.
     public static func weekStart(containing day: String) -> String? {
         guard dayNumber(day) != nil else { return nil }
         return WeeklyDigestEngine.mondayOfWeek(containing: day)
@@ -968,6 +972,8 @@ public enum CutScorecard {
     ///
     /// `sign(x) × floor(|x| × 1000 + 0.5) ÷ 1000`, written out because library rounding functions
     /// disagree on halves across platforms. The Kotlin twin implements this expression.
+    ///
+    /// Kotlin twin: `CutScorecard.quantize`.
     public static func quantize(_ x: Double) -> Double {
         let scaled = abs(x) * 1000 + 0.5
         // §18 R4: §7.1's expression overflows to infinity for magnitudes above about 1.8e305. Such a
@@ -991,6 +997,8 @@ public enum CutScorecard {
         let dayKey: String
 
         /// Ascending order by `(day, takenAt, value)`; the reading that sorts last represents its week.
+        ///
+        /// Kotlin twin: `Point.sortsBefore`.
         func sortsBefore(_ other: Point) -> Bool {
             if day != other.day { return day < other.day }
             if takenAt != other.takenAt { return takenAt < other.takenAt }
@@ -1033,6 +1041,8 @@ public enum CutScorecard {
 
     /// The Julian Day Number of a canonical day key, or nil. Julian Day Numbers divisible by seven are
     /// Mondays, so `number / 7` is a week index and `index * 7` that week's Monday.
+    ///
+    /// Kotlin twin: `CutScorecard.dayNumber`.
     private static func dayNumber(_ key: String) -> Int? {
         guard key.utf8.count == 10, let (y, m, d) = WeeklyDigestEngine.parseYMD(key),
               y >= 1, y <= 9999, WeeklyDigestEngine.formatYMD(y, m, d) == key else { return nil }
@@ -1040,6 +1050,8 @@ public enum CutScorecard {
     }
 
     /// The day key of a Julian Day Number, clamped to the representable range.
+    ///
+    /// Kotlin twin: `CutScorecard.dayKey`.
     private static func dayKey(_ number: Int) -> String {
         let clamped = min(max(number, firstDayNumber), lastDayNumber)
         let (y, m, d) = WeeklyDigestEngine.fromJulianDayNumber(clamped)
@@ -1048,6 +1060,8 @@ public enum CutScorecard {
 
     /// Validate one input item in the order §6.5 lists the causes. Returns its day number when it is
     /// kept; otherwise counts the one cause and returns nil.
+    ///
+    /// Kotlin twin: `CutScorecard.admit`.
     private static func admit(value: Double, zeroIsValid: Bool, nameIsEmpty: Bool, day: String,
                               today: Int, counts: inout Counts) -> Int? {
         guard value.isFinite, abs(value) <= largestValueMagnitude else { counts.nonFinite += 1; return nil }
@@ -1058,6 +1072,8 @@ public enum CutScorecard {
     }
 
     /// §6.5: invalid parameters.
+    ///
+    /// Kotlin twin: `CutScorecard.parametersAreValid`.
     private static func parametersAreValid(_ p: CutScorecardParameters) -> Bool {
         guard p.waistMinDecreaseCm.isFinite, p.liftDropTolerancePercent.isFinite, p.liftDropShare.isFinite,
               p.slowLossThresholdKgPerWeek.isFinite, p.targetToleranceKg.isFinite else { return false }
@@ -1079,6 +1095,8 @@ public enum CutScorecard {
     }
 
     /// §6.5: an invalid phase.
+    ///
+    /// Kotlin twin: `CutScorecard.phaseIsValid`.
     private static func phaseIsValid(_ phase: CutScorecardPhase) -> Bool {
         guard dayNumber(phase.startDay) != nil else { return false }
         if let target = phase.targetWeightKg {
@@ -1091,13 +1109,17 @@ public enum CutScorecard {
     }
 
     /// §7.5 item 2: the lift status of a week whose representative weigh-in fell on `anchor`.
+    ///
+    /// Kotlin twin: `CutScorecard.liftSignalForWeek`.
     private static func liftSignalForWeek(anchor: Int, liftsByDay: [Int: [String: Double]],
                                           _ p: CutScorecardParameters) -> CutScorecardLiftSignal {
         let windowStart = dayKey(anchor - 7), windowEnd = dayKey(anchor - 1)
+        /// Kotlin twin: `CutScorecard.unknown`.
         func unknown(_ reason: CutScorecardLiftReason) -> CutScorecardLiftSignal {
             CutScorecardLiftSignal(state: .unknown, reason: reason, commonExercises: 0, dropped: 0,
                                    climbed: 0, held: 0, windowStartDay: windowStart, windowEndDay: windowEnd)
         }
+        /// Kotlin twin: `CutScorecard.heaviest`.
         func heaviest(from first: Int, through last: Int) -> [String: Double] {
             var best: [String: Double] = [:]
             for d in first...last {
@@ -1150,6 +1172,8 @@ public enum CutScorecard {
     // §18 R11: with an absurd window parameter the formula of §7.9 lies before 0001-01-01, which has
     // no day key. It is clamped to "0001-01-01"; no valid item can be dated earlier.
     /// §7.9: `J − 7 × (m + 2)` days, `m` the widest window.
+    ///
+    /// Kotlin twin: `CutScorecard.evidenceStart`.
     private static func evidenceStart(judgedWeek: Int, _ p: CutScorecardParameters) -> String {
         let widest = max(max(p.rateWindowWeeks, p.waistWindowWeeks),
                          max(p.slowLossConsecutiveWeeks, p.liftDropConsecutiveWeeks))
@@ -1160,6 +1184,8 @@ public enum CutScorecard {
     }
 
     /// Three rules that could not be evaluated, all for one reason.
+    ///
+    /// Kotlin twin: `CutScorecard.unknownRules`.
     private static func unknownRules(_ reason: CutScorecardRuleUnknownReason,
                                      _ p: CutScorecardParameters) -> [CutScorecardRuleEvaluation] {
         [CutScorecardRuleEvaluation(rule: .liftsHoldingWaistShrinking, state: .unknown, unknownReason: reason,
@@ -1171,6 +1197,8 @@ public enum CutScorecard {
     }
 
     /// §7.7 line 0: a precondition failed.
+    ///
+    /// Kotlin twin: `CutScorecard.insufficient`.
     private static func insufficient(_ reason: CutScorecardVerdictReason) -> CutScorecardVerdict {
         CutScorecardVerdict(kind: .insufficientData, reason: reason, rule: nil, calorieChangeKcal: nil,
                             overriddenRules: [], unevaluatedRules: [])
@@ -1181,6 +1209,8 @@ public enum CutScorecard {
     // ones); `floorGrams` echoes the floor only when it is finite and positive, so no NaN or infinity
     // reaches the output. `currentWeightKg`, `judgedWeekStart` and `evidenceStartDay` are nil.
     /// §6.5: the result for invalid parameters, an invalid phase or an unparseable `today`.
+    ///
+    /// Kotlin twin: `CutScorecard.invalidResult`.
     private static func invalidResult(_ cause: CutScorecardInvalidInput,
                                       _ p: CutScorecardParameters) -> CutScorecardResult {
         var floor: Double?
