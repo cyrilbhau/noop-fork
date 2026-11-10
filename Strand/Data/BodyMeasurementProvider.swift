@@ -5,7 +5,9 @@ import WhoopStore
 /// The weight points a Today view draws and resolves its tile from, fetched in one read.
 ///
 /// `policy` is fixed when the read starts, so a flag flipped while the read is suspended cannot make
-/// the tile and its sparkline answer under two different rules.
+/// the tile and its sparkline answer under two different rules. It stays with the value, so a view
+/// that holds or caches a series can tell that the flag has changed since: the series' policy is
+/// then no longer `BodyMeasurementProvider.displayPolicy` (ruling R38).
 struct BodyWeightSeries: Sendable {
     let policy: BodyMeasurementPolicy
     /// Ascending by day. Flag off: the Apple Health `weight` series inside the view's own window.
@@ -206,18 +208,25 @@ final class BodyMeasurementProvider: ObservableObject {
         }
     }
 
+    /// The device ids `labBookRows` reads across, in its order of precedence (rulings R25 and R29).
+    /// `WeighInStore` checks the same ids before a write, so a write cannot store a reading the
+    /// readers would then collapse onto another (ruling R36). Reads the registry only.
+    static func unionedDeviceIds(store: WhoopStore, activeDeviceId: String) -> [String] {
+        let paired = (try? DeviceRegistryStore(dbQueue: store.registryWriter).all()) ?? []
+        let registeredWhoops = paired.filter {
+            $0.brand.caseInsensitiveCompare("WHOOP") == .orderedSame
+        }.map(\.id)
+        return Repository.rawWhoopSourceIds(activeDeviceId: activeDeviceId,
+                                            registeredWhoopIds: registeredWhoops)
+    }
+
     /// Every Lab Book row of `kind` across the ids the repository unions for imported history
     /// (rulings R25 and R29): the active strap, every other registered WHOOP, the canonical id.
     /// A reading stored under two ids (same marker, instant and source) is listed once, the copy
     /// under the earlier id in that order standing for it. Oldest first. Reads only.
     static func labBookRows(_ kind: BodyMeasurementKind, store: WhoopStore,
                             activeDeviceId: String) async -> [LabMarkerRow] {
-        let paired = (try? DeviceRegistryStore(dbQueue: store.registryWriter).all()) ?? []
-        let registeredWhoops = paired.filter {
-            $0.brand.caseInsensitiveCompare("WHOOP") == .orderedSame
-        }.map(\.id)
-        let ids = Repository.rawWhoopSourceIds(activeDeviceId: activeDeviceId,
-                                               registeredWhoopIds: registeredWhoops)
+        let ids = unionedDeviceIds(store: store, activeDeviceId: activeDeviceId)
         var seen: Set<String> = []
         var rows: [LabMarkerRow] = []
         for id in ids {
@@ -243,6 +252,11 @@ final class BodyMeasurementProvider: ObservableObject {
                                              profileValue: stored.value, profileIsSet: stored.isSet)
         }
     }
+
+    /// The policy a Today view's weight resolves under now: one read of the flag, no store read
+    /// and no write. A view compares it with the `policy` of the series it holds, and a reading
+    /// resolved under another policy is not shown or restored (ruling R38).
+    var displayPolicy: BodyMeasurementPolicy { policy(.display) }
 
     private func policy(_ consumer: BodyMeasurementConsumer) -> BodyMeasurementPolicy {
         BodyMeasurementResolver.policy(flagEnabled: flagEnabled, consumer: consumer)
