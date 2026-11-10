@@ -72,9 +72,9 @@ The newest migration is `v47-rr-whoop5-fill`.
 
 | Area | State | Where |
 |---|---|---|
-| Lab Book | Marker cards with sparklines; an editor with a unit switcher for dual-unit markers (lipids and glucose, mmol/L and mg/dL) | `Strand/Screens/LabBookView.swift`, `MarkerEditorView.swift` |
+| Lab Book | Marker cards with sparklines; an editor with a unit switcher for dual-unit markers (lipids and glucose, mmol/L and mg/dL). It has no kg/lb or cm/in handling, and the store cannot change a reading's instant (add and delete only). | `Strand/Screens/LabBookView.swift`, `MarkerEditorView.swift` |
 | Lab marker catalogue on Android | A Kotlin twin exists | `android/app/src/main/java/com/noop/analytics/MarkerCatalog.kt`, `.../ingest/LabMarkerCsvImport.kt` |
-| Body weight elsewhere | `Profile.weightKg`, `waistCm` and `heightCm` are single profile values that feed VO₂max and calorie estimates. Today resolves weight as Apple Health first, profile second. | `Strand/Data/Profile.swift`, `Strand/Liquid/LiquidTodayView.swift` (search `#204`) |
+| Body weight elsewhere | `Profile.weightKg`, `waistCm` and `heightCm` are single profile values that feed VO₂max and calorie estimates. Weight has six stores, not three (profile, `appleDaily.weightKg`, `metricSeries` `weight` under `apple-health` and under `nutrition-csv`, `labMarker` rows and their `lab-book` projection). Liquid and classic Today resolve it over different days and windows, and the estimates read the profile only. See the stage 1 specification §3 and §4. | `Strand/Data/Profile.swift`, `Strand/Liquid/LiquidTodayView.swift` (search `#204`) |
 | Metric catalogue | `weight` and `body_fat` are defined as Apple Health sourced series | `Strand/Data/MetricCatalog.swift` |
 | Lift programmes | Items carry target sets, rep range, weight, RPE, rest seconds and a cue | tables `liftProgram`, `liftProgramItem` |
 | Lift sessions | Live session with rest timers; sets carry weight, reps, RPE, warm-up flag, rest taken and a note. No per-side or machine field. | `Strand/Data/LiftSessionEngine.swift`, tables `liftSession`, `liftSet` |
@@ -160,15 +160,24 @@ where they disagree.
 
 These surfaced while planning. Each is assigned to a stage in the roadmap.
 
-1. **Health data in Git.** The repository may be published. Measurements, scan results, medication
+1. **Health data in Git.** The GitHub repository is **public** (checked with `gh repo view` on
+   10 November 2026; earlier documents call it private). Every push is a publication. Measurements, scan results, medication
    notes and injury history must never be committed, including in test fixtures, screenshots, commit
    messages and pull-request descriptions.
-2. **CI does not run on this fork.** The six most recent workflow runs on `cyrilbhau/noop-fork` all
-   concluded `skipped` (checked with `gh run list` on 10 November 2026; the cause was not
-   investigated). Until that changes, local gates are the only evidence. Stage 0 builds one script
-   that runs them all.
+2. **CI does not run on this fork.** Investigated on 10 November 2026. The `skipped` runs are
+   scheduled runs of two workflows that carry a guard added in commit `398af615` to keep scheduled
+   jobs off personal forks. Every other workflow triggers only on `main`, which this repository
+   does not have, so none has ever run. Two workflows (`source-hygiene`, `i18n-coverage`) have no
+   manual dispatch. Until the owner chooses otherwise, the local gate script
+   (`Tools/personal/gate.sh`, recorded in [BASELINE.md](BASELINE.md)) is the evidence. Dispatching
+   `android.yml` by hand on a pushed branch is a way to run Kotlin twins without installing
+   anything on the Mac; it was not tried.
 3. **No Java runtime on the Mac.** Android unit tests cannot run locally. Kotlin twins written without
    being run are unverified. See Q3.
+   The parity ledger is also stale on this branch: its stored authority has not reproduced since
+   11 October 2026, the ratchet always prints one pre-existing error, and the ledger cannot see
+   committed one-sided code here. New analytics functions need a twin claim on both sides and a
+   production caller in the same change. No refresh or migration without the owner.
 4. **Upstream migration collisions.** The fork tracks `ryanbr/noop`. If the fork adds a migration
    named like upstream's next one, a later merge collides. Prefer no migration; where one is
    unavoidable, design its name and position with the upstream sequence in mind and write that
