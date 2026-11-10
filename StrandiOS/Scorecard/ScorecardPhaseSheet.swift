@@ -21,6 +21,7 @@ struct ScorecardPhaseSheet: View {
     @State private var showsCalendar = false
     @FocusState private var focused: ScorecardPhaseDraft.Field?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// `draft` is for the debug demo, which opens the sheet on a given draft.
     init(context: ScorecardContext, draft: ScorecardPhaseDraft? = nil, onSaved: @escaping () -> Void) {
@@ -145,6 +146,7 @@ struct ScorecardPhaseSheet: View {
                 .tint(NoopTheme.textSecondary)
                 .environment(\.calendar, pickerCalendar)
                 .environment(\.timeZone, context.timeZone())
+                .environment(\.locale, context.locale())
                 .padding(.bottom, NoopTheme.Layout.s)
         }
     }
@@ -173,12 +175,14 @@ struct ScorecardPhaseSheet: View {
             .focused($focused, equals: row.field)
             .fixedSize(horizontal: row.input != .text, vertical: false)
             .frame(minWidth: NoopTheme.Layout.xl, minHeight: NoopTheme.Layout.minTouchTarget, alignment: .trailing)
-            if let suffix = row.suffix {
+            // An empty field that may stay empty reads "Not set", with no unit after it.
+            if let suffix = row.suffix, !(typed[row.field] ?? row.text).isEmpty {
                 Text(verbatim: suffix)
                     .noopFont(.bodySmall, color: false)
                     .foregroundStyle(row.isInvalid ? NoopTheme.recoveryLow : NoopTheme.textSecondary)
                     .multilineTextAlignment(.trailing)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // One line beside the label, which wraps instead; stacked rows let it wrap.
+                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
             }
         }
         .contentShape(Rectangle())

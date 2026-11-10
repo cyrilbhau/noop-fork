@@ -301,6 +301,9 @@ struct ScorecardContent: View {
                 .noopFont(.statNumber, color: false)
                 .fontWeight(.bold)
                 .fixedSize(horizontal: false, vertical: true)
+                // A verdict can hold one long word ("carbohydrate"), which cannot wrap: past this
+                // size it would run off the card.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
         .foregroundStyle(color)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -181,6 +181,7 @@ struct WeighInSheetScreen: View {
                     .tint(NoopTheme.textSecondary)
                     .environment(\.calendar, pickerCalendar)
                     .environment(\.timeZone, context.timeZone())
+                    .environment(\.locale, context.locale())
                     .padding(NoopTheme.Layout.m)
                     .background {
                         RoundedRectangle(cornerRadius: NoopTheme.Layout.l, style: .continuous)

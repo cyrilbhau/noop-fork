@@ -270,6 +270,11 @@ private struct ScorecardDemoHost: View {
         }
     }
 
+    private var textSizes: ClosedRange<DynamicTypeSize> {
+        isLargestText ? DynamicTypeSize.accessibility5...DynamicTypeSize.accessibility5
+                      : DynamicTypeSize.xSmall...DynamicTypeSize.accessibility5
+    }
+
     var body: some View {
         Group {
             if let built {
@@ -280,8 +285,7 @@ private struct ScorecardDemoHost: View {
                 NoopTheme.canvas.ignoresSafeArea()
             }
         }
-        .dynamicTypeSize(isLargestText ? DynamicTypeSize.accessibility5...DynamicTypeSize.accessibility5
-                                       : DynamicTypeSize.xSmall...DynamicTypeSize.accessibility5)
+        .dynamicTypeSize(textSizes)
         .task {
             guard built == nil else { return }
             built = try? await build()
@@ -296,8 +300,10 @@ private struct ScorecardDemoHost: View {
         case .weighIn:
             ScorecardScreen(context: built.context)
                 .sheet(isPresented: $showsSheet) {
+                    // A sheet does not take the text size of the view that presents it.
                     WeighInSheetScreen(context: built.context, model: built.sheetModel,
                                        showsCalendar: built.showsCalendar)
+                        .dynamicTypeSize(textSizes)
                 }
         case .history:
             WeighInHistoryScreen(context: built.context, model: built.historyModel,
