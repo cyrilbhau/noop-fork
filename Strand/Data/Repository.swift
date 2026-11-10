@@ -203,6 +203,10 @@ final class Repository: ObservableObject {
     /// data load on this so they reload when fresh strap data lands , `today?.day` alone is a stable
     /// date string within a day and would freeze e.g. the Today HR trend until the date rolls over.
     @Published private(set) var refreshSeq = 0
+    /// Fires once for every `refresh()` that ran to completion, including one that found its caches
+    /// unchanged and so left `refreshSeq` alone (a Lab Book write changes none of them). Deliberately
+    /// not `@Published`: sending it does not fire `objectWillChange`, so no view re-renders for it.
+    let refreshCompleted = PassthroughSubject<Void, Never>()
 
     /// #989: bumped by every hydration mutation (log / edit / delete). Today's hydration card re-reads on
     /// this instead of waiting for a full `refreshSeq` data refresh, which a hydration write never causes,
@@ -1009,6 +1013,9 @@ final class Repository: ObservableObject {
         // Generation guard (#review): if a newer refresh() started while this one merged off-actor, drop
         // this now-stale result so it can't clobber the newer caches or re-fire loadAll out of order.
         guard myGen == refreshGen else { return }
+        // Stage 1 ruling R32: this refresh completed. Sent on the "unchanged" return below as well as
+        // after the publish, and never for a refresh the generation guard above dropped.
+        defer { refreshCompleted.send() }
 
         // DIFF before publishing (FIX 3): if this refresh produced byte-identical caches AND we've already
         // loaded once, skip the re-publish and the `refreshSeq` bump entirely , assigning an equal value to

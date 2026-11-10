@@ -12,6 +12,7 @@
 //  background (edge-to-edge under the status bar, does not scroll).
 
 import SwiftUI
+import Combine
 import StrandDesign
 import WhoopStore
 import StrandAnalytics
@@ -2947,6 +2948,11 @@ final class TodayDayModel: ObservableObject {
     /// #204: the dated weight the selected day resolves to through `BodyMeasurementProvider`; nil
     /// means the tile falls back to the profile value.
     @Published var bodyWeight: ResolvedBodyMeasurement?
+    /// The provider `bodyWeight` was last resolved through, and the subscription to its `revision`
+    /// (stage 1 ruling R32). `revision` moves only with the scorecard flag on, so with it off the
+    /// subscription never delivers and nothing is re-read.
+    private var bodyWeightProvider: BodyMeasurementProvider?
+    private var bodyWeightObserver: AnyCancellable?
     @Published var hrValues: [Double] = []     // hrBuckets since midnight → 5-min means
     /// Line identity for [hrValues], from the bucket timestamps (#2082).
     @Published var hrSegments: [String] = []
@@ -3008,6 +3014,34 @@ final class TodayDayModel: ObservableObject {
     }
 
     // MARK: Data
+
+    /// Re-resolve the weight tile whenever `provider` publishes a changed snapshot (ruling R32): a
+    /// weigh-in or Lab Book write does not move `refreshSeq`, so it never re-runs `load`.
+    private func followBodyWeight(_ provider: BodyMeasurementProvider, repo: Repository) {
+        guard bodyWeightProvider !== provider else { return }
+        bodyWeightProvider = provider
+        bodyWeightObserver = provider.$revision.dropFirst().sink { [weak self, weak provider, weak repo] _ in
+            Task { @MainActor in
+                guard let self, let provider, let repo else { return }
+                await self.reloadBodyWeight(provider, repo: repo)
+            }
+        }
+    }
+
+    /// The weight half of `load`, on its own. Unified policy only: under a legacy policy the tile's
+    /// inputs are the Apple Health reads `load` already keys on `refreshSeq`.
+    private func reloadBodyWeight(_ provider: BodyMeasurementProvider, repo: Repository) async {
+        // Captured before suspension: a day change while the reads run belongs to that day's `load`.
+        let requestedDayKey = selectedDayKey(repo: repo)
+        let isCurrent = selectedDayOffset == 0
+        async let seriesA = provider.displayWeightSeries(days: 91)
+        async let appleA = repo.appleDailyRows()
+        let series = await seriesA
+        let appleRows = await appleA
+        guard series.policy == .unified, requestedDayKey == selectedDayKey(repo: repo) else { return }
+        bodyWeight = provider.displayWeight(from: series, asOf: .day(requestedDayKey, isCurrent: isCurrent),
+                                            appleRows: appleRows)
+    }
 
     func load(repo: Repository, profile: ProfileStore, inputs: TodayLoadInputs) async {
         let requestedDayKey = selectedDayKey(repo: repo)
@@ -3133,6 +3167,7 @@ final class TodayDayModel: ObservableObject {
         // Stage 1 specification §8.4, ruling R26: the weight read belongs to the provider. This view's
         // window is 91 days and its as-of day is the selected day.
         let bodyMeasurements = BodyMeasurementProvider.live(repository: repo, profile: profile)
+        followBodyWeight(bodyMeasurements, repo: repo)
         async let weightA = bodyMeasurements.displayWeightSeries(days: 91)
         async let appleA = repo.appleDailyRows()
         async let hrA = repo.hrBuckets(from: from, to: to, bucketSeconds: 300)
@@ -3255,8 +3290,10 @@ final class TodayDayModel: ObservableObject {
         // weight in the renderer (weightTile).
         let appleRows = await appleA
         let weightSeries = await weightA
-        bodyWeight = bodyMeasurements.displayWeight(from: weightSeries, asOf: .day(selectedDayKey(repo: repo)),
-                                                    appleRows: appleRows)
+        // Ruling R33: the selected day is the logical day; at offset 0 it is the current day.
+        bodyWeight = bodyMeasurements.displayWeight(
+            from: weightSeries, asOf: .day(selectedDayKey(repo: repo), isCurrent: selectedDayOffset == 0),
+            appleRows: appleRows)
 
         // Awaited ONCE: the timestamps and the means have to come from the same read, or the segments
         // would describe a different series than the one drawn.

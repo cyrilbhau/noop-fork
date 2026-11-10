@@ -15,8 +15,10 @@ struct BodyWeightSeries: Sendable {
 
 /// The day a Today view resolves its weight tile for.
 enum BodyWeightAsOf {
-    /// Liquid and the redesign: the day the wearer is looking at.
-    case day(String)
+    /// Liquid and the redesign: the day the wearer is looking at, and whether it is the current
+    /// day. Those views select the logical day (04:00 rollover), so under the unified policy the
+    /// current day resolves as of the later of it and the calendar day (ruling R33).
+    case day(String, isCurrent: Bool)
     /// Classic Today: the latest reading, whichever day is selected.
     case latest
 }
@@ -44,9 +46,16 @@ final class BodyMeasurementProvider: ObservableObject {
         var weightRows: [LabMarkerRow] = []
         var waistRows: [LabMarkerRow] = []
         var appleWeight: [(day: String, value: Double)] = []
+
+        func isSame(as other: Snapshot) -> Bool {
+            weightRows == other.weightRows && waistRows == other.waistRows
+                && appleWeight.elementsEqual(other.appleWeight) { $0.day == $1.day && $0.value == $1.value }
+        }
     }
 
-    /// Bumped each time a refresh publishes, so an observing view re-reads.
+    /// Bumped when a refresh read something other than the snapshot already held, so an observing
+    /// view re-resolves. A refresh that changed nothing leaves it alone, and so does every refresh
+    /// with the flag off, when no reader uses the snapshot (ruling R32).
     @Published private(set) var revision = 0
 
     private let repository: Repository
@@ -64,6 +73,7 @@ final class BodyMeasurementProvider: ObservableObject {
         self.defaults = defaults
         self.today = today
         self.profile = nil
+        followRepository()
     }
 
     private init(repository: Repository, profile: ProfileStore) {
@@ -71,13 +81,19 @@ final class BodyMeasurementProvider: ObservableObject {
         self.defaults = .standard
         self.today = { Repository.localDayKey(Date()) }
         self.profile = profile
-        // §8.4: refresh after `Repository.refresh()`. Only while the flag is on: with it off no
-        // reader uses the snapshot, so the app does no extra store work.
-        repositoryObserver = repository.$refreshSeq.dropFirst().sink { [weak self] _ in
-            guard UserDefaults.standard.bool(forKey: CutScorecardSettings.enabledKey) else { return }
+        followRepository()
+        if flagEnabled {
             Task { @MainActor [weak self] in await self?.refresh() }
         }
-        if flagEnabled {
+    }
+
+    /// §8.4, ruling R32: refresh after every completed `Repository.refresh()`, including one that
+    /// found its caches unchanged, which is all a Lab Book write produces. Only while the flag is
+    /// on: with it off no reader uses the snapshot, so the signal costs one flag read and nothing
+    /// else.
+    private func followRepository() {
+        repositoryObserver = repository.refreshCompleted.sink { [weak self] in
+            guard let self, self.flagEnabled else { return }
             Task { @MainActor [weak self] in await self?.refresh() }
         }
     }
@@ -166,9 +182,11 @@ final class BodyMeasurementProvider: ObservableObject {
         for row in appleDaily {
             if let kg = row.weightKg { appleByDay[row.day] = kg }
         }
-        snapshot = Snapshot(weightRows: weightRows, waistRows: waistRows,
+        let read = Snapshot(weightRows: weightRows, waistRows: waistRows,
                             appleWeight: appleByDay.keys.sorted().map { (day: $0, value: appleByDay[$0] ?? 0) })
-        revision += 1
+        let changed = !read.isSame(as: snapshot)
+        snapshot = read
+        if changed, flagEnabled { revision += 1 }
         mirrorIntoProfile()
     }
 
@@ -291,7 +309,8 @@ final class BodyMeasurementProvider: ObservableObject {
     /// The dated reading a Today weight tile shows, nil when only the profile value exists.
     ///
     /// Flag off, this is each view's rule as it was (ruling R26), run through the resolver's
-    /// `legacyDisplay` policy. `.day`: the Apple Health daily value of that day, else the newest
+    /// `legacyDisplay` policy, and `isCurrent` changes nothing (ruling R33). `.day`: the Apple
+    /// Health daily value of that day, else the newest
     /// series point on or before it. `.latest`: the newest daily row's weight when that row carries
     /// one, else the newest series point. `appleRows` are the Apple Health daily rows the view
     /// already holds for its steps and calories; they are consulted only with the flag off.
@@ -302,7 +321,7 @@ final class BodyMeasurementProvider: ObservableObject {
         case .unified:
             let day: String
             switch asOf {
-            case .day(let selected): day = selected
+            case .day(let selected, let isCurrent): day = isCurrent ? max(selected, today()) : selected
             case .latest: day = today()
             }
             resolved = BodyMeasurementResolver.resolve(.weight, asOf: day, candidates: candidates(.weight),
@@ -311,7 +330,7 @@ final class BodyMeasurementProvider: ObservableObject {
             var apple = series.points
             let day: String
             switch asOf {
-            case .day(let selected):
+            case .day(let selected, _):
                 if let daily = appleRows.filter({ $0.day == selected }).compactMap({ $0.weightKg }).max() {
                     apple.append((day: selected, value: daily))
                 }
