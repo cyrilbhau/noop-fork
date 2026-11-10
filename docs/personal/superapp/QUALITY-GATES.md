@@ -122,7 +122,7 @@ drift.
 | `Tools/doc_comment_lint.py` | No detached doc comments | `source-hygiene.yml` |
 | `Tools/i18n_audit.py --ci` | New strings cover every locale | `i18n-coverage.yml` |
 | Python unit tests under `Tools/` | Repository acceptance and tooling | `tools-python.yml` |
-| `Tools/check_personal_widgets.py` | Personal widget invariants | The script itself |
+| `Tools/check_personal_widgets.py` | Personal widget invariants | The script itself. It cannot run on macOS as written (it needs a Linux toolchain) and is a recorded baseline failure; the same test file runs inside `StrandTests`. |
 | Android unit tests | Kotlin twins | `android.yml`; needs JDK 17 and the Android SDK |
 | Parity oracle | Swift and Kotlin agree on generated inputs | Per stage |
 

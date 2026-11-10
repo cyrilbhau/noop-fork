@@ -57,9 +57,9 @@ the phone.
 | 0B-0 | **Bootstrap.** Check the working tree, fetch, branch `personal/superapp-0-foundation` from the up-to-date baseline, file the six planning documents as the first commit, place the private profile in its ignored path and confirm Git ignores it. | Orchestrator | Steps are in [KICKOFF-PROMPT.md](KICKOFF-PROMPT.md). Copy from the planning worktree when it exists; otherwise write the attachments out exactly. |
 | 0B-1 | **Baseline record.** Build both Apple targets and run every local suite on the untouched branch. Record pass counts and every pre-existing failure. | Verifier | The redesign report already mentions known baseline tool-test failures. New work is judged against this record, so a later failure can be attributed. Store as `docs/personal/superapp/BASELINE.md`. |
 | 0B-2 | **One local gate script**, proposed `Tools/personal/gate.sh`. Runs every check in [QUALITY-GATES.md](QUALITY-GATES.md) §G4 and prints one summary table. | Implementer | Derive each invocation from the workflow files in `.github/workflows/`, not from memory. A check that cannot run (for example Android with no JDK) prints `NOT RUN` with the reason and makes the script exit non-zero unless explicitly waived by flag. It must never skip silently. |
-| 0B-3 | **Why CI is skipped.** Find out why workflow runs on the fork conclude `skipped` and report the options to the owner. | Explorer | Do not change workflow files without the owner's decision. Private-repository macOS minutes cost money. |
+| 0B-3 | **Why CI is skipped.** Find out why workflow runs on the fork conclude `skipped` and report the options to the owner. | Explorer | Done 10 November 2026: see [CONTEXT.md](CONTEXT.md) §7 item 2. Do not change workflow files without the owner's decision. The repository is public, so the private-repository cost concern may not apply; that was not checked against GitHub's terms. |
 | 0B-4 | **Android decision (Q3).** Present the two options: install JDK 17 and the Android SDK so twins are run, or record a written disposition per change. | Orchestrator | Installing software on the Mac needs the owner's go-ahead. Until answered, the default applies: twins are written and reported as "written, not run". This does not block other work. |
-| 0B-5 | **Package test reachability.** The older handoff reports that a full SwiftPM run was blocked by an unavailable GRDB checkout. Reproduce, fix or document. | Verifier | The gate script depends on this. |
+| 0B-5 | **Package test reachability.** The older handoff reports that a full SwiftPM run was blocked by an unavailable GRDB checkout. Reproduce, fix or document. | Verifier | Done 10 November 2026: not reproducible. There is no submodule; GRDB is a SwiftPM dependency and all eight package suites run. See [BASELINE.md](BASELINE.md). |
 | 0B-6 | **Synthetic fixture set.** A documented, obviously fictional person with weekly weigh-ins, waist readings, protein days, scan entries and events, covering every edge case listed in stages 1 to 5. | Test author | Lives with the tests. Values must not resemble the owner's. |
 | 0B-7 | **Real-data rehearsal procedure.** A written procedure for restoring a private backup into a simulator, with the copy kept under `PersonalData/`. | Verifier | Never committed. Screenshots from this path are never committed. |
 | 0B-8 | **Figma pipeline check.** Confirm the design HTML renders, the frame export works, the local server script exists (it previously lived in a session scratchpad and may be gone), and the plugin has a command for the new round. | Designer | See [QUALITY-GATES.md](QUALITY-GATES.md) §G1. Needs computer-use access from the owner. |
@@ -92,8 +92,11 @@ only from their own fixed rules.
 ### What exists
 
 Lab Book already stores timestamped `weight` and `waist` readings and draws a sparkline per marker.
-The profile holds a single weight and waist. Today resolves weight from Apple Health first and the
-profile second. So one fact currently has three homes.
+The profile holds a single weight and waist. The code reading for the specification found that
+weight has six stores and waist three, that the Today views already resolve weight differently from
+each other, and that the estimates read the profile only. The specification
+([specs/stage-1.md](specs/stage-1.md) §3, §4 and §8) is the authority; where it differs from the
+proposals below, the specification wins.
 
 ### Scope
 
@@ -181,7 +184,7 @@ Decided at the design gate (Q2). Frames required:
 | 1-6 | Resolver, and migration of existing readers onto it | Implementer B | `Strand/Data/...` |
 | 1-7 | Screens, sheet, history, Your Cards entry, setting behind a default-off flag | Implementer C, after 1-2 is approved and 1-4, 1-6 merge | `Strand/Screens/...`, `StrandiOS/...` |
 | 1-8 | Strings in all ten locales | Localiser | `Strand/Resources/Localizable.xcstrings` (sole writer) |
-| 1-9 | Reminder notification | Implementer C | Notification settings files |
+| 1-9 | Reminder notification | Implementer C | A new reminder type beside the existing ones in `Strand/System/`; there is no shared notification settings file for local reminders |
 | 1-10 | Adversarial review, then simulator verification | Reviewer, Verifier | None; read-only |
 
 1-3 and 1-4 run in parallel in separate worktrees. 1-7 does not start before the design is approved.
@@ -209,7 +212,8 @@ Pure logic, each a named test case:
 - Week boundaries: a reading at 23:59 and at 00:01 local time on the boundary; a week spanning a
   daylight-saving change; a time-zone change between two readings.
 - Non-finite and negative inputs are rejected.
-- Unit handling: kilograms and pounds in, kilograms stored.
+- Unit handling: kilograms and pounds in, kilograms stored. (An app-layer test, not pure logic: the
+  pure function takes kilograms only, and Lab Book has no kg/lb handling today.)
 - Property check: adding a reading outside the evaluation window never changes the verdict.
 - Determinism: the same input and the same "today" always give the same output.
 
