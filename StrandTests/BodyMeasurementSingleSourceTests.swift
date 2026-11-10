@@ -500,31 +500,44 @@ final class BodyMeasurementSingleSourceTests: XCTestCase {
 
     /// §8.5: "The mirror has one writer." A `WeighInStore` with no provider writes the Lab Book rows
     /// and no profile value, in the injected defaults or in the standard ones.
+    ///
+    /// No provider exists while the store writes. Under ruling R32 a flag-on provider follows every
+    /// completed refresh of its repository and mirrors, so one kept alive on this repository (as the
+    /// shared harness keeps one) would write the profile during the store's own refresh and the
+    /// test could not tell the two writers apart.
     func testWeighInStoreByItselfNeverWritesTheProfile() async throws {
         let clock = Clock()
-        let h = try await makeHarness(today: clock.today, now: clock.now, flag: true)
-        h.defaults.set(80.0, forKey: "profile.weightKg")
-        h.defaults.written = []
+        let name = "BodyMeasurementSingleSourceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(RecordingDefaults(suiteName: name))
+        suites.append(name)
+        defaults.set(true, forKey: "noop.cutScorecardEnabled")
+        defaults.set(80.0, forKey: "profile.weightKg")
+        let store = try await WhoopStore.inMemory()
+        let repo = Repository(deviceId: "my-whoop")
+        repo.setStoreForTesting(store)
+        defaults.written = []
         let standardWeight = UserDefaults.standard.object(forKey: "profile.weightKg") as? Double
         let standardWaist = UserDefaults.standard.object(forKey: "profile.waistCm") as? Double
         let now = clock.now
         let zone = utc
-        let alone = WeighInStore(repository: h.repo, provider: nil, timeZone: { zone }, now: { now })
+        let alone = WeighInStore(repository: repo, provider: nil, timeZone: { zone }, now: { now })
 
         let rows = try await alone.save(weight: 99.2, waist: 96.0, unitSystem: .metric, takenAt: clock.instant(0))
         try await alone.edit(rows[0], value: 98.8, unitSystem: .metric, takenAt: clock.instant(0))
         try await alone.delete(rows[1])
 
-        XCTAssertFalse(h.defaults.wroteProfile(), "the write funnel wrote the profile itself: \(h.defaults.written)")
-        XCTAssertEqual(h.defaults.object(forKey: "profile.weightKg") as? Double, 80.0)
-        XCTAssertNil(h.defaults.object(forKey: "profile.waistCm"))
+        XCTAssertFalse(defaults.wroteProfile(), "the write funnel wrote the profile itself: \(defaults.written)")
+        XCTAssertEqual(defaults.object(forKey: "profile.weightKg") as? Double, 80.0)
+        XCTAssertNil(defaults.object(forKey: "profile.waistCm"))
         XCTAssertEqual(UserDefaults.standard.object(forKey: "profile.weightKg") as? Double, standardWeight,
                        "the app's real profile was touched")
         XCTAssertEqual(UserDefaults.standard.object(forKey: "profile.waistCm") as? Double, standardWaist)
 
-        // The provider, once it refreshes, is the one that mirrors.
-        await h.provider.refresh()
-        XCTAssertEqual(h.defaults.object(forKey: "profile.weightKg") as? Double, 98.8)
+        // The provider, once there is one and it refreshes, is the one that mirrors.
+        let today = clock.today
+        let provider = BodyMeasurementProvider(repository: repo, defaults: defaults, today: { today })
+        await provider.refresh()
+        XCTAssertEqual(defaults.object(forKey: "profile.weightKg") as? Double, 98.8)
     }
 
     /// The provider under test never touches the standard defaults either.

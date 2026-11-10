@@ -20,8 +20,10 @@ import StrandAnalytics
 //     differs from the row's and another stored row has the same marker, source and device id at
 //     that instant, the edit throws `.instantOccupied` and writes nothing: no insert, no update, no
 //     delete, and `interruptDateEditForTesting` is not reached.
-//  3. A row at that instant under ANOTHER device id, or from ANOTHER source, does not occupy it: the
-//     date edit succeeds as specified in `WeighInStoreTests.swift` and leaves that row untouched.
+//  3. A row at that instant from ANOTHER source, or under a device id OUTSIDE the union of ruling
+//     R25, does not occupy it: the date edit succeeds as specified in `WeighInStoreTests.swift` and
+//     leaves that row untouched. (Ruling R36: an id inside the union does occupy it; see
+//     `WeighInCrossIdOccupancyTests.swift`.)
 //  4. `WeighInStore.save(weight:waist:unitSystem:takenAt:)`: when a manual row of the marker already
 //     exists at the instant under the active device id, the save updates that row's `value` and
 //     `unit` only. Its `id`, `category`, `day`, `valueText`, `note` and `referenceText` are kept, and
@@ -205,17 +207,18 @@ final class WeighInOccupiedInstantTests: XCTestCase {
 
     // MARK: - Instants that are not occupied
 
-    /// The natural key includes the device id. A reading at the target instant under another
-    /// registered strap does not occupy it: the edit succeeds under the edited row's own id and the
-    /// other strap's row is untouched.
-    func testDateEditOntoAnInstantTakenOnlyUnderAnotherDeviceIdSucceeds() async throws {
+    /// A reading at the target instant under a device id OUTSIDE the union of ruling R25 (here an id
+    /// nothing registered) does not occupy it: the edit succeeds under the edited row's own id and
+    /// that row is untouched. Ruling R36 superseded the earlier expectation of this test, which held
+    /// the instant under a registered earlier strap: an id inside the union does occupy it
+    /// (`WeighInCrossIdOccupancyTests`).
+    func testDateEditOntoAnInstantTakenOnlyUnderADeviceIdOutsideTheUnionSucceeds() async throws {
         let (store, repo) = try await makeRepo()
-        try register(store, "whoop-old", status: .archived)
-        let ids = ["my-whoop", "whoop-old"]
+        let ids = ["my-whoop", "whoop-gone"]
         let mine = row("weight", id: "weight-1925622000-0000AAAA", day: "2031-01-08", takenAt: week1Epoch,
                        value: 100.0, unit: "kg", note: "first week", referenceText: "home scale")
-        let other = row("weight", id: "weight-1926226800-0000BBBB", deviceId: "whoop-old", day: "2031-01-15",
-                        takenAt: week2Epoch, value: 99.2, unit: "kg", note: "old strap", referenceText: "ref")
+        let other = row("weight", id: "weight-1926226800-0000BBBB", deviceId: "whoop-gone", day: "2031-01-15",
+                        takenAt: week2Epoch, value: 99.2, unit: "kg", note: "unknown strap", referenceText: "ref")
         try await store.upsertLabMarkers([mine, other])
         let weighIns = makeWeighIns(repo)
 
@@ -229,10 +232,10 @@ final class WeighInOccupiedInstantTests: XCTestCase {
         XCTAssertNotEqual(moved.id, mine.id)
         XCTAssertNotEqual(moved.id, other.id)
         let otherAfter = try await stored(store, id: other.id, ids: ids)
-        assertSameColumns(otherAfter, other, "the other strap's reading")
+        assertSameColumns(otherAfter, other, "the reading under the id outside the union")
         let mineRows = try await store.labMarkers(deviceId: "my-whoop", markerKey: "weight")
         XCTAssertEqual(mineRows, [moved], "one reading under the edited row's id, at the new instant")
-        let otherRows = try await store.labMarkers(deviceId: "whoop-old", markerKey: "weight")
+        let otherRows = try await store.labMarkers(deviceId: "whoop-gone", markerKey: "weight")
         XCTAssertEqual(otherRows, [other])
     }
 
@@ -324,16 +327,18 @@ final class WeighInOccupiedInstantTests: XCTestCase {
         assertSameColumns(waistAfter, waist, "the waist row")
     }
 
-    /// A row of another source, or under another device id, at the save's instant is not the row the
-    /// save lands on: it is untouched and the save writes its own manual row.
-    func testSaveAtAnInstantTakenByAnotherSourceOrDeviceWritesItsOwnRow() async throws {
+    /// A row of another source, or under a device id OUTSIDE the union of ruling R25, at the save's
+    /// instant is not the row the save lands on: it is untouched and the save writes its own manual
+    /// row. Ruling R36 superseded the earlier expectation of this test, which held the instant under
+    /// a registered earlier strap: a save onto an instant held only under another unioned id now
+    /// throws (`WeighInCrossIdOccupancyTests`).
+    func testSaveAtAnInstantTakenByAnotherSourceOrADeviceOutsideTheUnionWritesItsOwnRow() async throws {
         let (store, repo) = try await makeRepo()
-        try register(store, "whoop-old", status: .archived)
-        let ids = ["my-whoop", "whoop-old"]
+        let ids = ["my-whoop", "whoop-gone"]
         let imported = row("weight", id: "weight-csv-1", day: "2031-01-08", takenAt: week1Epoch, value: 220.5,
                            unit: "lb", source: "csv", note: "imported", referenceText: "ref")
-        let other = row("weight", id: "weight-1925622000-0000BBBB", deviceId: "whoop-old", day: "2031-01-08",
-                        takenAt: week1Epoch, value: 100.4, unit: "kg", note: "old strap")
+        let other = row("weight", id: "weight-1925622000-0000BBBB", deviceId: "whoop-gone", day: "2031-01-08",
+                        takenAt: week1Epoch, value: 100.4, unit: "kg", note: "unknown strap")
         try await store.upsertLabMarkers([imported, other])
         let weighIns = makeWeighIns(repo)
 
@@ -347,7 +352,7 @@ final class WeighInOccupiedInstantTests: XCTestCase {
         let importedAfter = try await stored(store, id: imported.id, ids: ids)
         let otherAfter = try await stored(store, id: other.id, ids: ids)
         assertSameColumns(importedAfter, imported, "the imported reading")
-        assertSameColumns(otherAfter, other, "the other strap's reading")
+        assertSameColumns(otherAfter, other, "the reading under the id outside the union")
         let all = try await everything(store, ids: ids)
         XCTAssertEqual(all.count, 3)
     }
