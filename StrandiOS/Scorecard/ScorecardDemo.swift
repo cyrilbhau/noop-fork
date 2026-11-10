@@ -14,6 +14,10 @@ import WhoopStore
 //   history-d1 … history-d5        the history list (d2 is d1; swipe a row by hand)
 //   phase-e1 … phase-e4            the phase and rules sheet over the scorecard
 //   cards-a1 … cards-a3            the Today card tile in each state (A3 is AX5)
+//   scorecard-live                 the real screen on this simulator's own store (not synthetic:
+//                                  pair it with `-noop.cutScorecardEnabled YES`)
+//
+// `--demo-scroll <0…1>` opens the scorecard, the weigh-in sheet and the phase sheet part-way down.
 //
 // EVERY VALUE IS SYNTHETIC: the "Fixture Person" of the stage 1 specification §13, a fictional cut
 // from Mon 6 Jan 2031. Nothing is read from or written to the app's own store or settings: each
@@ -23,6 +27,8 @@ import WhoopStore
 
 enum ScorecardDemo {
     static func screen(named name: String) -> AnyView? {
+        // The real screen on the simulator's own store and settings, to exercise the live wiring.
+        if name == "scorecard-live" { return AnyView(ScorecardView()) }
         let parts = name.split(separator: "-")
         guard parts.count == 2, let letter = parts[1].first, let number = Int(parts[1].dropFirst()) else { return nil }
         switch (String(parts[0]), letter) {
