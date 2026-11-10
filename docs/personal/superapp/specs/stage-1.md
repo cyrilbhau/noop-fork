@@ -1630,3 +1630,30 @@ To be completed by the orchestrator when the owner approves the frames.
 | Frame | Page | Approved on |
 |---|---|---|
 | — | — | — |
+
+## 18. Rulings after independent tests and implementation (10 November 2026)
+
+The tests (WP 1-3) and the implementation (WP 1-4) were written by separate agents from §6 and §7.
+Where they found this document ambiguous or self-contradictory, the orchestrator ruled as below.
+These rulings are binding on the tests, the Swift implementation and the Kotlin twin, and they
+override the earlier section they name.
+
+| # | Section | Ruling |
+|---|---|---|
+| R1 | §7.6 | `consecutiveWeeks` is **not capped** at `requiredWeeks`. It counts back from the judged week until the first week where the rule's weekly condition is false or unknown, however long the run. |
+| R2 | §7.9 | The claim is narrowed. An item dated before `evidenceStartDay` never changes a signal state, a rule state, the verdict, the rate or the projection. It may change: `weeks`; `rateUnavailable` (`singleReading` against `gapLongerThanWindow`); the lift signal's reason (`noLiftData` against `noSessionsThisWeek`); and `consecutiveWeeks` (R1). The property test is stated against this narrowed claim. |
+| R3 | §6.5 | A reading, lift weight or protein total whose magnitude is above `1e100` is rejected and counted as `nonFinite`. A parameter or phase bound above `1e100` is invalid input. This is an arithmetic limit so that no sum or product can overflow into the output; it is not a plausibility range. The twin uses the same constant. |
+| R4 | §7.1 | `quantize` returns positive zero, never negative zero. It returns its argument unchanged if `abs(x) × 1000` is not finite (unreachable for inputs that pass R3, kept as a guard). |
+| R5 | §6.1 | A day key is valid only in the canonical ten-character form `yyyy-MM-dd`, years 0001 to 9999, naming a real calendar date. Anything else is `invalidDay`, or invalid `today` or phase. `weekStart(containing:)` returns nil for it. |
+| R6 | §7.2 | The overdue rule applies with no active phase as well: the rate is nil with `weighInOverdue` and the waist, lift and protein signals are `unknown(weighInOverdue)`. The rate-band signal, the rules, the projection and the verdict keep reporting `noActivePhase` or `phaseNotStarted`. |
+| R7 | §7.2, §7.3 | A phase that has not started is treated exactly as no phase: `inPhase` is false for every week, the domain is every week, `weeklyLossKg` is reported for every pair of consecutive weeks, and the judged week is the latest week with a weight. The band bounds in the rate-band signal are nil. |
+| R8 | §7.8 | With an active phase and no in-phase weigh-in, the projection status is `noTarget` when the phase has no target and `rateUnknown` otherwise; `remainingKg` is nil. |
+| R9 | §6.4, §7.8 | `remainingKg` is set whenever a phase target and an in-phase current weight exist, including while overdue. |
+| R10 | §7.1, §7.5, §7.8 | Every threshold comparison uses quantized operands on both sides, including the rate-band bounds, the lift share (`dropped ÷ common` against `liftDropShare`) and `weeksRemaining` against `maxProjectionWeeks`. The reported `weeksRemaining` is the unquantized quotient. |
+| R11 | §7.8, §7.9 | A projected day after 9999-12-31 is `beyondHorizon`. `evidenceStartDay` is clamped to `0001-01-01`. |
+| R12 | §6.5 | When several inputs are invalid the order checked is parameters, then phase, then `today`. An item with several faults is counted once, in the order `nonFinite`, `nonPositive`, `invalidDay`, `future`. |
+| R13 | §6.4 | Secondary fields of unknown signals: counts are zero and optionals nil, except that `noEarlierWaist` carries `currentCm`; the lift signal carries its window days whenever a judged week is evaluated (nil for `noReadings` and `weighInOverdue`); the protein signal always carries `requiredDays` and `floorGrams` and counts `daysLogged` even with no floor; the rate-band signal carries its bounds whenever a started phase exists and `percentPerWeek` only when met or not met. A rule in a precondition-failed state has `consecutiveWeeks` 0 and `requiredWeeks` 1 for rule 1 and the parameter otherwise. `judgedWeekStart` and `evidenceStartDay` stay set while overdue. In the invalid result `requiredWeeks` and `requiredDays` echo the parameters as given, `floorGrams` is set only when finite and positive, and `currentWeightKg`, `judgedWeekStart` and `evidenceStartDay` are nil. |
+| R14 | §7.5 | `waistMinDecreaseCm == 0` is valid and makes an unchanged waist `met`. The sentence "a flat waist is `notMet`" describes any positive minimum, including the default. |
+| R15 | §6.4 | `spanWeeks` is the number of weeks from the first to the last point used in the fit. |
+| R16 | §13.4 | Variant V8 was wrong as written: its outlier sits at the centre of the fit window, where it moves neither the fitted rate nor the end-point difference. The comparison the row intended holds when the outlier is the last point of the window, and the test `testSingleOutlierWeekMovesRateLessThanEndpointDifference` asserts that case. |
+| R17 | §12.7 | The standalone oracle compiles with `CutScorecard.swift`, `WeeklyDigest.swift` and `ComparisonEngine.swift`. |
