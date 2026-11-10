@@ -73,7 +73,9 @@ struct LiquidTodayView: View {
     private var stepsEst: Double? { dayModel.stepsEst }
     private var importedStepsDay: Int? { dayModel.importedStepsDay }
     private var importedActiveKcalDay: Double? { dayModel.importedActiveKcalDay }
-    private var bodyWeight: ResolvedBodyMeasurement? { dayModel.bodyWeight }
+    private var bodyWeight: ResolvedBodyMeasurement? {
+        dayModel.shownBodyWeight(BodyMeasurementProvider.live(repository: repo, profile: profile))
+    }
     private var hrValues: [Double] { dayModel.hrValues }
     /// Line identity for [hrValues], from the bucket timestamps this used to discard (#2082).
     ///
@@ -459,6 +461,13 @@ struct LiquidTodayView: View {
         .task(id: "\(repo.refreshSeq)-\(selectedDayOffset)-\(repo.hydrationSeq)-\(hydrationEnabled)-\(dayCycleModeRaw)") {
             DashboardCardPrefs.migrateLegacyStepsAverage()
             await load()
+        }
+        // Stage 1 ruling R38: the weight the day model holds was resolved under another policy than
+        // the current one (the scorecard flag changed), so it is resolved again. The id is one flag
+        // read per body evaluation; while the flag stays put the model reads nothing.
+        .task(id: dayModel.bodyWeightPolicyKey(BodyMeasurementProvider.live(repository: repo, profile: profile))) {
+            await dayModel.resolveBodyWeightAgainIfPolicyChanged(
+                BodyMeasurementProvider.live(repository: repo, profile: profile), repo: repo)
         }
         .sheet(item: $guideSection) { section in
             NavigationStack { ScoringGuideView(initialSection: section, onClose: { guideSection = nil }) }
@@ -2948,6 +2957,9 @@ final class TodayDayModel: ObservableObject {
     /// #204: the dated weight the selected day resolves to through `BodyMeasurementProvider`; nil
     /// means the tile falls back to the profile value.
     @Published var bodyWeight: ResolvedBodyMeasurement?
+    /// The policy `bodyWeight` was resolved under; nil before the first resolve. A view shows
+    /// `bodyWeight` only while this is still the provider's display policy (stage 1 ruling R38).
+    @Published private(set) var bodyWeightPolicy: BodyMeasurementPolicy?
     /// The provider `bodyWeight` was last resolved through, and the subscription to its `revision`
     /// (stage 1 ruling R32). `revision` moves only with the scorecard flag on, so with it off the
     /// subscription never delivers and nothing is re-read.
@@ -3022,14 +3034,16 @@ final class TodayDayModel: ObservableObject {
         bodyWeightProvider = provider
         bodyWeightObserver = provider.$revision.dropFirst().sink { [weak self, weak provider, weak repo] _ in
             Task { @MainActor in
-                guard let self, let provider, let repo else { return }
+                guard let self, let provider, let repo, provider.displayPolicy == .unified else { return }
                 await self.reloadBodyWeight(provider, repo: repo)
             }
         }
     }
 
-    /// The weight half of `load`, on its own. Unified policy only: under a legacy policy the tile's
-    /// inputs are the Apple Health reads `load` already keys on `refreshSeq`.
+    /// The weight half of `load`, on its own. Run when the provider's revision moved (ruling R32,
+    /// unified policy only) and when the reading held was resolved under another policy than the
+    /// current one (ruling R38). Never run while the scorecard flag stays off: the tile's inputs
+    /// are then the Apple Health reads `load` already keys on `refreshSeq`.
     private func reloadBodyWeight(_ provider: BodyMeasurementProvider, repo: Repository) async {
         // Captured before suspension: a day change while the reads run belongs to that day's `load`.
         let requestedDayKey = selectedDayKey(repo: repo)
@@ -3038,9 +3052,48 @@ final class TodayDayModel: ObservableObject {
         async let appleA = repo.appleDailyRows()
         let series = await seriesA
         let appleRows = await appleA
-        guard series.policy == .unified, requestedDayKey == selectedDayKey(repo: repo) else { return }
-        bodyWeight = provider.displayWeight(from: series, asOf: .day(requestedDayKey, isCurrent: isCurrent),
-                                            appleRows: appleRows)
+        guard requestedDayKey == selectedDayKey(repo: repo) else { return }
+        publishBodyWeight(provider, series: series, asOf: .day(requestedDayKey, isCurrent: isCurrent),
+                          appleRows: appleRows)
+    }
+
+    /// Resolve `bodyWeight` from `series` and record the policy it was resolved under. A series
+    /// fetched under a policy that is no longer the provider's never replaces a reading resolved
+    /// under the current one: an obsolete read does not publish. With nothing better held it is
+    /// taken, and its recorded policy is what keeps it off the screen and makes the view's policy
+    /// task resolve again (ruling R38).
+    private func publishBodyWeight(_ provider: BodyMeasurementProvider, series: BodyWeightSeries,
+                                   asOf: BodyWeightAsOf, appleRows: [AppleDaily]) {
+        let current = provider.displayPolicy
+        if series.policy != current, bodyWeightPolicy == current { return }
+        bodyWeightPolicy = series.policy
+        bodyWeight = provider.displayWeight(from: series, asOf: asOf, appleRows: appleRows)
+    }
+
+    /// The reading a weight tile shows: `bodyWeight` while the policy it was resolved under is
+    /// still `provider`'s, else none, so the tile prints the profile value until the reading
+    /// resolved under the current policy lands (ruling R38). One flag read.
+    func shownBodyWeight(_ provider: BodyMeasurementProvider) -> ResolvedBodyMeasurement? {
+        bodyWeightPolicy == provider.displayPolicy ? bodyWeight : nil
+    }
+
+    /// Identity of a view's policy task: the policy `bodyWeight` was resolved under and the
+    /// provider's current one.
+    struct BodyWeightPolicyKey: Equatable {
+        let held: BodyMeasurementPolicy?
+        let current: BodyMeasurementPolicy
+    }
+
+    func bodyWeightPolicyKey(_ provider: BodyMeasurementProvider) -> BodyWeightPolicyKey {
+        BodyWeightPolicyKey(held: bodyWeightPolicy, current: provider.displayPolicy)
+    }
+
+    /// Ruling R38: resolve the weight again when the one held was resolved under another policy
+    /// than `provider`'s current one. With nothing resolved yet, or the policy unchanged, this
+    /// reads nothing: `load` owns the first resolve.
+    func resolveBodyWeightAgainIfPolicyChanged(_ provider: BodyMeasurementProvider, repo: Repository) async {
+        guard let held = bodyWeightPolicy, held != provider.displayPolicy else { return }
+        await reloadBodyWeight(provider, repo: repo)
     }
 
     func load(repo: Repository, profile: ProfileStore, inputs: TodayLoadInputs) async {
@@ -3291,9 +3344,9 @@ final class TodayDayModel: ObservableObject {
         let appleRows = await appleA
         let weightSeries = await weightA
         // Ruling R33: the selected day is the logical day; at offset 0 it is the current day.
-        bodyWeight = bodyMeasurements.displayWeight(
-            from: weightSeries, asOf: .day(selectedDayKey(repo: repo), isCurrent: selectedDayOffset == 0),
-            appleRows: appleRows)
+        publishBodyWeight(
+            bodyMeasurements, series: weightSeries,
+            asOf: .day(selectedDayKey(repo: repo), isCurrent: selectedDayOffset == 0), appleRows: appleRows)
 
         // Awaited ONCE: the timestamps and the means have to come from the same read, or the segments
         // would describe a different series than the one drawn.

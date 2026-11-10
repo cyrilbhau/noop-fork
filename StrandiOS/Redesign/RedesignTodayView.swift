@@ -136,6 +136,13 @@ struct RedesignTodayView: View {
             DashboardCardPrefs.migrateLegacyStepsAverage()
             await load()
         }
+        // Stage 1 ruling R38, as in Liquid Today: a weight resolved under another policy than the
+        // current one is resolved again. One flag read per body evaluation; nothing is read while
+        // the flag stays put.
+        .task(id: dayModel.bodyWeightPolicyKey(BodyMeasurementProvider.live(repository: repo, profile: profile))) {
+            await dayModel.resolveBodyWeightAgainIfPolicyChanged(
+                BodyMeasurementProvider.live(repository: repo, profile: profile), repo: repo)
+        }
         .task(id: "\(repo.refreshSeq)-\(repo.deviceId)") {
             let deviceId = repo.deviceId
             let isWhoop4 = await Self.activeStrapIsWhoop4(repo: repo)
@@ -608,8 +615,10 @@ struct RedesignTodayView: View {
         case .weight:
             // Resolved through the one body-measurement provider (stage 1 specification §8.4): the
             // day model's dated reading, else the profile value as it is now.
-            let dated = dayModel.bodyWeight
-            let shown = BodyMeasurementProvider.live(repository: repo, profile: profile).displayWeightValue(dated)
+            // A reading resolved under another policy than the current one is not shown (ruling R38).
+            let provider = BodyMeasurementProvider.live(repository: repo, profile: profile)
+            let dated = dayModel.shownBodyWeight(provider)
+            let shown = provider.displayWeightValue(dated)
             return MetricRowContent(
                 title: "Weight", color: NoopTheme.temp,
                 subtitle: dated == nil ? String(localized: "from profile") : String(localized: "latest"),
