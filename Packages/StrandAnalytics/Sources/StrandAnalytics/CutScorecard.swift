@@ -114,7 +114,7 @@ public struct CutScorecardParameters: Equatable, Sendable {
     }
 
     /// The initialiser's defaults. Generic; the owner's values replace them in settings.
-    public static let generic = CutScorecardParameters()
+    public static var generic: CutScorecardParameters { CutScorecardParameters() }
 }
 
 /// Everything `CutScorecard.evaluate` reads. Arrays need not be sorted; the result does not depend on

@@ -79,7 +79,7 @@ data class CutScorecardParameters(
 ) {
     companion object {
         /** The constructor's defaults. Generic; the owner's values replace them in settings. */
-        val GENERIC = CutScorecardParameters()
+        val GENERIC: CutScorecardParameters get() = CutScorecardParameters()
     }
 }
 
