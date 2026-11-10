@@ -693,7 +693,9 @@ final class WeighInCrossIdOccupancyTests: XCTestCase {
             ("referenceText", { $0.referenceText = "clinic scale" }),
             ("referenceText (absent)", { $0.referenceText = nil }),
             ("category", { $0.category = "other" }),
-            ("day", { $0.day = "2031-01-14" }),
+            // No "day" variant: ruling R39 leaves the stored day out of the comparison, because it
+            // derives from the instant and the zone of the original write. The zone-change tests below
+            // pin that case.
             ("valueText", { $0.valueText = "taken standing" }),
             ("deviceId (another unioned id)", { $0.deviceId = "whoop-old" }),
         ]
