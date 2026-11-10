@@ -110,9 +110,11 @@ final class WeighInStore {
     /// `.instantOccupied` before anything is written (rulings R34 and R36): the readers list one
     /// reading per marker, instant and source across those ids, so the edit would hide one of the
     /// two. The one exception is the state an interrupted date edit leaves behind, where the only
-    /// row at that instant already equals the replacement in every column except `id`: the edit
-    /// then completes by deleting the old row and writes nothing new. Returns the row as stored
-    /// afterwards.
+    /// row at that instant already equals the replacement in every column except `id` and the
+    /// stored `day`: the edit then completes by deleting the old row and writes nothing new. The
+    /// day is left out because it follows from the instant and the zone of the original write, so
+    /// a retry after the device changed zone still completes (ruling R39), and the surviving row
+    /// keeps the day that write stored. Returns the row as stored afterwards.
     @discardableResult
     func edit(_ row: LabMarkerRow, value: Double, unitSystem: UnitSystem, takenAt: Date) async throws -> LabMarkerRow {
         guard let kind = BodyMeasurementKind(markerKey: row.markerKey) else { throw WeighInError.notABodyMeasurement }
@@ -147,9 +149,11 @@ final class WeighInStore {
         let occupants = try await Self.storedRows(deviceIds: ids, kind: kind, epoch: epoch,
                                                   source: current.source, in: store)
         if !occupants.isEmpty {
-            // Ruling R36's exception: the single occupant is this edit's own replacement.
+            // Ruling R36's exception: the single occupant is this edit's own replacement. Its
+            // stored day is taken too (ruling R39): the zone may have changed since that write.
             guard occupants.count == 1, let occupant = occupants.first else { throw WeighInError.instantOccupied }
             replacement.id = occupant.id
+            replacement.day = occupant.day
             guard occupant == replacement, occupant.id != current.id else { throw WeighInError.instantOccupied }
             try await store.deleteLabMarker(id: current.id)
             await finishWrite()
