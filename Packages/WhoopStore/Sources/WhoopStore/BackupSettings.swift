@@ -67,6 +67,12 @@ public enum BackupSettings {
         // SCOPE: NAMES only — the wire carries no kind/group, so a numeric custom behaviour restores as a
         // plain .bool toggle (identical on both platforms; historical entries keep their DB numericValue).
         "journal.customBehaviors": .string,
+        // The weigh-in scorecard's phases (a JSON array) and rule parameters (a JSON object), each
+        // carried as text and never parsed here. The feature flag and the reminder keys stay out: a
+        // `noop.*` toggle is per install, and a reminder depends on this device's notification
+        // permission. Mirrored by Android's `BackupSettingsCodec.WHITELIST`.
+        "cutScorecard.phases": .string,
+        "cutScorecard.rules": .string,
     ]
 
     /// Canonical JSON key → this platform's UserDefaults key. Identity everywhere except
@@ -86,6 +92,8 @@ public enum BackupSettings {
         "effort.scale": "effort.scale",
         "dayCycle.mode": "noop.dayCycleMode",
         "today.hostedCards": "today.hostedCards",
+        "cutScorecard.phases": "cutScorecard.phases",
+        "cutScorecard.rules": "cutScorecard.rules",
     ]
 
     // MARK: - Snapshot / apply (UserDefaults boundary)
