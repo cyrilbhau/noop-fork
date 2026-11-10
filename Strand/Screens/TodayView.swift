@@ -1574,6 +1574,10 @@ struct TodayView: View {
         // edited / deleted drink (hydrationSeq) and the Settings feature toggle both re-read just the two
         // hydration fields. Cheap (one metricSeries row), never re-runs the heavy loads.
         .task(id: repo.hydrationSeq) { await reloadHydration() }
+        // Stage 1 ruling R32: a weigh-in or Lab Book write changes the weight without moving
+        // refreshSeq. The provider's revision moves only with the scorecard flag on, so with it off
+        // this never fires.
+        .onReceive(bodyMeasurements.$revision.dropFirst()) { _ in Task { await reloadWeight() } }
         .onChangeCompat(of: hydrationEnabled) { _ in Task { await reloadHydration() } }
         // #755: NO per-edge safety net here, on purpose. A deep offload segments into many slices that each
         // flip `backfilling` false→true, so re-running the heavy history-wide reads on that edge would re-fire
@@ -4586,6 +4590,9 @@ struct TodayView: View {
         // reload identical data. If the cache is somehow absent (defensive), fall through and reload.
         if repo.todayHistoryWideLoadedSeq == currentSeq, let cached = repo.todayHistoryWideCache {
             restoreHistoryWide(cached)
+            // Stage 1 ruling R32: a weigh-in since the snapshot does not move `refreshSeq`. Never
+            // true with the scorecard flag off, when the provider's revision does not move.
+            if cached.bodyMeasurementRevision != bodyMeasurements.revision { await reloadWeight() }
             // #989: hydration is excluded from the snapshot (a drink logged since would be stale), so a
             // restore re-reads it live, one cheap row.
             await reloadHydration()
@@ -4718,6 +4725,9 @@ struct TodayView: View {
         if !strapSteps.isEmpty { sparks["steps"] = strapSteps }
         let weightSeries = await weightSeriesA
         sparks["weight"]      = weightSeries.points.map { $0.value }
+        // Ruling R35: the base tile was a render-time expression of `appleDays` and this spark, so
+        // it moved here, against the rows of the previous load, and again when the fresh rows land.
+        weightReading = bodyMeasurements.displayWeight(from: weightSeries, asOf: .latest, appleRows: appleDays)
         sparks["active_kcal"] = await activeKcalSpark
 
         // Steps ESTIMATE per day (WHOOP 4.0 motion → calibrated steps), the Mi-Band series, workout +
@@ -4792,6 +4802,7 @@ struct TodayView: View {
             workouts: workouts,
             appleDays: appleDays,
             weightReading: weightReading,
+            bodyMeasurementRevision: bodyMeasurements.revision,
             xiaomiDays: xiaomiDays,
             xiaomiSleeps: xiaomiSleeps,
             stressToday: stressToday,
@@ -5227,6 +5238,16 @@ struct TodayView: View {
         return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
     }
 
+    /// The weight part of `loadHistoryWide`, on its own (stage 1 ruling R32). Unified policy only:
+    /// under a legacy policy the tile's inputs are reads `loadAll` already keys on `refreshSeq`.
+    private func reloadWeight() async {
+        let provider = bodyMeasurements
+        let series = await provider.displayWeightSeries(days: 91, trailingDays: 90)
+        guard series.policy == .unified else { return }
+        sparks["weight"] = series.points.map { $0.value }
+        weightReading = provider.displayWeight(from: series, asOf: .latest, appleRows: appleDays)
+    }
+
     /// The one source of body weight and waist for this view.
     private var bodyMeasurements: BodyMeasurementProvider {
         BodyMeasurementProvider.live(repository: repo, profile: profile)
@@ -5475,6 +5496,10 @@ struct TodayHistoryWideCache {
     /// The Weight tile's dated reading, resolved from `appleDays` and the weight spark of this same
     /// load, so a restore cannot pair one load's rows with another's reading.
     let weightReading: ResolvedBodyMeasurement?
+    /// The provider's `revision` when `weightReading` was resolved. It moves only with the scorecard
+    /// flag on, when a weigh-in or Lab Book write changed the readings without moving `refreshSeq`;
+    /// a restore that finds it moved re-resolves the weight (stage 1 ruling R32).
+    let bodyMeasurementRevision: Int
     let xiaomiDays: Int
     let xiaomiSleeps: Int
     let stressToday: Double?
