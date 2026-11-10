@@ -1663,6 +1663,7 @@ override the earlier section they name.
 | R21 | §6.4 | Any day the function reports that would fall before 0001-01-01 (for example a lift window for a weigh-in in the first week of year 0001) is reported as `0001-01-01`. The function does not trap. |
 | R22 | §6.5 | An integer parameter is valid at any value at or above its stated lower bound, `Int.max` included. No arithmetic on it may overflow. |
 | R23 | §7.6 | `consecutiveWeeks` never counts a week before the phase domain. |
+| R24 | §6.3 | Exercise names are compared by Unicode canonical equivalence, which is what Swift `String` equality does: a precomposed and a decomposed spelling of the same name are one exercise. There is still no trimming and no case folding. This replaces "byte for byte". The Kotlin twin normalises names to NFC before using them as keys. The parity oracle carries a case for it. |
 
 Fault injection on 10 November 2026 ran 198 single mutations of the implementation. Three were not
 caught by any test and are covered by tests added afterwards: the heaviest set when one exercise has
