@@ -1657,3 +1657,15 @@ override the earlier section they name.
 | R15 | §6.4 | `spanWeeks` is the number of weeks from the first to the last point used in the fit. |
 | R16 | §13.4 | Variant V8 was wrong as written: its outlier sits at the centre of the fit window, where it moves neither the fitted rate nor the end-point difference. The comparison the row intended holds when the outlier is the last point of the window, and the test `testSingleOutlierWeekMovesRateLessThanEndpointDifference` asserts that case. |
 | R17 | §12.7 | The standalone oracle compiles with `CutScorecard.swift`, `WeeklyDigest.swift` and `ComparisonEngine.swift`. |
+| R18 | §6.4 | Readings echoed in the result (`weeks[].weightKg`, `weeks[].waistCm`, `currentWeightKg`, and the waist signal's `currentCm` and `referenceCm`) are the values as given, not quantized. Derived figures (`weeklyLossKg`, `changeCm`, the rate) are quantized as §7 states. |
+| R19 | §6.4 | The rate-band signal reports `lowPercentPerWeek` and `highPercentPerWeek` as given in the phase. Only the comparison quantizes them (R10). |
+| R20 | §6.5 | In the invalid result the rate-band bounds and `currentWeightDay` are nil. |
+| R21 | §6.4 | Any day the function reports that would fall before 0001-01-01 (for example a lift window for a weigh-in in the first week of year 0001) is reported as `0001-01-01`. The function does not trap. |
+| R22 | §6.5 | An integer parameter is valid at any value at or above its stated lower bound, `Int.max` included. No arithmetic on it may overflow. |
+| R23 | §7.6 | `consecutiveWeeks` never counts a week before the phase domain. |
+
+Fault injection on 10 November 2026 ran 198 single mutations of the implementation. Three were not
+caught by any test and are covered by tests added afterwards: the heaviest set when one exercise has
+several sets on one day; the prior lift window ending at `a − 8`, not `a − 7`; and the `dropped >= 1`
+condition when `liftDropShare` quantizes to zero. Seven mutations were equivalent (they cannot change
+any output).
