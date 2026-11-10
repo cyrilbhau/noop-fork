@@ -25,6 +25,9 @@ struct RedesignTodayView: View {
     @Environment(\.scrollToTopSignal) private var scrollToTopSignal
 
     @StateObject private var dayModel = TodayDayModel()
+    /// The scorecard flag, observed (stage 1 ruling R40). Reading it writes nothing, and it
+    /// publishes only when the flag changes.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
 
     // Shared preferences: the same keys Liquid Today and the Customise sheet read and write.
     @AppStorage(DayCycleMode.storageKey) private var dayCycleModeRaw = DayCycleMode.sleepOnset.rawValue
@@ -139,7 +142,9 @@ struct RedesignTodayView: View {
         // Stage 1 ruling R38, as in Liquid Today: a weight resolved under another policy than the
         // current one is resolved again. One flag read per body evaluation; nothing is read while
         // the flag stays put.
-        .task(id: dayModel.bodyWeightPolicyKey(BodyMeasurementProvider.live(repository: repo, profile: profile))) {
+        // Ruling R40: the flag itself is observed (`scorecardFlag`) and is part of the identity.
+        .task(id: dayModel.bodyWeightPolicyKey(BodyMeasurementProvider.live(repository: repo, profile: profile),
+                                               flagEnabled: scorecardFlag.isEnabled)) {
             await dayModel.resolveBodyWeightAgainIfPolicyChanged(
                 BodyMeasurementProvider.live(repository: repo, profile: profile), repo: repo)
         }
@@ -576,6 +581,8 @@ struct RedesignTodayView: View {
         var unit: String?
         var sparkKey: String?
         var route: TabRoute?
+        /// The row pushes the scorecard screen instead of `route` (stage 1 specification §10.8).
+        var opensScorecard = false
     }
 
     @ViewBuilder
@@ -595,6 +602,9 @@ struct RedesignTodayView: View {
             Button { showStepSources = true } label: { row.contentShape(Rectangle()) }
                 .buttonStyle(.noopPress)
                 .accessibilityHint("Opens step sources and a phone-free walk check")
+        } else if c.opensScorecard {
+            NavigationLink(value: RedesignRoute.scorecard) { row.contentShape(Rectangle()) }
+                .buttonStyle(.noopPress)
         } else if let route = c.route {
             NavigationLink(value: route) { row.contentShape(Rectangle()) }
                 .buttonStyle(.noopPress)
@@ -619,11 +629,15 @@ struct RedesignTodayView: View {
             let provider = BodyMeasurementProvider.live(repository: repo, profile: profile)
             let dated = dayModel.shownBodyWeight(provider)
             let shown = provider.displayWeightValue(dated)
+            // Specification §10.8. Flag off: the caption and the route are as they were. Flag on: a
+            // weigh-in is named as a Lab Book reading and the row opens the scorecard it belongs to.
+            let isWeighIn = scorecardFlag.isEnabled && dated?.source == .labBook
+            let caption = dated == nil ? String(localized: "from profile")
+                : isWeighIn ? CutScorecardPresenter.sourceCaption(.labBook) : String(localized: "latest")
             return MetricRowContent(
-                title: "Weight", color: NoopTheme.temp,
-                subtitle: dated == nil ? String(localized: "from profile") : String(localized: "latest"),
+                title: "Weight", color: NoopTheme.temp, subtitle: caption,
                 value: UnitFormatter.massFromKilograms(shown.value, system: unitSystem), unit: nil,
-                sparkKey: "weight", route: .metric("weight"))
+                sparkKey: "weight", route: .metric("weight"), opensScorecard: isWeighIn)
         default:
             // Score rows retain their existing hero-only presentation; A4 is a separate follow-up.
             return MetricRowContent(title: "", color: NoopTheme.textTertiary, value: nil)
@@ -638,7 +652,8 @@ struct RedesignTodayView: View {
 
     private var renderedDashboardCards: [DashboardCard] {
         TodayCardResolver.renderList(raw: dashboardCardsRaw, hydrationEnabled: hydrationEnabled,
-                                     coachEnabled: coachEnabled, visibleKeyMetrics: visibleKeyMetricRows)
+                                     coachEnabled: coachEnabled, visibleKeyMetrics: visibleKeyMetricRows,
+                                     scorecardEnabled: scorecardFlag.isEnabled)
     }
 
     private var gatedDashboardCaption: String? {
@@ -654,8 +669,24 @@ struct RedesignTodayView: View {
         return nil
     }
 
+    /// The scorecard card reads the one shared scorecard model, which exists only while the card is
+    /// rendered: the flag is on and the owner has added it (stage 1 specification §10.1).
+    @ViewBuilder
     private var yourCardsSection: some View {
-        YourCardsSection(cards: renderedDashboardCards, inputs: dashboardInputs,
+        if renderedDashboardCards.contains(.scorecard) {
+            CutScorecardCardReader(model: CutScorecardModel.live(repository: repo, profile: profile),
+                                   refreshSequence: repo.refreshSeq) { card in
+                yourCards(scorecard: card)
+            }
+        } else {
+            yourCards(scorecard: nil)
+        }
+    }
+
+    private func yourCards(scorecard: CutScorecardCard?) -> some View {
+        var inputs = dashboardInputs
+        inputs.scorecard = scorecard
+        return YourCardsSection(cards: renderedDashboardCards, inputs: inputs,
                          isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
                          loading: loading || dayModel.cardSnapshotDayKey != selectedDayKey,
                          refreshSequence: repo.refreshSeq, gatedCaption: gatedDashboardCaption,

@@ -19,6 +19,8 @@ struct RedesignHealthView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
+    /// The scorecard flag (stage 1 specification §17, placement P1): its row shows only while on.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
@@ -470,9 +472,14 @@ struct RedesignHealthView: View {
     private var moreCard: some View {
         NoopGlassCard(flush: true) {
             VStack(spacing: 0) {
+                // With the flag off this row is absent and the list is exactly as it was.
+                if scorecardFlag.isEnabled {
+                    HealthScorecardRow(model: CutScorecardModel.live(repository: repo, profile: profile),
+                                       refreshSequence: repo.refreshSeq)
+                }
                 NavigationLink(value: MoreDestination.live) {
                     NoopListRow("Live heart rate", systemImage: "waveform.path.ecg", color: NoopTheme.heart,
-                                showsDivider: false)
+                                showsDivider: scorecardFlag.isEnabled)
                 }
                 NavigationLink(value: MoreDestination.explore) {
                     NoopListRow("All metrics", systemImage: "square.grid.2x2", color: NoopTheme.hrv)
@@ -508,6 +515,24 @@ struct RedesignHealthView: View {
         case .contributors: return "Contributors"
         case .sync: return "Strap sync"
         }
+    }
+}
+
+// MARK: - Scorecard row
+
+/// The Health tab's way into the scorecard (stage 1 placement P1): the card's caption and the
+/// current weight, from the one model the Today card and the scorecard screen read. Mounted only
+/// while the flag is on.
+private struct HealthScorecardRow: View {
+    @ObservedObject var model: CutScorecardModel
+    let refreshSequence: Int
+
+    var body: some View {
+        NavigationLink(value: RedesignRoute.scorecard) {
+            NoopListRow("Scorecard", systemImage: DashboardCard.scorecard.icon, color: NoopTheme.textPrimary,
+                        detail: CutScorecardPresenter.rowValue(model.card), showsDivider: false)
+        }
+        .task(id: refreshSequence) { await model.load() }
     }
 }
 
