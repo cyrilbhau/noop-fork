@@ -127,6 +127,9 @@ struct CutScorecardPresentation: Equatable {
     }
 
     var status: CutScorecardStatus
+    /// "week of 27 Jan": the week the verdict and the four signals are about. Nil with no started
+    /// phase or no judged week.
+    var weekLabel: String? = nil
     var phase: PhaseHeader?
     var dueBanner: Banner?
     var targetBanner: Banner?
@@ -508,7 +511,7 @@ enum CutScorecardPresenter {
 
         let logged = input.weights.filter { $0.day <= today }.count
         return CutScorecardPresentation(
-            status: status, phase: header, dueBanner: dueBanner, targetBanner: targetBanner, verdict: verdict,
+            status: status, weekLabel: weekOfJudged, phase: header, dueBanner: dueBanner, targetBanner: targetBanner, verdict: verdict,
             rules: rules, signals: signals,
             liftFootnote: String(localized: "Compares the heaviest working set of each exercise with the week before."),
             weight: weightCurve, waist: waistCurve,
@@ -1019,4 +1022,328 @@ enum CutScorecardPresenter {
 private func both<A, B>(_ first: A?, _ second: B?) -> (A, B)? {
     guard let first, let second else { return nil }
     return (first, second)
+}
+
+// MARK: - Screen labels
+
+/// The fixed words of the scorecard screens (frames B, C and D): section titles, actions and the
+/// mark for a missing value. They live here so that a view words nothing itself.
+extension CutScorecardPresenter {
+    /// A value that was not measured. Never "0".
+    static var missingValue: String { "—" }
+
+    static var rulesTitle: String { String(localized: "Your three rules, in order") }
+    static var signalsTitle: String { String(localized: "Four signals") }
+    static var curvesTitle: String { String(localized: "Weekly curves") }
+    static var emptyCurvesTitle: String { String(localized: "Weight and waist") }
+    static var historyTitle: String { String(localized: "History") }
+    static var phaseAndRulesTitle: String { String(localized: "Phase and rules") }
+    static var logWeighInTitle: String { String(localized: "Log weigh-in") }
+    static var weightTitle: String { String(localized: "Weight") }
+    static var waistTitle: String { String(localized: "Waist") }
+    static var editTitle: String { String(localized: "Edit") }
+    static var deleteTitle: String { String(localized: "Delete") }
+    static var cancelTitle: String { String(localized: "Cancel") }
+    static var saveTitle: String { String(localized: "Save") }
+
+    // MARK: Weigh-in sheet
+
+    static var weighInTitle: String { String(localized: "Weigh-in") }
+    static var skipTitle: String { String(localized: "Skip") }
+
+    /// "Step 1 of 2".
+    static func weighInStepText(_ step: WeighInSheetModel.Step) -> String {
+        let number = step == .weight ? 1 : 2
+        return String(localized: "Step \(number) of 2")
+    }
+
+    /// The date control's caption: "Today · Wed 5 Feb · 07:02", or "Thu 16 Jan · 07:02" for another day.
+    static func weighInDateText(takenAt: Date, now: Date, timeZone: TimeZone, locale: Locale) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let day = DateFormatter()
+        day.calendar = calendar
+        day.timeZone = timeZone
+        day.locale = locale
+        day.dateFormat = "EEE d MMM"
+        let time = DateFormatter()
+        time.calendar = calendar
+        time.timeZone = timeZone
+        time.locale = locale
+        time.setLocalizedDateFormatFromTemplate("jmm")
+        var parts = [day.string(from: takenAt), time.string(from: takenAt)]
+        if calendar.isDate(takenAt, inSameDayAs: now) { parts.insert(String(localized: "Today"), at: 0) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// A typed number with its unit: "97.5 kg". Step 2 shows the weight of step 1 this way.
+    static func weighInValueText(_ text: String, unit: String) -> String {
+        "\(text.trimmingCharacters(in: .whitespaces)) \(unit)"
+    }
+
+    // MARK: History
+
+    /// The note under the history list: what the dot means, then how many readings were left out.
+    static func historyFootnote(_ history: WeighInHistory) -> String? {
+        let parts = [history.legend, history.unlistedNote].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+}
+
+// MARK: - Phase and rules sheet
+
+/// One editable value of the phase and rules sheet (specification §10.5).
+struct ScorecardPhaseRow: Equatable, Identifiable {
+    enum Input: Equatable { case text, decimal, whole, date }
+
+    var field: ScorecardPhaseDraft.Field
+    var label: String
+    /// The value as typed: a name, or a number in the display unit. Empty when not set.
+    var text: String
+    /// Shown in an empty field that may stay empty ("Not set"). Nil: the field needs a value.
+    var placeholder: String?
+    /// What follows the number: "% of bodyweight per week", "weeks running", "kg".
+    var suffix: String?
+    var input: Input
+    var isInvalid: Bool
+
+    var id: String { field.rawValue }
+}
+
+/// One section of the sheet: its rows and the note under them.
+struct ScorecardPhaseGroup: Equatable, Identifiable {
+    var title: String
+    var rows: [ScorecardPhaseRow]
+    var footnote: String?
+    /// Why the sheet cannot be saved, under the section that holds the first value at fault. It
+    /// takes the footnote's place.
+    var error: String?
+
+    var id: String { title }
+}
+
+/// The phase and rules sheet, already worded.
+struct ScorecardPhaseSheetPresentation: Equatable {
+    var title: String
+    var cancelTitle: String
+    var saveTitle: String
+    var canSave: Bool
+    var cutTitle: String
+    var otherTitle: String
+    var groups: [ScorecardPhaseGroup]
+    /// "Start a new phase" and its note. Nil while the draft is itself a new phase.
+    var newPhaseTitle: String?
+    var newPhaseNote: String?
+}
+
+extension CutScorecardPresenter {
+
+    /// The sheet for `draft`. `today` marks a start date of today; `previousPhaseName` is the stored
+    /// phase a new phase would follow.
+    static func phaseSheet(_ draft: ScorecardPhaseDraft, today: String, previousPhaseName: String?,
+                           unitSystem: UnitSystem, locale: Locale) -> ScorecardPhaseSheetPresentation {
+        let words = Wording(unitSystem: unitSystem, locale: locale)
+        let invalid = Set(draft.invalidFields)
+        let message = draft.validationMessage
+        let firstInvalid = draft.invalidFields.first
+        let isCut = draft.kind == .cut
+        let groups = draft.groups
+
+        var shown: [ScorecardPhaseGroup] = groups.enumerated().map { index, group in
+            let rows = group.fields.map { field in
+                phaseRow(field, draft: draft, today: today, words: words, isInvalid: invalid.contains(field))
+            }
+            var error: String?
+            if let message {
+                if let firstInvalid {
+                    if group.fields.contains(firstInvalid) { error = message }
+                } else if index == groups.count - 1 {
+                    error = message
+                }
+            }
+            return ScorecardPhaseGroup(title: group.title, rows: rows,
+                                       footnote: phaseFootnote(group, draft: draft, isCut: isCut,
+                                                               previousPhaseName: previousPhaseName),
+                                       error: error)
+        }
+        // The same title twice would give two sections one identity.
+        var seen: Set<String> = []
+        shown = shown.filter { seen.insert($0.title).inserted }
+
+        return ScorecardPhaseSheetPresentation(
+            title: draft.title, cancelTitle: cancelTitle, saveTitle: saveTitle, canSave: draft.canSave,
+            cutTitle: String(localized: "Cut"), otherTitle: String(localized: "Other"), groups: shown,
+            newPhaseTitle: draft.isNewPhase ? nil : String(localized: "Start a new phase"),
+            newPhaseNote: draft.isNewPhase ? nil
+                : String(localized: "The current phase stays in your list of past phases."))
+    }
+
+    private static func phaseFootnote(_ group: ScorecardPhaseDraft.Group, draft: ScorecardPhaseDraft,
+                                      isCut: Bool, previousPhaseName: String?) -> String? {
+        let fields = group.fields
+        if fields.contains(.name) {
+            var parts: [String] = []
+            parts.append(isCut
+                ? String(localized: "The target is optional. With no target there is no projection.")
+                : String(localized: "A phase that is not a cut has no target, no band and no rules. While it is active the scorecard shows \"No cut phase is active\". Weigh-ins and curves carry on."))
+            if draft.isNewPhase, let previousPhaseName {
+                parts.append(String(localized: "Starting this phase keeps \"\(previousPhaseName)\" in your list of past phases."))
+            }
+            return parts.joined(separator: " ")
+        }
+        if fields.contains(.rateLow) {
+            return String(localized: "The rate signal is met inside this band. The band never changes the verdict.")
+        }
+        if fields.contains(.waistWindowWeeks) {
+            return String(localized: "Fires when lifts are holding and the waist is shrinking. It comes first.")
+        }
+        if fields.contains(.proteinFloorGrams) {
+            return draft.parameters.proteinFloorGrams == nil
+                ? String(localized: "With no floor the protein signal reads \"No floor set\". Protein never changes the verdict.")
+                : String(localized: "Protein is shown as a signal and never changes the verdict.")
+        }
+        return nil
+    }
+
+    private static func phaseRow(_ field: ScorecardPhaseDraft.Field, draft: ScorecardPhaseDraft, today: String,
+                                 words: Wording, isInvalid: Bool) -> ScorecardPhaseRow {
+        let p = draft.parameters
+        let notSet = String(localized: "Not set")
+        func row(_ text: String, _ suffix: String?, _ input: ScorecardPhaseRow.Input,
+                 placeholder: String? = nil) -> ScorecardPhaseRow {
+            ScorecardPhaseRow(field: field, label: field.label, text: text, placeholder: placeholder,
+                              suffix: suffix, input: input, isInvalid: isInvalid)
+        }
+        func decimal(_ value: Double, _ decimals: Int) -> String {
+            value.isFinite ? words.trimmed(value, decimals) : ""
+        }
+        func whole(_ value: Int) -> String { value < 0 ? "" : String(value) }
+        func weeks(_ count: Int) -> String {
+            count == 1 ? String(localized: "week") : String(localized: "weeks")
+        }
+        let percentOfBodyweight = String(localized: "% of bodyweight per week")
+        switch field {
+        case .name: return row(draft.name, nil, .text)
+        case .startDay:
+            let date = words.dateWithYear(draft.startDay)
+            return row(draft.startDay == today ? String(localized: "Today · \(date)") : date, nil, .date)
+        case .targetWeight:
+            return row(draft.targetWeightKg.map { $0.isFinite ? words.weightNumber($0) : "" } ?? "",
+                       words.weightUnit, .decimal, placeholder: notSet)
+        case .rateLow:
+            return row(draft.rateLowPercentPerWeek.isFinite ? words.fixed(draft.rateLowPercentPerWeek, 2) : "",
+                       percentOfBodyweight, .decimal)
+        case .rateHigh:
+            return row(draft.rateHighPercentPerWeek.isFinite ? words.fixed(draft.rateHighPercentPerWeek, 2) : "",
+                       percentOfBodyweight, .decimal)
+        case .waistWindowWeeks: return row(whole(p.waistWindowWeeks), weeks(p.waistWindowWeeks), .whole)
+        case .waistMinDecreaseCm:
+            return row(decimal(words.lengthValue(p.waistMinDecreaseCm), 2), words.lengthUnit, .decimal)
+        case .liftDropTolerancePercent:
+            return row(decimal(p.liftDropTolerancePercent, 2), String(localized: "% under last week"), .decimal)
+        case .liftDropShare:
+            return row(decimal(p.liftDropShare * 100, 0), String(localized: "% or more"), .decimal)
+        case .liftDropConsecutiveWeeks:
+            return row(whole(p.liftDropConsecutiveWeeks),
+                       p.liftDropConsecutiveWeeks == 1 ? String(localized: "week running")
+                           : String(localized: "weeks running"), .whole)
+        case .addCaloriesKcal: return row(whole(p.addCaloriesKcal), "kcal", .whole)
+        case .slowLossThresholdKgPerWeek:
+            return row(decimal(words.weightValue(p.slowLossThresholdKgPerWeek), 2),
+                       String(localized: "\(words.weightUnit) per week"), .decimal)
+        case .slowLossConsecutiveWeeks:
+            return row(whole(p.slowLossConsecutiveWeeks),
+                       p.slowLossConsecutiveWeeks == 1 ? String(localized: "week running")
+                           : String(localized: "weeks running"), .whole)
+        case .reduceCarbsKcal: return row(whole(p.reduceCarbsKcal), "kcal", .whole)
+        case .rateWindowWeeks: return row(whole(p.rateWindowWeeks), weeks(p.rateWindowWeeks), .whole)
+        case .maxProjectionWeeks: return row(whole(p.maxProjectionWeeks), weeks(p.maxProjectionWeeks), .whole)
+        case .targetToleranceKg:
+            return row(decimal(words.weightValue(p.targetToleranceKg), 2), words.weightUnit, .decimal)
+        case .proteinFloorGrams:
+            return row(p.proteinFloorGrams.map { decimal($0, 2) } ?? "", "g", .decimal, placeholder: notSet)
+        case .proteinMinDaysPerWeek:
+            return row(whole(p.proteinMinDaysPerWeek), String(localized: "of 7"), .whole)
+        case .maxWeighInAgeWeeks:
+            return row(whole(p.maxWeighInAgeWeeks),
+                       p.maxWeighInAgeWeeks == 1 ? String(localized: "week without a weigh-in")
+                           : String(localized: "weeks without a weigh-in"), .whole)
+        }
+    }
+
+    /// `draft` with `field` set from what was typed, in the display unit. Text that is not a number
+    /// stores a value the draft's own validation refuses, so the field is marked and Save is off; an
+    /// empty target or protein floor means "not set". Numbers are read as the weigh-in sheet reads
+    /// them, which is why this runs on the main actor.
+    @MainActor
+    static func phaseDraft(_ draft: ScorecardPhaseDraft, setting field: ScorecardPhaseDraft.Field,
+                           to text: String, unitSystem: UnitSystem, locale: Locale) -> ScorecardPhaseDraft {
+        var next = draft
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let number = WeighInSheetModel.parse(trimmed, locale: locale) ?? .nan
+        let count = Int(trimmed) ?? -1
+        let metric = unitSystem == .metric
+        let kilograms = metric ? number : number / UnitFormatter.poundsPerKilogram
+        let centimetres = metric ? number : number * UnitFormatter.centimetersPerInch
+        switch field {
+        case .name: next.name = text
+        case .startDay: next.startDay = trimmed
+        case .targetWeight: next.targetWeightKg = trimmed.isEmpty ? nil : kilograms
+        case .rateLow: next.rateLowPercentPerWeek = number
+        case .rateHigh: next.rateHighPercentPerWeek = number
+        case .waistWindowWeeks: next.parameters.waistWindowWeeks = count
+        case .waistMinDecreaseCm: next.parameters.waistMinDecreaseCm = centimetres
+        case .liftDropTolerancePercent: next.parameters.liftDropTolerancePercent = number
+        case .liftDropShare: next.parameters.liftDropShare = number / 100
+        case .liftDropConsecutiveWeeks: next.parameters.liftDropConsecutiveWeeks = count
+        case .addCaloriesKcal: next.parameters.addCaloriesKcal = count
+        case .slowLossThresholdKgPerWeek: next.parameters.slowLossThresholdKgPerWeek = kilograms
+        case .slowLossConsecutiveWeeks: next.parameters.slowLossConsecutiveWeeks = count
+        case .reduceCarbsKcal: next.parameters.reduceCarbsKcal = count
+        case .rateWindowWeeks: next.parameters.rateWindowWeeks = count
+        case .maxProjectionWeeks: next.parameters.maxProjectionWeeks = count
+        case .targetToleranceKg: next.parameters.targetToleranceKg = kilograms
+        case .proteinFloorGrams: next.parameters.proteinFloorGrams = trimmed.isEmpty ? nil : number
+        case .proteinMinDaysPerWeek: next.parameters.proteinMinDaysPerWeek = count
+        case .maxWeighInAgeWeeks: next.parameters.maxWeighInAgeWeeks = count
+        }
+        return next
+    }
+
+    /// The start day as an instant the date control can show: noon of that day in `timeZone`.
+    static func phaseStartDate(_ draft: ScorecardPhaseDraft, timeZone: TimeZone) -> Date? {
+        let parts = draft.startDay.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3, CutScorecard.weekStart(containing: draft.startDay) != nil else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))
+    }
+
+    /// `draft` starting on the day `date` falls on in `timeZone`.
+    static func phaseDraft(_ draft: ScorecardPhaseDraft, startingOn date: Date,
+                           timeZone: TimeZone) -> ScorecardPhaseDraft {
+        var next = draft
+        next.startDay = LocalDayWindows(timeZone: timeZone).dayKey(for: date)
+        return next
+    }
+}
+
+extension CutScorecardPresenter.Wording {
+    /// "Mon 6 Jan 2031". A key that names no date is returned as it is.
+    func dateWithYear(_ day: String) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let keys = DateFormatter()
+        keys.calendar = calendar
+        keys.timeZone = calendar.timeZone
+        keys.locale = Locale(identifier: "en_US_POSIX")
+        keys.dateFormat = "yyyy-MM-dd"
+        guard let instant = keys.date(from: day) else { return day }
+        let shown = DateFormatter()
+        shown.calendar = calendar
+        shown.timeZone = calendar.timeZone
+        shown.locale = locale
+        shown.dateFormat = "EEE d MMM yyyy"
+        return shown.string(from: instant)
+    }
 }

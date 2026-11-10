@@ -618,7 +618,9 @@ enum DemoScreens {
         case "redesignhealth": return AnyView(RedesignHealthView())
         case "profile": return AnyView(ProfileDemoHost())
         case "gallery": return AnyView(NoopDesignGallery())
-        default:         return nil
+        // The stage 1 scorecard screens in each state of design/round6-scorecard, on synthetic data:
+        // scorecard-b1 … b27, weighin-c1 … c10, history-d1 … d5, phase-e1 … e4, cards-a1 … a3.
+        default:         return ScorecardDemo.screen(named: args[i + 1].lowercased())
         }
     }
 }

@@ -72,7 +72,9 @@ struct YourCardsSection: View {
     }
 }
 
-private struct YourCardTile: View {
+/// One tile of Your cards. Internal so the scorecard's debug demo can draw the tile in each of its
+/// states.
+struct YourCardTile: View {
     let card: DashboardCard
     let inputs: TodayCardInputs
     let isAccessibilitySize: Bool
