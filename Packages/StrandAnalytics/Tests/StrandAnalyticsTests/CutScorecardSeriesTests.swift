@@ -102,10 +102,8 @@ final class CutScorecardSeriesTests: XCTestCase {
         XCTAssertEqual(result.signals.rateBand.state, .unknown)
         XCTAssertEqual(result.signals.rateBand.reason, .weighInOverdue)
         assertCutProjection(result, .weighInOverdue)
-        // SPEC-AMBIGUITY: §6.4 says `remainingKg` is "set whenever a phase target and a current weight
-        // exist", but §7.8 computes it at step 4, after `weighInOverdue` has already matched at step 2.
-        // The field comment is the only statement about the field itself, so it is followed: the last
-        // weight, 97.1, is 3.1 kg above the 94.0 target.
+        // Ruling R9: `remainingKg` is set whenever a phase target and an in-phase current weight exist,
+        // including while overdue. The last weight, 97.1, is 3.1 kg above the 94.0 target.
         XCTAssertEqual(result.projection.remainingKg, 3.1)
 
         // The series and the last weight are still reported; only current claims are withheld.
@@ -163,11 +161,10 @@ final class CutScorecardSeriesTests: XCTestCase {
         let outside = evaluate(F.scenario(weights: [100.0, nil, nil, nil, nil, 98.0]))
         assertCutNoRate(outside, .gapLongerThanWindow)
 
-        // SPEC-AMBIGUITY: §7.4 separates `singleReading` from `gapLongerThanWindow` by whether "older
-        // points exist" anywhere in the phase, however old. That contradicts §7.9: with a window of 4
-        // the reading in week 1 above is dated before `evidenceStartDay` (six weeks before the judged
-        // week) and still changes `rateUnavailable`. §7.4 is asserted as written; the property test
-        // does not add old weights to an input whose rate is `singleReading`.
+        // §7.4 separates `singleReading` from `gapLongerThanWindow` by whether "older points exist"
+        // anywhere in the phase, however old. Ruling R2 lists this as one of the things a reading dated
+        // before `evidenceStartDay` may change: with a window of 4 the reading in week 1 below is dated
+        // before it (six weeks before the judged week) and still decides the reason.
         let farWeights: [Double?] = [100.0] + Array(repeating: nil, count: 10) + [98.0]
         let far = evaluate(F.scenario(weights: farWeights))
         XCTAssertLessThan(F.weighInDay(1), far.evidenceStartDay ?? "")
@@ -313,11 +310,8 @@ final class CutScorecardSeriesTests: XCTestCase {
         XCTAssertEqual(result.currentWeightKg, 97.6)
         XCTAssertEqual(result.currentWeightDay, F.weighInDay(4))
         XCTAssertEqual(result.judgedWeekStart, F.monday(4))
-        // SPEC-AMBIGUITY: §7.3 defines `weeklyLossKg` for "a domain week", and §7.2 defines the domain
-        // only for a started phase. §7.2 also says that without a phase the weekly points and the
-        // "(unclipped)" rate are still computed, which treats every week as available. The unclipped
-        // reading is taken: with no phase the weekly losses are reported for every pair of consecutive
-        // weighed weeks, while `inPhase` stays false.
+        // Ruling R7: with no active phase the domain is every week, so the weekly losses are reported
+        // for every pair of consecutive weighed weeks, while `inPhase` stays false.
         XCTAssertEqual(result.weeks.map(\.weeklyLossKg), [nil, 0.8, 0.8, 0.8])
     }
 

@@ -48,9 +48,8 @@ final class CutScorecardPropertyTests: XCTestCase {
     /// Varies the four windows and counts, the protein floor, the phase (none, not started, started long
     /// ago, started inside the windows), the target, which weeks have a weigh-in or a waist reading,
     /// their days and values, lift coverage across three exercise names (two differ only by case) and
-    /// protein logging. Weights and waists lie in the weeks `J - m … J`; lifts and protein lie on or
-    /// after `evidenceStartDay`. That is the region where §7.9 and the rest of §7 agree (see
-    /// `testReadingBeforeEvidenceStartDayNeverChangesAnythingButWeeks`).
+    /// protein logging. Weights and waists reach back to week `J - m - 4` and lifts to `J - m - 5`, so
+    /// the input itself already holds items dated before `evidenceStartDay` (which is `J - m - 2`).
     private func generate(_ g: inout Generator) -> Generated {
         var c = Generated()
         c.parameters.liftDropConsecutiveWeeks = 1 + g.next(4)
@@ -79,20 +78,20 @@ final class CutScorecardPropertyTests: XCTestCase {
                               low: 0.4, high: 1.2)
         }
 
-        for k in 0...m where k == 0 || g.next(4) != 0 {
+        for k in 0...(m + 4) where k == 0 || g.next(4) != 0 {
             let offset = k == 0 ? weighInOffset : g.next(7)
             let takenAt = 1_000 + g.next(100)
             let value = 90.0 + Double(g.next(4_001)) / 1_000.0
             c.weights.append(CutScorecardReading(day: F.day(judgedMonday, -7 * k + offset), takenAt: takenAt, value: value))
         }
-        for k in 0...m where g.next(3) != 0 {
+        for k in 0...(m + 4) where g.next(3) != 0 {
             let offset = k == 0 ? g.next(weighInOffset + 1) : g.next(7)
             let takenAt = 1_000 + g.next(100)
             let value = 80.0 + Double(g.next(3_001)) / 1_000.0
             c.waists.append(CutScorecardReading(day: F.day(judgedMonday, -7 * k + offset), takenAt: takenAt, value: value))
         }
         if g.next(4) != 0 {
-            for k in 0...(m + 1) {
+            for k in 0...(m + 5) {
                 for exercise in exercises where g.next(2) == 0 {
                     let offset = k == 0 ? g.next(weighInOffset + 1) : g.next(7)
                     let kg = 40.0 + 2.5 * Double(g.next(9))
@@ -119,29 +118,20 @@ final class CutScorecardPropertyTests: XCTestCase {
 
     // MARK: - §7.9
 
-    /// Items dated before `evidenceStartDay` change nothing in the result except `weeks`, which only
-    /// grows at the front. 400 generated inputs, each extended with up to 13 older items.
+    /// Ruling R2, the narrowed §7.9: an item dated before `evidenceStartDay` never changes a signal
+    /// state, a rule state, the verdict, the rate or the projection. It may change `weeks`,
+    /// `rateUnavailable` (`singleReading` against `gapLongerThanWindow`), the lift signal's reason
+    /// (`noLiftData` against `noSessionsThisWeek`) and `consecutiveWeeks`; this test also asserts that
+    /// nothing else moves and that those four move only in the stated way. 400 generated inputs, each
+    /// extended with up to 13 older items, with no restriction on what the input already holds.
     ///
-    /// SPEC-AMBIGUITY: §7.9 is stated without exception, but four other statements of §7 let an item
-    /// dated before `evidenceStartDay` change something else:
-    ///   1. §7.4: a rate that is nil for `singleReading` becomes `gapLongerThanWindow` when any older
-    ///      weight exists in the phase (`CutScorecardSeriesTests.testGapLongerThanWindowHasNoRate`).
-    ///   2. §7.5: `noLiftData` becomes `noSessionsThisWeek` when any older lift observation exists
-    ///      (`CutScorecardSignalTests.testLiftUnknownReasonPrecedence`).
-    ///   3. §7.6: `consecutiveWeeks` has no upper bound, so with weigh-ins further back than `J - m` an
-    ///      older reading or lift can lengthen or shorten a run that already spans the window
-    ///      (`CutScorecardTests.testConsecutiveWeeksKeepsCountingPastTheRequiredWindow`).
-    ///   4. §7.3: an older weight in the week just before the first week of `weeks` gives that first
-    ///      week a `weeklyLossKg`, which is a change inside `weeks` other than its length.
-    /// The property is tested where all of §7 agrees: base weights and waists lie in `J - m … J`
-    /// (ruling out 3 and 4), older weights are not added when the base rate is `singleReading` (1), and
-    /// older lifts are not added when the base has no lift observation (2). Without the last two guards
-    /// a throwaway model of §7 fails 94 of these 400 cases.
-    func testReadingBeforeEvidenceStartDayNeverChangesAnythingButWeeks() throws {
+    /// Each permitted change is shown to be reachable by a direct test in `CutScorecardRulingTests`.
+    func testReadingBeforeEvidenceStartDayNeverChangesAnythingButWeeks() {
         var g = Generator(state: 0x5EED_C0DE_2031)
         var kinds = Set<CutScorecardVerdictKind>()
         var statuses = Set<CutScorecardProjectionStatus>()
         var olderItems = 0
+        var liftReasonChanges = 0
 
         for index in 0..<400 {
             let base = generate(&g)
@@ -157,67 +147,91 @@ final class CutScorecardPropertyTests: XCTestCase {
             XCTAssertNil(before.invalidInput, label)
 
             // Older items: one to sixty days before `evidenceStartDay`, so the day just before it is
-            // drawn often. The draws are made unconditionally so the stream does not depend on results.
-            var older = Generated()
+            // drawn often.
+            var extended = base
             for _ in 0..<g.next(4) {
                 let day = F.day(evidenceStart, -1 - g.next(60))
                 let takenAt = 1_000 + g.next(100)
-                older.weights.append(CutScorecardReading(day: day, takenAt: takenAt,
-                                                         value: 90.0 + Double(g.next(4_001)) / 1_000.0))
+                extended.weights.insert(CutScorecardReading(day: day, takenAt: takenAt,
+                                                            value: 90.0 + Double(g.next(4_001)) / 1_000.0), at: 0)
+                olderItems += 1
             }
             for _ in 0..<(1 + g.next(3)) {
                 let day = F.day(evidenceStart, -1 - g.next(60))
                 let takenAt = 1_000 + g.next(100)
-                older.waists.append(CutScorecardReading(day: day, takenAt: takenAt,
-                                                        value: 80.0 + Double(g.next(3_001)) / 1_000.0))
+                extended.waists.insert(CutScorecardReading(day: day, takenAt: takenAt,
+                                                           value: 80.0 + Double(g.next(3_001)) / 1_000.0), at: 0)
+                olderItems += 1
             }
             for _ in 0..<g.next(4) {
                 let day = F.day(evidenceStart, -1 - g.next(60))
                 let exercise = exercises[g.next(3)]
-                older.lifts.append(CutScorecardLiftObservation(day: day, exercise: exercise,
-                                                               weightKg: 40.0 + 2.5 * Double(g.next(9))))
+                extended.lifts.insert(CutScorecardLiftObservation(day: day, exercise: exercise,
+                                                                  weightKg: 40.0 + 2.5 * Double(g.next(9))), at: 0)
+                olderItems += 1
             }
             for _ in 0..<g.next(4) {
                 let day = F.day(evidenceStart, -1 - g.next(60))
-                older.proteinDays.append(CutScorecardProteinDay(day: day, grams: 80.0 + 10.0 * Double(g.next(5))))
+                extended.proteinDays.insert(CutScorecardProteinDay(day: day, grams: 80.0 + 10.0 * Double(g.next(5))), at: 0)
+                olderItems += 1
             }
-            if before.rateUnavailable == .singleReading { older.weights = [] }      // contradiction 1
-            if base.lifts.isEmpty { older.lifts = [] }                              // contradiction 2
-            olderItems += older.weights.count + older.waists.count + older.lifts.count + older.proteinDays.count
-            XCTAssertTrue((older.weights.map(\.day) + older.waists.map(\.day) + older.lifts.map(\.day)
-                           + older.proteinDays.map(\.day)).allSatisfy { $0 < evidenceStart }, label)
-
-            var extended = base
-            extended.weights = older.weights + base.weights
-            extended.waists = older.waists + base.waists
-            extended.lifts = older.lifts + base.lifts
-            extended.proteinDays = older.proteinDays + base.proteinDays
             let after = CutScorecard.evaluate(extended.input)
 
-            XCTAssertGreaterThan(after.weeks.count, before.weeks.count, "\(label): `weeks` grows")
-            XCTAssertEqual(Array(after.weeks.suffix(before.weeks.count)), before.weeks, "\(label): existing weeks")
+            // Never changes: the verdict, the rate, the projection, every signal state, every rule state.
+            XCTAssertEqual(after.verdict, before.verdict, "\(label) verdict")
+            XCTAssertEqual(after.rate, before.rate, "\(label) rate")
+            XCTAssertEqual(after.projection, before.projection, "\(label) projection")
+            XCTAssertEqual(after.signals.waist, before.signals.waist, "\(label) waist signal")
+            XCTAssertEqual(after.signals.protein, before.signals.protein, "\(label) protein signal")
+            XCTAssertEqual(after.signals.rateBand, before.signals.rateBand, "\(label) rate-band signal")
+            XCTAssertEqual(after.signals.lifts.state, before.signals.lifts.state, "\(label) lift state")
+            XCTAssertEqual(after.rules.map(\.state), before.rules.map(\.state), "\(label) rule states")
+
+            // May change, and only in the stated way.
+            if after.signals.lifts.reason != before.signals.lifts.reason {
+                liftReasonChanges += 1
+                XCTAssertEqual(before.signals.lifts.reason, .noLiftData, "\(label) lift reason before")
+                XCTAssertEqual(after.signals.lifts.reason, .noSessionsThisWeek, "\(label) lift reason after")
+            }
+            if after.rateUnavailable != before.rateUnavailable {
+                XCTAssertEqual(before.rateUnavailable, .singleReading, "\(label) rateUnavailable before")
+                XCTAssertEqual(after.rateUnavailable, .gapLongerThanWindow, "\(label) rateUnavailable after")
+            }
+
+            // Nothing else: the rest of the lift signal, the rest of each rule, and the scalar fields.
+            let liftsBefore = before.signals.lifts, liftsAfter = after.signals.lifts
+            XCTAssertEqual([liftsAfter.commonExercises, liftsAfter.dropped, liftsAfter.climbed, liftsAfter.held],
+                           [liftsBefore.commonExercises, liftsBefore.dropped, liftsBefore.climbed, liftsBefore.held],
+                           "\(label) lift counts")
+            XCTAssertEqual(liftsAfter.windowStartDay, liftsBefore.windowStartDay, "\(label) lift window start")
+            XCTAssertEqual(liftsAfter.windowEndDay, liftsBefore.windowEndDay, "\(label) lift window end")
+            XCTAssertEqual(after.rules.map(\.rule), before.rules.map(\.rule), "\(label) rule order")
+            XCTAssertEqual(after.rules.map(\.unknownReason), before.rules.map(\.unknownReason), "\(label) rule reasons")
+            XCTAssertEqual(after.rules.map(\.requiredWeeks), before.rules.map(\.requiredWeeks), "\(label) required weeks")
             XCTAssertEqual(after.judgedWeekStart, before.judgedWeekStart, "\(label) judgedWeekStart")
             XCTAssertEqual(after.currentWeightKg, before.currentWeightKg, "\(label) currentWeightKg")
             XCTAssertEqual(after.currentWeightDay, before.currentWeightDay, "\(label) currentWeightDay")
-            XCTAssertEqual(after.rate, before.rate, "\(label) rate")
-            XCTAssertEqual(after.rateUnavailable, before.rateUnavailable, "\(label) rateUnavailable")
-            XCTAssertEqual(after.projection, before.projection, "\(label) projection")
-            XCTAssertEqual(after.signals, before.signals, "\(label) signals")
-            XCTAssertEqual(after.rules, before.rules, "\(label) rules")
-            XCTAssertEqual(after.verdict, before.verdict, "\(label) verdict")
             XCTAssertEqual(after.evidenceStartDay, before.evidenceStartDay, "\(label) evidenceStartDay")
             XCTAssertEqual(after.rejections, before.rejections, "\(label) rejections")
             XCTAssertEqual(after.invalidInput, before.invalidInput, "\(label) invalidInput")
+
+            // `weeks` may change, but by §7.1 and §7.3 an older item reaches no further than its own
+            // week's point and the next week's loss: every week after the one holding
+            // `evidenceStartDay` is untouched.
+            XCTAssertEqual(after.weeks.filter { $0.weekStart > evidenceStart },
+                           before.weeks.filter { $0.weekStart > evidenceStart }, "\(label) later weeks")
+            XCTAssertGreaterThanOrEqual(after.weeks.count, before.weeks.count, "\(label): `weeks` never shrinks")
         }
 
-        // The generator is the one that was checked against a throwaway model of §7 when this test was
-        // written: the same seed and the same draws end in the same state.
-        XCTAssertEqual(g.state, 7_234_633_130_411_528_470, "the generator's draw sequence changed")
-        // The inputs are not degenerate: every verdict kind and most projection statuses occur.
+        // The generator is the one that was checked against a throwaway model of §7 and the rulings when
+        // this test was written: the same seed and the same draws end in the same state.
+        XCTAssertEqual(g.state, 8_124_511_014_044_627_415, "the generator's draw sequence changed")
+        // The inputs are not degenerate: every verdict kind and most projection statuses occur, and the
+        // lift-reason exception is exercised (70 times under the model).
         XCTAssertEqual(kinds, [.holdSteady, .addCalories, .reduceCarbs, .insufficientData])
-        XCTAssertTrue(statuses.isSuperset(of: [.projected, .noActivePhase, .noTarget, .targetReached,
-                                               .rateUnknown, .notLosing]))
-        XCTAssertGreaterThan(olderItems, 1_000)
+        XCTAssertTrue(statuses.isSuperset(of: [.projected, .noActivePhase, .noTarget, .targetReached, .notLosing]))
+        XCTAssertGreaterThan(olderItems, 2_000)
+        XCTAssertGreaterThan(liftReasonChanges, 0)
     }
 
     /// The four parameters `evidenceStartDay` depends on, each in turn as the largest.

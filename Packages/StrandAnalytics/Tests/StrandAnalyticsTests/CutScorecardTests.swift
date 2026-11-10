@@ -61,11 +61,9 @@ final class CutScorecardTests: XCTestCase {
         XCTAssertNil(result.projection.targetDay)
         XCTAssertNil(result.projection.weeksRemaining)
         XCTAssertNil(result.projection.remainingKg, "no current weight, so nothing remains to state")
-        // SPEC-AMBIGUITY: §7.8 has no status for "an active phase with a target but no reading in it".
-        // §7.2 says everything is unknown(.noReadings), but CutScorecardProjectionStatus has no such
-        // case. Walking §7.8 in order: not 1 (the phase is active), not 2 (no judged week, so nothing is
-        // overdue), not 3 (there is a target), step 4 cannot be computed, and step 5 applies because the
-        // rate is nil. So `.rateUnknown`. The invalid result's `.noActivePhase` (§6.5) is not this case.
+        // Ruling R8: an active phase with a target and no in-phase weigh-in is `.rateUnknown`, and
+        // `.noTarget` when the phase has no target. The invalid result's `.noActivePhase` (§6.5) is not
+        // this case.
         XCTAssertEqual(result.projection.status, .rateUnknown)
         // The same walk with no target stops at step 3.
         let noTarget = evaluate(F.make(phase: F.phase(target: nil), today: "2031-01-08"))
@@ -547,12 +545,9 @@ final class CutScorecardTests: XCTestCase {
     }
 
     func testConsecutiveWeeksKeepsCountingPastTheRequiredWindow() {
-        // SPEC-AMBIGUITY: §7.6 says the count "stops at the first week where it is false or unknown" and
-        // names no upper bound, so a run longer than the window is reported in full: fixture week 9 has
-        // five slow weeks (5 to 9) against a window of 3, and week 19 has seven. §7.9 implies the
-        // opposite, since an uncapped count can be changed by a reading dated before `evidenceStartDay`.
-        // The literal §7.6 reading is asserted here; the property test keeps its inputs where the two
-        // readings agree.
+        // Ruling R1: the count is not capped at `requiredWeeks`. It runs back from the judged week to the
+        // first week where the condition is false or unknown, however long: fixture week 9 has five slow
+        // weeks (5 to 9) against a window of 3, and week 19 has seven.
         let week9 = evaluate(F.input(week: 9))
         XCTAssertEqual(week9.rule(2)?.state, .fired)
         XCTAssertEqual(week9.rule(2)?.consecutiveWeeks, 5)
@@ -766,13 +761,12 @@ final class CutScorecardTests: XCTestCase {
         XCTAssertEqual(v7.rules, base9.rules, "V7")
 
         // V8: week 6's weight replaced by 99.9, today 2031-02-26.
-        // SPEC-AMBIGUITY (discrepancy in §13.4): the table says "the fitted rate moves by less than the
-        // end-point difference would". On this day the window is weeks 4 to 8 and week 6 is its centre
-        // point, which has no leverage on a least-squares slope and is not an end point either: the
-        // fitted loss stays exactly 0.100 and so does the end-point difference (97.6 - 97.2) / 4. Neither
-        // moves, so "less than" is not satisfied. What §7 gives is asserted here; the comparison the
-        // variant intends is made in `testSingleOutlierWeekMovesRateLessThanEndpointDifference`, with the
-        // outlier at the end of the window.
+        // Ruling R16: the row was wrong as written. On this day the window is weeks 4 to 8 and week 6 is
+        // its centre point, which has no leverage on a least-squares slope and is not an end point
+        // either: the fitted loss stays exactly 0.100 and so does the end-point difference
+        // (97.6 - 97.2) / 4. What §7 gives is asserted here; the comparison the row intended is made in
+        // `testSingleOutlierWeekMovesRateLessThanEndpointDifference`, with the outlier as the last point
+        // of the window.
         let outlier = F.allWeights.map { $0.day == F.weighInDay(6) ? F.weight($0.day, 99.9) : $0 }
         let v8 = evaluate(F.input(today: "2031-02-26", weights: outlier))
         XCTAssertEqual(v8.weeks.map(\.weeklyLossKg), [nil, 0.8, 0.8, 0.8, 0.1, -2.4, 2.6, 0.1], "V8")
