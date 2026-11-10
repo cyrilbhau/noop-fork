@@ -269,11 +269,9 @@ final class CutScorecardSignalTests: XCTestCase {
         // The only observation is invalid, so the input holds no valid observation at all.
         XCTAssertEqual(liftSignal([(2, press, -1)]).reason, .noLiftData)
         XCTAssertEqual(liftSignal([(2, "", 100)]).reason, .noLiftData)
-        // SPEC-AMBIGUITY: §7.5 makes `noLiftData` depend on the whole input ("no valid lift observation
-        // at all"), so one valid observation anywhere, however old, turns it into `noSessionsThisWeek`.
-        // That contradicts §7.9, under which an observation dated before `evidenceStartDay` changes
-        // nothing. §7.5 is asserted as written; the property test does not add old lifts to an input
-        // that has none.
+        // §7.5 makes `noLiftData` depend on the whole input ("no valid lift observation at all"), so one
+        // valid observation anywhere, however old, turns it into `noSessionsThisWeek`. Ruling R2 lists
+        // this as one of the things an observation dated before `evidenceStartDay` may change.
         XCTAssertEqual(liftSignal([(400, press, 100)]).reason, .noSessionsThisWeek)
         // Both windows empty: the current window is named first.
         XCTAssertEqual(liftSignal([(20, press, 100)]).reason, .noSessionsThisWeek)

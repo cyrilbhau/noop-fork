@@ -325,13 +325,13 @@ final class CutScorecardRejectionTests: XCTestCase {
     // MARK: - Totality
 
     /// §6.5: "`evaluate` never throws and never traps. It is total over every input." The values here
-    /// are valid by §6.5 (plausibility is the entry sheet's job) and sit where integer conversion and
-    /// day arithmetic are most likely to trap.
+    /// sit where integer conversion and day arithmetic are most likely to trap.
     func testExtremeButValidInputsReturnWithoutTrapping() {
-        // Readings so large that quantizing overflows to infinity, with a target: the projection's
-        // weeks-remaining is infinity divided by infinity, and a NaN must not reach an integer ceiling.
-        // SPEC-AMBIGUITY: §7 does not say what the result is once `quantize` overflows (|x| above about
-        // 1.8e305). Only "returns, and the input is not invalid" is asserted.
+        // Readings so large that a sum, a product or `quantize` would overflow to infinity. Ruling R3:
+        // a reading, lift weight or protein total above 1e100 in magnitude is rejected and counted as
+        // `nonFinite`, so none of them reaches the arithmetic. They are dropped, the result is exactly
+        // what it would be had they never been passed (here: no reading at all), and nothing traps.
+        // Before R3 this test asserted that the two huge weights appeared as two weeks.
         let huge = evaluate(F.make(weights: [F.weight("2031-01-08", 1.7e308), F.weight("2031-01-15", 1.0e308)],
                                    waists: [F.waist("2031-01-08", 1.7e308), F.waist("2031-01-15", 1.0e308)],
                                    lifts: [CutScorecardLiftObservation(day: "2031-01-06", exercise: "A", weightKg: 1.7e308),
@@ -339,7 +339,16 @@ final class CutScorecardRejectionTests: XCTestCase {
                                    proteinDays: [CutScorecardProteinDay(day: "2031-01-14", grams: 1.7e308)],
                                    today: today))
         XCTAssertNil(huge.invalidInput)
-        XCTAssertEqual(huge.weeks.count, 2)
+        XCTAssertEqual(huge.rejections, rejections(7))
+        XCTAssertEqual(huge.weeks, [])
+        assertSameApartFromRejections(huge, evaluate(F.make(today: today)), "huge values dropped")
+        assertCutVerdict(huge, .insufficientData, .noReadings)
+
+        // Mixed with ordinary readings, the huge ones leave no trace but the count.
+        let mixed = evaluate(F.make(weights: good + [F.weight("2031-01-15", 1.7e308), F.weight("2031-01-14", -1.7e308)],
+                                    today: today))
+        XCTAssertEqual(mixed.rejections, rejections(2))
+        assertSameApartFromRejections(mixed, evaluate(F.make(weights: good, today: today)), "mixed")
 
         // The smallest positive values, and instants at the ends of Int.
         let tiny = evaluate(F.make(weights: [CutScorecardReading(day: "2031-01-08", takenAt: .min, value: 5e-324),
