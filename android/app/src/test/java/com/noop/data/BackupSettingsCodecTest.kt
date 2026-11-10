@@ -115,6 +115,111 @@ class BackupSettingsCodecTest {
         assertNull(BackupSettingsCodec.encode(mapOf("unrelated.key" to 1)))
     }
 
+    // ── Cut scorecard keys: two opaque Strings, never parsed on Android ──────────
+
+    /** Synthetic values in the shape the Apple side writes: sorted keys, no insignificant whitespace. */
+    private val scorecardPhases =
+        """[{"kind":"cut","startDay":"2026-01-05"},{"kind":"maintenance","startDay":"2026-03-02"}]"""
+    private val scorecardRules = """{"minimumReadingsPerWeek":3,"targetLossPercentPerWeek":0.5}"""
+
+    @Test fun scorecardKeysAreWhitelistedAsStrings() {
+        assertEquals(BackupSettingsCodec.Kind.STRING, BackupSettingsCodec.WHITELIST["cutScorecard.phases"])
+        assertEquals(BackupSettingsCodec.Kind.STRING, BackupSettingsCodec.WHITELIST["cutScorecard.rules"])
+    }
+
+    @Test fun scorecardKeysRoundTripAsStrings() {
+        val values = mapOf(
+            "cutScorecard.phases" to scorecardPhases,
+            "cutScorecard.rules" to scorecardRules,
+        )
+        val back = BackupSettingsCodec.decode(requireNotNull(BackupSettingsCodec.encode(values)))
+
+        assertEquals(scorecardPhases, back["cutScorecard.phases"])
+        assertEquals(scorecardRules, back["cutScorecard.rules"])
+        assertEquals(values.size, back.size)
+    }
+
+    @Test fun scorecardContentIsPreservedByteForByteWithoutParsing() {
+        // Content this platform has never seen: unknown fields, nested containers, escapes, non-ASCII,
+        // a number spelling a re-serialiser would rewrite (1.50, 1e2) and spacing it would drop. Any
+        // parse-and-re-emit of the inner JSON would change at least one of these.
+        val phases = """[{"a":1.50,"futureField":{"y":[1e2, 2],"z":null},"note":"é \"q\" \n \u00e9 </x>"}, {"b":[]}]"""
+        val rules = """{"alpha":{"nested":[true,false,null]},"beta":"","gamma":-0.0,"zeta":[{"k":"v"}]}"""
+        // Not JSON at all: still a String, still carried (reading it is the Apple side's concern).
+        val unreadable = "not json {"
+
+        for ((p, r) in listOf(phases to rules, unreadable to "", scorecardPhases to scorecardRules)) {
+            val once = requireNotNull(
+                BackupSettingsCodec.encode(mapOf("cutScorecard.phases" to p, "cutScorecard.rules" to r)),
+            )
+            val back = BackupSettingsCodec.decode(once)
+            assertEquals(p, back["cutScorecard.phases"])
+            assertEquals(r, back["cutScorecard.rules"])
+            assertEquals(
+                p.toByteArray(Charsets.UTF_8).toList(),
+                (back["cutScorecard.phases"] as String).toByteArray(Charsets.UTF_8).toList(),
+            )
+            assertEquals(
+                r.toByteArray(Charsets.UTF_8).toList(),
+                (back["cutScorecard.rules"] as String).toByteArray(Charsets.UTF_8).toList(),
+            )
+            // Restore here, export again: the second export is the first, unchanged.
+            assertEquals(once, BackupSettingsCodec.encode(back))
+        }
+    }
+
+    @Test fun scorecardKeysDecodeFromAppleShapedJson() {
+        // The Apple exporter's outer object: sorted keys, each scorecard value a JSON STRING holding JSON.
+        val appleJson = """{"cutScorecard.phases":"[{\"kind\":\"cut\",\"startDay\":\"2026-01-05\"}]",""" +
+            """"cutScorecard.rules":"{\"a\":1,\"b\":[2,3]}","profile.age":34}"""
+        val back = BackupSettingsCodec.decode(appleJson)
+
+        assertEquals("""[{"kind":"cut","startDay":"2026-01-05"}]""", back["cutScorecard.phases"])
+        assertEquals("""{"a":1,"b":[2,3]}""", back["cutScorecard.rules"])
+        assertEquals(34, back["profile.age"])
+    }
+
+    @Test fun absentScorecardKeysStayAbsent() {
+        val json = requireNotNull(BackupSettingsCodec.encode(mapOf("profile.age" to 34)))
+        assertFalse(json.contains("cutScorecard"))
+
+        val back = BackupSettingsCodec.decode(json)
+        assertFalse(back.containsKey("cutScorecard.phases"))
+        assertFalse(back.containsKey("cutScorecard.rules"))
+
+        // One present, the other absent: the absent one is not defaulted into existence.
+        val onlyRules = BackupSettingsCodec.decode(
+            requireNotNull(BackupSettingsCodec.encode(mapOf("cutScorecard.rules" to scorecardRules))),
+        )
+        assertEquals(scorecardRules, onlyRules["cutScorecard.rules"])
+        assertFalse(onlyRules.containsKey("cutScorecard.phases"))
+        assertEquals(1, onlyRules.size)
+    }
+
+    @Test fun nonStringScorecardValuesAreDroppedNotCoerced() {
+        // A raw JSON array / object / number / bool / null under a String-kind key is the wrong kind and
+        // is dropped like any other, never stringified.
+        val back = BackupSettingsCodec.decode(
+            """{"cutScorecard.phases": [{"kind":"cut"}], "cutScorecard.rules": {"a":1}, "profile.hrMax": 185}""",
+        )
+        assertNull(back["cutScorecard.phases"])
+        assertNull(back["cutScorecard.rules"])
+        assertEquals("Valid siblings still decode", 185, back["profile.hrMax"])
+
+        val scalars = BackupSettingsCodec.decode(
+            """{"cutScorecard.phases": 5, "cutScorecard.rules": true}""",
+        )
+        assertTrue(scalars.isEmpty())
+        assertTrue(BackupSettingsCodec.decode("""{"cutScorecard.phases": null}""").isEmpty())
+
+        // Same rule on the encode side: a caller handing over a non-String writes nothing.
+        assertNull(
+            BackupSettingsCodec.encode(
+                mapOf("cutScorecard.phases" to listOf("cut"), "cutScorecard.rules" to mapOf("a" to 1)),
+            ),
+        )
+    }
+
     // ── Container: settings entry round-trips through the real ZIP layer ─────────
 
     /** The 16-byte SQLite magic, so the staged file passes the importer's header validation. */
