@@ -16,6 +16,9 @@ enum WeighInError: Error, Equatable {
     case readingNotFound
     /// The store could not be opened.
     case storeUnavailable
+    /// A date edit whose new instant already holds another reading of the same marker, source and
+    /// device id (ruling R34).
+    case instantOccupied
 }
 
 /// The write funnel for weigh-ins (specification §9.1): one or two Lab Book rows per weigh-in,
@@ -60,6 +63,10 @@ final class WeighInStore {
     /// inches; kilograms and centimetres are stored, unrounded. Both values are validated before
     /// anything is written, and both rows go in one transaction. Returns the rows as stored, weight
     /// first.
+    ///
+    /// A manual row of the marker already stored at that instant under the active id is the row the
+    /// save lands on: its value and unit are replaced and every other column is written back as it
+    /// was (ruling R34).
     @discardableResult
     func save(weight: Double, waist: Double?, unitSystem: UnitSystem, takenAt: Date) async throws -> [LabMarkerRow] {
         let weightKg = try Self.validated(weight, kind: .weight, unitSystem: unitSystem)
@@ -71,13 +78,14 @@ final class WeighInStore {
         let day = LocalDayWindows(timeZone: timeZone()).dayKey(for: takenAt)
         guard let store = await repository.storeHandle() else { throw WeighInError.storeUnavailable }
 
-        var rows = [Self.newRow(.weight, deviceId: deviceId, epoch: epoch, day: day, value: weightKg)]
+        var rows = [try await Self.rowToWrite(.weight, deviceId: deviceId, epoch: epoch, day: day,
+                                              value: weightKg, in: store)]
         if let waistCm {
-            rows.append(Self.newRow(.waist, deviceId: deviceId, epoch: epoch, day: day, value: waistCm))
+            rows.append(try await Self.rowToWrite(.waist, deviceId: deviceId, epoch: epoch, day: day,
+                                                  value: waistCm, in: store))
         }
         try await store.upsertLabMarkers(rows)
-        // A save in the same second updates the row already there, which keeps its own id: return
-        // what is stored, not what was offered.
+        // Return what is stored, not what was offered.
         var stored: [LabMarkerRow] = []
         for row in rows {
             stored.append(try await Self.storedRow(matching: row, in: store))
@@ -91,7 +99,9 @@ final class WeighInStore {
     /// Edit one stored reading. Same instant: the value is updated in place, and the row keeps its
     /// id, device id, source, note, reference text and stored day. Another instant: a new row is
     /// inserted under the same device id, then the old one is deleted, so an interruption leaves two
-    /// readings and never none. Returns the row as stored afterwards.
+    /// readings and never none. Another instant that already holds a reading of the same marker,
+    /// source and device id is refused with `.instantOccupied` before anything is written (ruling
+    /// R34). Returns the row as stored afterwards.
     @discardableResult
     func edit(_ row: LabMarkerRow, value: Double, unitSystem: UnitSystem, takenAt: Date) async throws -> LabMarkerRow {
         guard let kind = BodyMeasurementKind(markerKey: row.markerKey) else { throw WeighInError.notABodyMeasurement }
@@ -114,6 +124,12 @@ final class WeighInStore {
             return stored
         }
 
+        // The upsert is keyed on (device id, marker, instant, source) and would overwrite the row
+        // already at that key, after which the delete below would remove the edited one.
+        guard try await Self.storedRow(deviceId: current.deviceId, kind: kind, epoch: epoch,
+                                       source: current.source, in: store) == nil else {
+            throw WeighInError.instantOccupied
+        }
         replacement.id = Self.newId(kind, epoch: epoch)
         replacement.takenAt = epoch
         replacement.day = newDay
@@ -125,8 +141,7 @@ final class WeighInStore {
             await finishWrite()
             throw error
         }
-        // The new reading may have landed on a row that already existed at that instant; never
-        // delete the row that now holds it.
+        // Never delete the row that holds the new reading.
         if stored.id != current.id {
             try await store.deleteLabMarker(id: current.id)
         }
@@ -198,6 +213,26 @@ final class WeighInStore {
         LabMarkerRow(id: newId(kind, epoch: epoch), deviceId: deviceId, markerKey: kind.markerKey,
                      category: bodyMeasurementCategory, day: day, takenAt: epoch, value: value,
                      valueText: nil, unit: unit(kind), source: manualSource, note: nil, referenceText: nil)
+    }
+
+    /// What a save writes for `kind`: the manual row already stored at this instant under
+    /// `deviceId` with only its value and unit replaced, else a new row.
+    private static func rowToWrite(_ kind: BodyMeasurementKind, deviceId: String, epoch: Int, day: String,
+                                   value: Double, in store: WhoopStore) async throws -> LabMarkerRow {
+        guard var existing = try await storedRow(deviceId: deviceId, kind: kind, epoch: epoch,
+                                                 source: manualSource, in: store) else {
+            return newRow(kind, deviceId: deviceId, epoch: epoch, day: day, value: value)
+        }
+        existing.value = value
+        existing.unit = unit(kind)
+        return existing
+    }
+
+    /// The stored row at this natural key (device id, marker, instant, source), nil when it is free.
+    private static func storedRow(deviceId: String, kind: BodyMeasurementKind, epoch: Int, source: String,
+                                  in store: WhoopStore) async throws -> LabMarkerRow? {
+        try await store.labMarkers(deviceId: deviceId, markerKey: kind.markerKey)
+            .first { $0.takenAt == epoch && $0.source == source }
     }
 
     /// The stored row with this id, under the device id it was stored under.
