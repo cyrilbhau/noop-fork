@@ -12,6 +12,20 @@ enum TodayCardsEditorPresentation {
         case hidden, first, after(TodaySection)
     }
 
+    /// What the editor lists: every card in canonical order, without a card only the redesign
+    /// draws unless this is the redesign's editor and the scorecard flag is on. With the flag off
+    /// the list is the one from before the scorecard card existed.
+    static func availableCards(redesign: Bool, scorecardEnabled: Bool) -> [DashboardCard] {
+        DashboardCard.canonicalOrder.filter { !$0.isRedesignOnly || (redesign && scorecardEnabled) }
+    }
+
+    /// The saved cards the editor does not list. They are written back after the edited list on
+    /// save, so a choice made while its gate was on survives an edit made while it is off.
+    static func withheldCards(raw: String, available: [DashboardCard]) -> [DashboardCard] {
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        return DashboardCardPrefs.decodeEnabled(raw).filter { !available.contains($0) }
+    }
+
     static func visibleKeyMetrics(sections: EditableLayoutDraft<TodaySection>,
                                   metrics: [KeyMetric]) -> [KeyMetric]? {
         sections.visible.contains(.keyMetrics) ? metrics : nil
@@ -19,7 +33,7 @@ enum TodayCardsEditorPresentation {
 
     static func selection(raw: String, redesign: Bool, sections: EditableLayoutDraft<TodaySection>,
                           metrics: [KeyMetric]) -> [DashboardCard] {
-        guard redesign else { return DashboardCardPrefs.decodeEnabled(raw) }
+        guard redesign else { return DashboardCard.classicSelection(raw: raw) }
         return TodayCardResolver.selection(raw: raw, visibleKeyMetrics: visibleKeyMetrics(sections: sections, metrics: metrics))
     }
 

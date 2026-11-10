@@ -79,6 +79,8 @@ extension DashboardCard {
         case .sleep: return StrandPalette.restColor
         case .coupled: return StrandPalette.chargeColor
         case .coach: return StrandPalette.accent
+        // Body weight has no semantic colour: the neutral primary text colour.
+        case .scorecard: return StrandPalette.textPrimary
         }
     }
 }

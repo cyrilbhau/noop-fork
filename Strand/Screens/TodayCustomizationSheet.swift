@@ -29,6 +29,11 @@ struct TodayCustomizationSheet: View {
     private let initialDetailed: Bool
     private let initialWindowDays: Int
     private let redesign: Bool
+    /// The cards this editor lists (stage 1 specification §10.1): every card, without the scorecard
+    /// card unless this is the redesign's editor and its flag is on.
+    private let availableDashboardCards: [DashboardCard]
+    /// Saved cards this editor does not list. Written back on save, so they are not lost.
+    private let withheldDashboardCards: [DashboardCard]
 
     @Binding private var sectionOrderRaw: String
     @Binding private var hiddenSectionsRaw: String
@@ -140,11 +145,16 @@ struct TodayCustomizationSheet: View {
             visible: KeyMetricPrefs.decodeEnabled(keyMetricsRaw.wrappedValue),
             allItems: KeyMetric.defaultOrder
         )
+        let available = TodayCardsEditorPresentation.availableCards(
+            redesign: usesRedesign, scorecardEnabled: CutScorecardFlag.shared.isEnabled)
+        availableDashboardCards = available
+        withheldDashboardCards = TodayCardsEditorPresentation.withheldCards(
+            raw: dashboardCardsRaw.wrappedValue, available: available)
         let cards = EditableLayoutDraft(
             visible: TodayCardsEditorPresentation.selection(
                 raw: dashboardCardsRaw.wrappedValue, redesign: usesRedesign,
-                sections: sections, metrics: metrics.visible),
-            allItems: DashboardCard.canonicalOrder
+                sections: sections, metrics: metrics.visible).filter { available.contains($0) },
+            allItems: available
         )
         let hosted = EditableLayoutDraft(
             visible: HostedCardPrefs.decodeEnabled(hostedCardsRaw.wrappedValue),
@@ -273,7 +283,7 @@ struct TodayCustomizationSheet: View {
                 visible: TodayCardsEditorPresentation.selection(
                     raw: "", redesign: usesRedesignEditor,
                     sections: sectionDraft, metrics: keyMetricDraft.visible),
-                allItems: DashboardCard.canonicalOrder
+                allItems: availableDashboardCards
             )
         case .addedCards:
             hostedDraft = EditableLayoutDraft(
@@ -290,7 +300,8 @@ struct TodayCustomizationSheet: View {
     private func save() {
         let values = TodayCustomizationSaveValues(
             sections: sectionDraft, metrics: keyMetricDraft.visible, detailed: detailed,
-            windowDays: windowDays, dashboardCards: dashboardDraft.visible, hostedCards: hostedDraft.visible)
+            windowDays: windowDays, dashboardCards: dashboardDraft.visible + withheldDashboardCards,
+            hostedCards: hostedDraft.visible)
         sectionOrderRaw = values.sectionOrderRaw
         hiddenSectionsRaw = values.hiddenSectionsRaw
         keyMetricsRaw = values.keyMetricsRaw
