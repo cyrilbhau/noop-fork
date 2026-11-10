@@ -1,0 +1,206 @@
+/* Round 6 · Cut scorecard (Stage 1). Local styles only; design/system/noop.css is not edited.
+   Everything here is built from existing tokens except the two named proposals below. */
+:root{
+  /* Mirrors NoopTheme.textTertiary (#8A8A93). noop.css --t3 (#5F5F67) is too faint for words, so
+     readable tertiary text uses this. Proposal: add it to noop.css as --t3a or correct --t3. */
+  --t3a:#8A8A93;
+  /* Signal states. These alias existing tokens; no new colour is introduced.
+     met = NoopTheme.recovery, not met = NoopTheme.recoveryMid, unknown = NoopTheme.trackEmpty + textTertiary. */
+  --sig-met:var(--recovery);
+  --sig-not:var(--rec-mid);
+  --sig-unk:var(--t3a);
+}
+.grp-title{font-size:22px;font-weight:700;letter-spacing:-.3px;margin:64px 0 6px}
+.grp-title:first-of-type{margin-top:8px}
+.grp-note{font-size:13px;color:var(--t2);max-width:920px;line-height:19px;margin-bottom:22px}
+.grp-note b{color:var(--t1);font-weight:600}
+.legend{max-width:920px;font-size:13px;color:var(--t2);line-height:19px;margin:-8px 0 8px}
+.legend b{color:var(--t1)}
+.fnote{width:402px;font-size:12px;color:var(--t2);line-height:17px;margin-top:10px}
+section{flex:none}
+.t2{color:var(--t2)}.t3{color:var(--t3a)}
+.sep{height:1px;background:var(--line)}
+.lab{font-size:13px;color:var(--t2);line-height:18px}
+
+/* Your cards tile: mirrors round 5 (.yc) and NoopTheme.Layout.yourCard*. */
+.ycgrid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+.yc{background:var(--card);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.05);border-radius:var(--r-tile);padding:14px;min-height:112px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden}
+.yc .hd{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;min-width:0}
+.yc .hd b{font-weight:600;flex:1;min-width:0;line-height:17px}
+.yc .hd .chev{margin-left:0;font-size:15px}
+.yc .v{font-size:24px;font-weight:600;letter-spacing:-.5px;line-height:28px;margin-top:auto}
+.yc .v small{font-size:13px;color:var(--t2);font-weight:500;letter-spacing:0;margin-left:3px}
+.yc .c{font-size:12px;color:var(--t2);line-height:16px}
+.yc.wide{grid-column:1 / -1}
+
+/* Cut scorecard card (Today, Health) */
+.scc{gap:10px}
+.scc .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.scc .vd{font-size:24px;font-weight:600;letter-spacing:-.5px;line-height:28px}
+.scc .vd.none{color:var(--t2)}
+.scc .vs{font-size:12px;color:var(--t2);line-height:16px;margin-top:2px}
+.scc .sigs{display:grid;grid-template-columns:repeat(4,auto);justify-content:space-between;gap:6px 10px}
+.scc .sg{display:flex;align-items:center;gap:5px;font-size:12px;line-height:16px;color:var(--t1)}
+.scc .sg.unk{color:var(--t3a)}
+.scc .foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cta{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border-radius:999px;background:#F5F5F7;color:#000;font-size:13px;font-weight:600;white-space:nowrap;flex:none}
+.cta.quiet{background:var(--card2);color:var(--t1)}
+
+/* Scorecard screen */
+.phase{padding:8px var(--gutter) 0}
+.phase .nm{font-size:30px;font-weight:700;letter-spacing:-.6px;line-height:36px}
+.phase .meta{font-size:13px;color:var(--t2);line-height:18px;margin-top:4px}
+.verdict .row1{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.verdict .vt{font-size:34px;font-weight:700;letter-spacing:-.6px;line-height:41px;margin-top:6px}
+.verdict .vt.none{color:var(--t2)}
+.verdict .tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--t3a);margin-top:2px}
+.verdict .rl{font-size:13px;color:var(--t2);line-height:18px;margin-top:12px}
+.verdict .rt{font-size:15px;line-height:21px;margin-top:2px}
+.verdict .rt.t2{color:var(--t2)}
+.lnk{font-size:15px;font-weight:600;color:var(--t1);display:inline-flex;align-items:center;margin-top:10px}
+.sig{display:flex;gap:12px;align-items:flex-start;padding:13px 0}
+.sig:first-child{padding-top:2px}.sig:last-child{padding-bottom:2px}
+.sig svg{flex:none;margin-top:1px}
+.sig .k{font-size:15px;font-weight:600;line-height:20px}
+.sig .n{font-size:13px;color:var(--t2);line-height:18px;margin-top:2px}
+.sig .w{font-size:13px;font-weight:600;line-height:20px;white-space:nowrap;flex:none}
+.cv .hd{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cv .big{margin-top:6px}
+.cv .big.none{color:var(--t2)}
+.cv svg.wk{display:block;margin-top:10px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.kv .k{font-size:13px;color:var(--t2);line-height:18px}
+.kv .v{font-size:22px;font-weight:600;letter-spacing:-.4px;line-height:28px;margin-top:2px}
+.kv .v small{font-size:13px;color:var(--t2);font-weight:500;letter-spacing:0;margin-left:3px}
+.kv .v.none{color:var(--t2)}
+.proj{margin-top:14px}
+.proj .t{font-size:15px;font-weight:600;line-height:21px;margin-top:2px}
+.proj .t.none{color:var(--t2);font-weight:500}
+.est{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;background:rgba(255,255,255,.08);font-size:11px;font-weight:600;color:var(--t2);margin-left:6px}
+.nrow{display:flex;align-items:center;gap:12px;padding:13px 0}
+.nrow .t{font-size:16px;font-weight:500;flex:1;min-width:0}
+.nrow .val{font-size:15px;color:var(--t2);text-align:right}
+.nrow .chev{font-size:17px}
+.banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:var(--r-tile);background:var(--card2);border:1px solid rgba(255,255,255,.05)}
+.banner .bt{font-size:15px;font-weight:600;line-height:20px}
+.banner .bd{font-size:13px;color:var(--t2);line-height:18px;margin-top:1px}
+.foottext{font-size:12px;color:var(--t3a);line-height:17px;padding:14px calc(var(--gutter) + 2px) 0}
+.empty{text-align:center;padding:26px 18px 22px}
+.empty .et{font-size:20px;font-weight:600;letter-spacing:-.3px;margin-top:12px}
+.empty .ed{font-size:15px;color:var(--t2);line-height:21px;margin:6px 0 18px}
+
+/* Skeleton: same shimmer as noop.css .sk, drawn as real blocks so the layout is the loaded layout. */
+.skb{border-radius:7px;background:linear-gradient(110deg,rgba(255,255,255,.05) 30%,rgba(255,255,255,.12) 50%,rgba(255,255,255,.05) 70%);background-size:250% 100%;animation:shimmer 1.25s linear infinite}
+.static .skb{animation:none;background-position:50% 0}
+
+/* Weigh-in sheet */
+.dim{opacity:.32}
+.wsheet{padding:8px 16px 26px}
+.sbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:44px;font-size:17px}
+.sbar .t{font-weight:600}
+.sbar .stp{justify-self:end;font-size:13px;color:var(--t2)}
+.datechip{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:999px;background:rgba(118,118,128,.24);font-size:15px;font-weight:500;margin-top:6px}
+.datechip.on{background:rgba(255,255,255,.16)}
+.datechip svg{color:var(--t2)}
+.datenote{font-size:13px;color:var(--t2);line-height:18px;margin-top:8px}
+.entry{text-align:center;padding:22px 0 20px}
+.bigin{font-size:64px;font-weight:600;letter-spacing:-2px;line-height:70px;display:inline-flex;align-items:baseline;justify-content:center}
+.bigin small{font-size:22px;font-weight:500;color:var(--t2);letter-spacing:0;margin-left:6px}
+.bigin.ghost{color:var(--t3)}
+.bigin .caret{display:inline-block;width:3px;height:52px;border-radius:2px;background:#F5F5F7;margin:0 2px 0 4px;align-self:center}
+.hint{font-size:13px;color:var(--t2);line-height:18px;margin-top:6px}
+.donerow{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:14px;background:rgba(118,118,128,.18);margin-top:12px;font-size:15px}
+.donerow b{font-weight:600}
+.donerow .ed{margin-left:auto;font-size:13px;font-weight:600;color:var(--t2)}
+.skip{text-align:center;font-size:15px;font-weight:600;color:var(--t1);padding:14px 0 2px}
+.skipnote{text-align:center;font-size:12px;color:var(--t3a);line-height:16px}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:16px}
+.keys span{height:46px;border-radius:8px;background:rgba(255,255,255,.12);display:grid;place-items:center;font-size:24px;font-weight:400}
+.keys span.fn{background:none;font-size:20px;color:var(--t1)}
+.cal{background:rgba(118,118,128,.18);border-radius:16px;padding:12px 12px 10px;margin-top:10px}
+.cal .mh{display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:600;padding:0 4px 8px}
+.cal .mh span{color:var(--t2);font-weight:500;display:inline-flex;gap:14px}
+.cal .g{display:grid;grid-template-columns:repeat(7,1fr);row-gap:2px;text-align:center}
+.cal .g i{font-style:normal;font-size:11px;font-weight:600;color:var(--t3a);padding-bottom:4px}
+.cal .g span{height:34px;display:grid;place-items:center;font-size:16px}
+.cal .g span.o{color:var(--t3)}
+.cal .g span.f{color:var(--t3)}
+.cal .g span.td{font-weight:700}
+.cal .g span.sel b{width:34px;height:34px;border-radius:50%;background:#F5F5F7;color:#000;display:grid;place-items:center;font-weight:600}
+.cal .g span.has{position:relative}
+.cal .g span.has::after{content:"";position:absolute;left:calc(50% - 2px);top:28px;width:4px;height:4px;border-radius:50%;background:var(--t2)}
+.fld{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:14px;border-radius:14px;background:rgba(118,118,128,.18);margin-top:10px}
+.fld .k{font-size:15px;color:var(--t2)}
+.fld .v{font-size:24px;font-weight:600;letter-spacing:-.4px}
+.fld .v small{font-size:15px;color:var(--t2);font-weight:500;margin-left:4px;letter-spacing:0}
+.fld .v.none{font-size:17px;font-weight:500;color:var(--t3a)}
+
+/* History */
+.wkh{display:flex;justify-content:space-between;align-items:baseline;padding:20px calc(var(--gutter) + 2px) 8px;font-size:13px;color:var(--t2)}
+.wkh b{font-weight:600;color:var(--t1);font-size:15px}
+.hrow{display:grid;grid-template-columns:1fr 78px 78px;align-items:center;gap:8px;padding:12px 0}
+.hrow .d{font-size:15px;font-weight:600;line-height:20px}
+.hrow .m{font-size:12px;color:var(--t2);line-height:16px;margin-top:2px}
+.hrow .x{font-size:17px;font-weight:600;text-align:right;line-height:22px}
+.hrow .x small{font-size:12px;color:var(--t2);font-weight:500;margin-left:2px}
+.hrow .x.none{font-size:13px;font-weight:500;color:var(--t3a)}
+.hrow.off .x{color:var(--t2)}
+.colh{display:grid;grid-template-columns:1fr 78px 78px;gap:8px;padding:10px calc(var(--gutter) + 18px) 0;font-size:12px;color:var(--t3a);text-align:right}
+.swipe{display:flex;align-items:stretch;margin:0 -18px}
+.swipe .hrow{flex:1;min-width:0;padding-left:18px;grid-template-columns:1fr}
+.swipe .act{width:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:600}
+.swipe .act.e{background:rgba(118,118,128,.36);color:var(--t1)}
+.swipe .act.x{background:var(--rec-low);color:#fff}
+
+/* Phase settings */
+.gh{font-size:13px;color:var(--t2);padding:22px calc(var(--gutter) + 18px) 8px}
+.gf{font-size:13px;color:var(--t2);padding:8px calc(var(--gutter) + 18px) 0;line-height:18px}
+.notif{display:flex;gap:12px;padding:14px;border-radius:22px;background:rgba(60,60,66,.72);border:1px solid rgba(255,255,255,.06)}
+.notif .ai{width:38px;height:38px;border-radius:9px;background:#000;border:1px solid rgba(255,255,255,.14);display:grid;place-items:center;flex:none}
+.notif .nt{font-size:15px;font-weight:600;line-height:20px}
+.notif .nb{font-size:15px;line-height:20px}
+.notif .nw{font-size:13px;color:var(--t2);margin-left:auto;flex:none}
+
+/* Five-tab bar for placement P3 */
+.tabs5 .tab{font-size:10px}
+
+/* Largest accessibility size (AX5). Same switch as round 5: one column, type scaled, nothing truncates. */
+.ax .navbar{height:auto;flex-wrap:wrap;row-gap:6px;padding-bottom:4px}
+.ax .navbar .ttl{order:3;width:100%;font-size:34px;font-weight:700;line-height:40px}
+.ax .sec{flex-wrap:wrap;gap:4px 12px}.ax .sec h3{font-size:40px;line-height:46px}.ax .sec a{font-size:30px}
+.ax .ycgrid{grid-template-columns:1fr}
+.ax .yc{min-height:0;padding:18px;gap:10px}
+.ax .yc .hd{font-size:30px;gap:10px}.ax .yc .hd b{line-height:36px}.ax .yc .hd svg{width:30px;height:30px}.ax .yc .hd .chev{font-size:30px}
+.ax .yc .v{font-size:46px;line-height:52px}.ax .yc .v small{font-size:28px}.ax .yc .c{font-size:26px;line-height:32px}
+.ax .scc .top{display:block}.ax .scc .top svg.line{display:none}
+.ax .scc .vd{font-size:46px;line-height:52px}.ax .scc .vs{font-size:26px;line-height:32px}
+.ax .scc .sigs{grid-template-columns:1fr;justify-content:start;gap:10px}
+.ax .scc .sg{font-size:28px;line-height:34px;gap:12px}.ax .scc .sg svg{width:32px;height:32px}
+.ax .scc .foot{display:block}.ax .cta{height:auto;min-height:60px;padding:12px 22px;font-size:28px;line-height:34px;margin-top:12px;white-space:normal}
+.ax .phase .nm{font-size:44px;line-height:50px}.ax .phase .meta{font-size:28px;line-height:34px}
+.ax .lab{font-size:28px;line-height:34px}
+.ax .verdict .row1{display:block}.ax .verdict .row1 span{display:block}.ax .verdict .tag svg{width:28px;height:28px}
+.ax .verdict .vt{font-size:52px;line-height:58px}
+.ax .verdict .rl{font-size:28px;line-height:34px}.ax .verdict .rt{font-size:32px;line-height:39px}
+.ax .verdict .tag{font-size:28px;line-height:34px}
+.ax .lnk{font-size:32px;line-height:38px}
+.ax .sig{display:block;padding:18px 0}.ax .sig svg{width:40px;height:40px}
+.ax .sig .k{font-size:32px;line-height:38px;margin-top:6px}.ax .sig .n{font-size:28px;line-height:34px}.ax .sig .w{font-size:28px;line-height:34px;margin-top:4px;white-space:normal}
+.ax .cv .hd{display:block}
+.ax .big{font-size:64px}.ax .big small{font-size:30px}
+.ax .src{font-size:26px;line-height:32px}.ax .src i{width:9px;height:9px}
+.ax .kv{grid-template-columns:1fr}.ax .kv .k{font-size:28px;line-height:34px}.ax .kv .v{font-size:44px;line-height:50px}.ax .kv .v small{font-size:28px}
+.ax .proj .t{font-size:32px;line-height:39px}
+.ax .est{height:auto;font-size:24px;padding:2px 12px;margin-left:0}
+.ax .nrow{flex-wrap:wrap}.ax .nrow .t{font-size:32px;line-height:38px;flex-basis:100%}.ax .nrow .val{font-size:28px;line-height:34px;text-align:left}.ax .nrow .chev{font-size:30px;margin-left:auto}
+.ax .foottext{font-size:26px;line-height:32px}
+.ax .sbar{display:flex;flex-wrap:wrap;height:auto;justify-content:space-between;gap:4px 12px;font-size:30px;line-height:38px}
+.ax .sbar .t{order:3;width:100%;font-size:34px;line-height:40px}.ax .sbar .stp{font-size:26px}
+.ax .datechip{height:auto;padding:10px 18px;font-size:30px;line-height:36px;border-radius:24px}.ax .datechip svg{width:30px;height:30px;flex:none}
+.ax .bigin{font-size:92px;line-height:100px}.ax .bigin small{font-size:40px}.ax .bigin .caret{height:76px;width:4px}
+.ax .hint{font-size:28px;line-height:34px}
+.ax .btn{height:auto;min-height:76px;padding:16px 22px;font-size:32px;line-height:38px;text-align:center;border-radius:38px}
+.ax .skip{font-size:30px;line-height:36px;padding:20px 0 4px}.ax .skipnote{font-size:26px;line-height:32px}
+.ax .keys span{height:58px;font-size:30px}
+.note{font-size:12px;color:var(--t2);background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.14);border-radius:14px;padding:10px 12px;line-height:17px}
+.note b{color:var(--t1);font-weight:600}
