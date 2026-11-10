@@ -561,7 +561,7 @@ public enum CutScorecard {
         let evidenceStartDay = judged.map { evidenceStart(judgedWeek: $0.week, p) }
         let judgedWeekStart = judged.map { dayKey($0.week * 7) }
 
-        // SPEC-NOTE: §7.2 states the overdue rule under an active phase only. It is applied here without
+        // §18 R6: §7.2 states the overdue rule under an active phase only. It is applied here without
         // a phase as well (rate nil, and the waist, lift and protein signals unknown, with
         // `.weighInOverdue`), because a signal about a stale week is not a current statement whether or
         // not a phase exists. The rate-band signal, the rules, the projection and the verdict still
@@ -590,14 +590,14 @@ public enum CutScorecard {
                                                      percentPerWeek: nil,
                                                      lowPercentPerWeek: activePhase?.rateLowPercentPerWeek,
                                                      highPercentPerWeek: activePhase?.rateHighPercentPerWeek))
-            // SPEC-NOTE: §7.8 has no status for "an active phase with no in-phase weigh-in" (§7.2 says
+            // §18 R8: §7.8 has no status for "an active phase with no in-phase weigh-in" (§7.2 says
             // "everything else is unknown(.noReadings)", and the projection has no such case). The list
             // is followed in order with no weight to evaluate: `noTarget` without a target, otherwise
             // `rateUnknown`, the first later status that is true.
             let projection: CutScorecardProjection
             if let phase = activePhase {
                 if let judged = judged {
-                    // SPEC-NOTE: §6.4 sets `remainingKg` "whenever a phase target and a current weight
+                    // §18 R9: §6.4 sets `remainingKg` "whenever a phase target and a current weight
                     // exist", so it is reported while overdue too, although §7.8 computes it after the
                     // overdue status.
                     projection = CutScorecardProjection(
@@ -674,6 +674,7 @@ public enum CutScorecard {
             }
             if let reference = reference {
                 let change = quantize(current.value - reference.point.value)
+                // §18 R14: a minimum of zero is valid and makes an unchanged waist `met`.
                 let shrinking = change <= -quantize(p.waistMinDecreaseCm)
                 waistSignal = CutScorecardWaistSignal(state: shrinking ? .met : .notMet,
                                                       reason: shrinking ? .shrinking : .notShrinking,
@@ -725,7 +726,7 @@ public enum CutScorecard {
         let rateBandSignal: CutScorecardRateBandSignal
         if let phase = activePhase {
             if let rate = rate {
-                // SPEC-NOTE: §7.5 item 4 writes the band comparison on the raw bounds; §7.1 step 2 says
+                // §18 R10: §7.5 item 4 writes the band comparison on the raw bounds; §7.1 step 2 says
                 // every threshold comparison compares quantized values. The bounds are quantized here.
                 let low = quantize(phase.rateLowPercentPerWeek)
                 let high = quantize(phase.rateHighPercentPerWeek)
@@ -788,17 +789,22 @@ public enum CutScorecard {
             let first = startsBeforeDomain ? domainStart : j - (required - 1)
             var anyHolding = false, allDropping = true, anyMissed = false
             var run = 0, runOpen = true
+            // §18 R1: the run is not capped at the window. The scan covers the window, then continues
+            // back while the run is unbroken. It never leaves the domain, so it is bounded by the
+            // number of weeks between the phase start and the judged week.
             var w = j
-            while w >= first {
+            while w >= domainStart && (w >= first || runOpen) {
                 var status = CutScorecardSignalState.unknown
                 if let point = weightByWeek[w] {
                     status = w == j ? liftSignal.state
                                     : liftSignalForWeek(anchor: point.day, liftsByDay: liftsByDay, p).state
-                } else {
+                } else if w >= first {
                     anyMissed = true
                 }
-                if status == .met { anyHolding = true }
-                if status != .notMet { allDropping = false }
+                if w >= first {
+                    if status == .met { anyHolding = true }
+                    if status != .notMet { allDropping = false }
+                }
                 if runOpen { if status == .notMet { run += 1 } else { runOpen = false } }
                 w -= 1
             }
@@ -825,17 +831,19 @@ public enum CutScorecard {
             let threshold = quantize(p.slowLossThresholdKgPerWeek)
             var anyAtOrAbove = false, allKnown = true
             var run = 0, runOpen = true
+            // §18 R1: as for rule 2, the run continues past the window while it is unbroken, and stops
+            // inside the domain (the baseline week has no weekly loss).
             var w = j
-            while w >= first {
+            while w >= domainStart && (w >= first || runOpen) {
                 if let loss = lossByWeek[w] {
                     if loss >= threshold {
-                        anyAtOrAbove = true
+                        if w >= first { anyAtOrAbove = true }
                         runOpen = false
                     } else if runOpen {
                         run += 1
                     }
                 } else {
-                    allKnown = false
+                    if w >= first { allKnown = false }
                     runOpen = false
                 }
                 w -= 1
@@ -905,7 +913,7 @@ public enum CutScorecard {
                     status = .notLosing
                 } else {
                     let weeksLeft = remaining / rate.lossKgPerWeek
-                    // SPEC-NOTE: §7.8 step 7 compares the raw quotient with the horizon; §7.1 step 2
+                    // §18 R10: §7.8 step 7 compares the raw quotient with the horizon; §7.1 step 2
                     // says every threshold comparison compares quantized values. The quotient is
                     // quantized for this comparison only; the reported `weeksRemaining` is the raw one.
                     if !weeksLeft.isFinite || quantize(weeksLeft) > Double(p.maxProjectionWeeks) {
@@ -913,7 +921,7 @@ public enum CutScorecard {
                     } else {
                         var daysNeeded = quantize(weeksLeft * 7).rounded(.up)
                         if daysNeeded < 1 { daysNeeded = 1 }
-                        // SPEC-NOTE: with an absurd `maxProjectionWeeks` the projected day can lie past
+                        // §18 R11: with an absurd `maxProjectionWeeks` the projected day can lie past
                         // the last representable day key (9999-12-31). §7.8 does not cover it; it is
                         // reported as `beyondHorizon` rather than as a date that cannot be written.
                         if daysNeeded > Double(lastDayNumber - anchor) {
@@ -962,11 +970,11 @@ public enum CutScorecard {
     /// disagree on halves across platforms. The Kotlin twin implements this expression.
     public static func quantize(_ x: Double) -> Double {
         let scaled = abs(x) * 1000 + 0.5
-        // SPEC-NOTE: §7.1's expression overflows to infinity for magnitudes above about 1.8e305. Such a
+        // §18 R4: §7.1's expression overflows to infinity for magnitudes above about 1.8e305. Such a
         // value has no fractional part to round, so it is returned unchanged. NaN is returned as NaN.
         guard scaled.isFinite else { return x }
         let magnitude = scaled.rounded(.down) / 1000
-        // SPEC-NOTE: the expression yields negative zero for a small negative input. Positive zero is
+        // §18 R4: the expression yields negative zero for a small negative input. Positive zero is
         // returned instead, so a formatted result (the parity oracle prints "%.6f") cannot differ by
         // sign alone.
         if magnitude == 0 { return 0 }
@@ -1004,14 +1012,14 @@ public enum CutScorecard {
         var future = 0
     }
 
-    // SPEC-NOTE: §6.5 rejects only NaN and infinity as `nonFinite`. A finite value above this magnitude
-    // is rejected under the same counter, because the sums and products of §7.4 would otherwise overflow
+    // §18 R3: §6.5 names only NaN and infinity as `nonFinite`. A finite value above this magnitude is
+    // rejected under the same counter (and a parameter or phase bound above it is invalid input), because the sums and products of §7.4 would otherwise overflow
     // to infinity or NaN and reach the output. It is an arithmetic limit, not a plausibility range: it
     // lies some ninety orders of magnitude above any quantity the units of §6.2 can describe.
     /// The largest reading magnitude the arithmetic accepts.
     private static let largestValueMagnitude = 1e100
 
-    // SPEC-NOTE: §6.1 names the day key "yyyy-MM-dd" without saying whether `WeeklyDigestEngine.parseYMD`'s
+    // §18 R5: §6.1 names the day key "yyyy-MM-dd" without saying whether `WeeklyDigestEngine.parseYMD`'s
     // looser forms ("2031-1-8", "+2031-01-08") are valid. Only the canonical ten-character form in years
     // 0001 to 9999 is accepted, so that a day has exactly one key, string and calendar order agree, and
     // the integer date arithmetic (Sakamoto's weekday, the Julian Day Number) stays inside the range in
@@ -1053,8 +1061,12 @@ public enum CutScorecard {
     private static func parametersAreValid(_ p: CutScorecardParameters) -> Bool {
         guard p.waistMinDecreaseCm.isFinite, p.liftDropTolerancePercent.isFinite, p.liftDropShare.isFinite,
               p.slowLossThresholdKgPerWeek.isFinite, p.targetToleranceKg.isFinite else { return false }
+        // §18 R3: a Double parameter above the arithmetic limit is invalid input.
+        guard abs(p.waistMinDecreaseCm) <= largestValueMagnitude,
+              abs(p.slowLossThresholdKgPerWeek) <= largestValueMagnitude,
+              abs(p.targetToleranceKg) <= largestValueMagnitude else { return false }
         if let floor = p.proteinFloorGrams {
-            guard floor.isFinite, floor > 0 else { return false }
+            guard floor.isFinite, floor > 0, floor <= largestValueMagnitude else { return false }
         }
         guard p.rateWindowWeeks >= 1, p.waistWindowWeeks >= 1, p.liftDropConsecutiveWeeks >= 1,
               p.slowLossConsecutiveWeeks >= 1, p.maxWeighInAgeWeeks >= 0, p.maxProjectionWeeks >= 1
@@ -1070,10 +1082,12 @@ public enum CutScorecard {
     private static func phaseIsValid(_ phase: CutScorecardPhase) -> Bool {
         guard dayNumber(phase.startDay) != nil else { return false }
         if let target = phase.targetWeightKg {
-            guard target.isFinite, target > 0 else { return false }
+            guard target.isFinite, target > 0, target <= largestValueMagnitude else { return false }
         }
+        // §18 R3: a target or band bound above the arithmetic limit is invalid input.
         let low = phase.rateLowPercentPerWeek, high = phase.rateHighPercentPerWeek
         return low.isFinite && high.isFinite && low >= 0 && high >= 0 && low <= high
+            && high <= largestValueMagnitude
     }
 
     /// §7.5 item 2: the lift status of a week whose representative weigh-in fell on `anchor`.
@@ -1119,7 +1133,7 @@ public enum CutScorecard {
             }
         }
         if common == 0 { return unknown(.noCommonExercises) }
-        // SPEC-NOTE: §7.5 writes `dropped ÷ common >= liftDropShare` on raw values; §7.1 step 2 says
+        // §18 R10: §7.5 writes `dropped ÷ common >= liftDropShare` on raw values; §7.1 step 2 says
         // every threshold comparison compares quantized values. Both sides are quantized, so a share of
         // one third meets a configured 0.333.
         let dropping = dropped >= 1 && quantize(Double(dropped) / Double(common)) >= quantize(p.liftDropShare)
@@ -1128,12 +1142,12 @@ public enum CutScorecard {
                                       windowStartDay: windowStart, windowEndDay: windowEnd)
     }
 
-    // SPEC-NOTE: §7.9 claims nothing dated before this day changes anything but `weeks`. Two parts of §7
-    // contradict that claim and are implemented as written: §7.4 chooses `.singleReading` or
-    // `.gapLongerThanWindow` by whether ANY older in-phase weight exists, and §7.5 chooses `.noLiftData`
-    // by whether ANY valid lift observation exists. An item older than this day can therefore change
-    // `rateUnavailable` or the lift reason (never a state, a rule or the verdict).
-    // SPEC-NOTE: with an absurd window parameter the formula of §7.9 lies before 0001-01-01, which has
+    // §18 R2: an item dated before this day never changes a signal state, a rule state, the verdict,
+    // the rate or the projection. It may change `weeks`; `rateUnavailable` (§7.4 chooses
+    // `.singleReading` or `.gapLongerThanWindow` by whether ANY older in-phase weight exists); the lift
+    // reason (§7.5 chooses `.noLiftData` by whether ANY valid lift observation exists); and
+    // `consecutiveWeeks`, whose run is not capped (§18 R1).
+    // §18 R11: with an absurd window parameter the formula of §7.9 lies before 0001-01-01, which has
     // no day key. It is clamped to "0001-01-01"; no valid item can be dated earlier.
     /// §7.9: `J − 7 × (m + 2)` days, `m` the widest window.
     private static func evidenceStart(judgedWeek: Int, _ p: CutScorecardParameters) -> String {
@@ -1162,7 +1176,7 @@ public enum CutScorecard {
                             overriddenRules: [], unevaluatedRules: [])
     }
 
-    // SPEC-NOTE: §6.5 does not say what the invalid result's echoed parameter fields hold.
+    // §18 R13: §6.5 does not say what the invalid result's echoed parameter fields hold.
     // `requiredWeeks` and `requiredDays` echo the parameters as given (integers, possibly the invalid
     // ones); `floorGrams` echoes the floor only when it is finite and positive, so no NaN or infinity
     // reaches the output. `currentWeightKg`, `judgedWeekStart` and `evidenceStartDay` are nil.
