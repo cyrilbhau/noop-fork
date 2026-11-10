@@ -22,6 +22,10 @@
       "command": "import"
     },
     {
+      "name": "Import round 6 frames",
+      "command": "import6"
+    },
+    {
       "name": "Repair imported rings",
       "command": "repair"
     }
