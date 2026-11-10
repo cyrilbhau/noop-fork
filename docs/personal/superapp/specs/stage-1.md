@@ -1628,11 +1628,35 @@ Work proceeds on each recommendation. None of these leaves the algorithm undecid
 
 ## 17. Design approval record (G1)
 
-To be completed by the orchestrator when the owner approves the frames.
+**Approved to proceed by the owner on 10 November 2026**, in the conversation, after the frames were
+imported to the Figma page "Round 6 · Scorecard (Stage 1)" (61 frames, from
+`design/round6-scorecard/`, commit `72189fed`). The owner's words: the basics look right, go ahead
+with implementation, and details will be edited in flight afterwards. This is approval of the
+direction and the frame set, not a sign-off of every string; wording and details remain open to the
+owner's changes, which are made in the HTML source first and re-imported.
 
-| Frame | Page | Approved on |
+The owner did not choose between the options offered, so the recommendations stand until changed:
+
+| Decision | In force |
+|---|---|
+| Placement | P1: a Today card outside the default card selection, plus a row in the Health tab (frames P1.1 to P1.4) |
+| Lift signal unknown | As drawn in B14, B15 and B16: the verdict names the rule it could not check |
+| Signal colours | Met: Recovery green. Not met: Recovery mid amber. Unknown: neutral grey, dashed ring. Red for Delete only |
+| Wording | The §11 strings and the designer's proposals in the round 6 README, as drawn |
+| Reminder | Title "Weekly weigh-in", body "Weight, then waist. It takes under a minute." Off by default |
+
+| Frames | Page | Approved on |
 |---|---|---|
-| — | — | — |
+| A1 to A4 (entry card) | Round 6 · Scorecard (Stage 1) | 10 November 2026 |
+| B1 to B27 (scorecard) | Round 6 · Scorecard (Stage 1) | 10 November 2026 |
+| C1 to C10 (weigh-in sheet) | Round 6 · Scorecard (Stage 1) | 10 November 2026 |
+| D1 to D5 (history) | Round 6 · Scorecard (Stage 1) | 10 November 2026 |
+| E1 to E4 (phase and rules) | Round 6 · Scorecard (Stage 1) | 10 November 2026 |
+| F1 to F4 (settings and reminder) | Round 6 · Scorecard (Stage 1) | 10 November 2026 |
+| P1.1 to P1.4 (placement in force); P2, P3 not built | Round 6 · Scorecard (Stage 1) | 10 November 2026 |
+
+Not verified at approval: which font the import used, and how each frame rendered in Figma (the
+session could not see the Figma window).
 
 ## 18. Rulings after independent tests and implementation (10 November 2026)
 
