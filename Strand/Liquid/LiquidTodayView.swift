@@ -72,7 +72,7 @@ struct LiquidTodayView: View {
     private var stepsEst: Double? { dayModel.stepsEst }
     private var importedStepsDay: Int? { dayModel.importedStepsDay }
     private var importedActiveKcalDay: Double? { dayModel.importedActiveKcalDay }
-    private var weightKg: Double? { dayModel.weightKg }
+    private var bodyWeight: ResolvedBodyMeasurement? { dayModel.bodyWeight }
     private var hrValues: [Double] { dayModel.hrValues }
     /// Line identity for [hrValues], from the bucket timestamps this used to discard (#2082).
     ///
@@ -1258,7 +1258,7 @@ struct LiquidTodayView: View {
             ktile(String(localized: "Steps"), icon: keyMetricIcon(metric), stepsText, "", StrandPalette.chargeColor,
                   fracOver(stepCount, 10000), key: stepsDetailKey, detailMetric: stepsDetailMetric)
         case .weight:
-            let (val, cap) = weightTile(weightKg)
+            let (val, cap) = weightTile(bodyWeight)
             ktile(String(localized: "Weight"), icon: keyMetricIcon(metric), val, "", StrandPalette.metricAmber, nil, key: "weight", caption: cap)
         case .calories:
             // #616: imported-first value (imported ?: activeKcalEst) + route the tap to the matching
@@ -1610,11 +1610,12 @@ struct LiquidTodayView: View {
     /// The Weight tile's display string + an honest caption ("from profile" only on the fallback).
     /// Always formatted through the shared `UnitFormatter` so the Imperial/Metric toggle reaches this
     /// tile. Mirrors the classic TodayView's `weightTile`.
-    private func weightTile(_ appleWeightKg: Double?) -> (value: String, caption: String) {
-        if let kg = appleWeightKg {
-            return (UnitFormatter.massFromKilograms(kg, system: unitSystem), String(localized: "latest"))
-        }
-        return (UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem), String(localized: "from profile"))
+    /// `dated` is the reading the day model resolved through `BodyMeasurementProvider`; without one
+    /// the provider supplies the profile value as it is now.
+    private func weightTile(_ dated: ResolvedBodyMeasurement?) -> (value: String, caption: String) {
+        let shown = BodyMeasurementProvider.live(repository: repo, profile: profile).displayWeightValue(dated)
+        let caption = dated != nil ? String(localized: "latest") : String(localized: "from profile")
+        return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
     }
 
     private func workoutSub(_ w: WorkoutRow) -> String {
@@ -2943,7 +2944,9 @@ final class TodayDayModel: ObservableObject {
     @Published var stepsEst: Double?           // steps_est, day-keyed to the selected day (fallback)
     @Published var importedStepsDay: Int?      // Apple Health steps for the selected day (middle tier)
     @Published var importedActiveKcalDay: Double?  // #616: Apple Health active energy for the day
-    @Published var weightKg: Double?           // #204: Apple Health weight ?: profile fallback
+    /// #204: the dated weight the selected day resolves to through `BodyMeasurementProvider`; nil
+    /// means the tile falls back to the profile value.
+    @Published var bodyWeight: ResolvedBodyMeasurement?
     @Published var hrValues: [Double] = []     // hrBuckets since midnight → 5-min means
     /// Line identity for [hrValues], from the bucket timestamps (#2082).
     @Published var hrSegments: [String] = []
@@ -3127,7 +3130,10 @@ final class TodayDayModel: ObservableObject {
         async let stepsA = repo.exploreSeries(key: "steps_est", source: "my-whoop")
         // Queue 11a: SpO₂ candidate fallback (see `spo2CandidateByDay`'s declaration).
         async let spo2CandA = repo.exploreSeries(key: "spo2_candidate", source: "my-whoop")
-        async let weightA = repo.series(key: "weight", source: "apple-health", days: 91)
+        // Stage 1 specification §8.4, ruling R26: the weight read belongs to the provider. This view's
+        // window is 91 days and its as-of day is the selected day.
+        let bodyMeasurements = BodyMeasurementProvider.live(repository: repo, profile: profile)
+        async let weightA = bodyMeasurements.displayWeightSeries(days: 91)
         async let appleA = repo.appleDailyRows()
         async let hrA = repo.hrBuckets(from: from, to: to, bucketSeconds: 300)
         async let wkA = repo.workoutRows()
@@ -3213,7 +3219,7 @@ final class TodayDayModel: ObservableObject {
                 .map { ($0.day, $0.value) },
             "sleep_performance": restSeries.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey(repo: repo) }
                 .map { ($0.day, $0.value) },
-            "weight": (await weightA).filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey(repo: repo) },
+            "weight": (await weightA).points.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey(repo: repo) },
         ]
         let stressReadings = await Task.detached(priority: .utility) {
             let model = StressModel(days: daysSnapshot, stored: storedStress)
@@ -3243,13 +3249,14 @@ final class TodayDayModel: ObservableObject {
         // HR estimate for the day, so the tile/card/detail agree (imported-first, mirrors steps).
         importedActiveKcalDay = (await appleA).filter { $0.day == selectedDayKey(repo: repo) }.compactMap { $0.activeKcal }.max()
 
-        // Weight for the SELECTED day: prefers a real Apple-Health reading (today's daily, else the
-        // "weight" series' newest point so a sparse-but-recent value still renders). Falls back to the
-        // user's profile weight in the renderer (weightTile).
+        // Weight for the SELECTED day, resolved by the provider. With the scorecard flag off that is
+        // a real Apple-Health reading (the day's daily, else the "weight" series' newest point on or
+        // before it, so a sparse-but-recent value still renders). Falls back to the user's profile
+        // weight in the renderer (weightTile).
         let appleRows = await appleA
         let weightSeries = await weightA
-        weightKg = appleRows.filter { $0.day == selectedDayKey(repo: repo) }.compactMap { $0.weightKg }.max()
-            ?? weightSeries.last(where: { $0.day <= selectedDayKey(repo: repo) })?.value
+        bodyWeight = bodyMeasurements.displayWeight(from: weightSeries, asOf: .day(selectedDayKey(repo: repo)),
+                                                    appleRows: appleRows)
 
         // Awaited ONCE: the timestamps and the means have to come from the same read, or the segments
         // would describe a different series than the one drawn.

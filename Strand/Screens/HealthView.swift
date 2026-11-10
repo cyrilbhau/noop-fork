@@ -723,6 +723,10 @@ private struct FitnessAgeSection: View {
     @EnvironmentObject var profile: ProfileStore
     /// Drives the not-ready card's "refresh Fitness Age" button (force an immediate recompute).
     @EnvironmentObject var intelligence: IntelligenceEngine
+    /// Body weight and waist come from the one resolver (stage 1 specification §8.4), not the profile.
+    private var bodyMeasurements: BodyMeasurementProvider {
+        BodyMeasurementProvider.live(repository: repo, profile: profile)
+    }
 
     /// Latest weekly Fitness Age (years) read from the "fitness_age" metricSeries, nil until loaded/computed.
     @State private var fitnessAge: Double?
@@ -765,8 +769,8 @@ private struct FitnessAgeSection: View {
             hasSex: !profile.sex.isEmpty,
             rhrDays: rhrDays,
             activityDays: activityDays,
-            hasHeightWeight: profile.heightCm > 0 && profile.weightKg > 0,
-            hasWaist: profile.waistCm > 0)
+            hasHeightWeight: profile.heightCm > 0 && bodyMeasurements.estimateWeightKg() > 0,
+            hasWaist: bodyMeasurements.estimateWaistCm() > 0)
     }
 
     /// The not-ready card's lead — delegates to the file-scope `fitnessReadyLeadCopy(rhrDays:hasAge:hasSex:)`,
@@ -804,7 +808,7 @@ private struct FitnessAgeSection: View {
             heroCard(age: age)
             // Nudge on WAIST being unset (the sole gate). VO₂max is already shown (the Uth fallback), so
             // the prompt offers to sharpen it to the Nes waist-based estimate, not to reveal a missing number.
-            if profile.waistCm <= 0 { vo2maxSharpenPrompt }
+            if bodyMeasurements.estimateWaistCm() <= 0 { vo2maxSharpenPrompt }
             if showReadiness {
                 ReadinessChecklistCard(readiness: readiness,
                                        lead: nil,

@@ -25,6 +25,9 @@ final class IntelligenceEngine: ObservableObject {
     private let dayCycleCache = DayCycleIntelligenceIntegration.Cache()
     private let repo: Repository
     private let profile: ProfileStore
+    /// The one source of body weight and waist for the estimates (stage 1 specification §8.4). With
+    /// the scorecard flag off it returns the profile value as it is at the moment of each call.
+    private let bodyMeasurements: BodyMeasurementProvider
     /// The CANONICAL id under whose `-noop` sibling this engine WRITES the computed daily rows, and from
     /// which it reads the imported-only baseline (`hist`). STABLE on "my-whoop", it must NOT follow the
     /// active strap, or a remove+re-add would orphan the computed history banked under the canonical id
@@ -303,6 +306,7 @@ final class IntelligenceEngine: ObservableObject {
 
     init(repo: Repository, profile: ProfileStore, deviceId: String) {
         self.repo = repo; self.profile = profile; self.deviceId = deviceId
+        self.bodyMeasurements = BodyMeasurementProvider.live(repository: repo, profile: profile)
     }
 
     // NOTE (#814 union-model follow-up): the engine intentionally has NO `adoptActiveDeviceId`. Its write
@@ -633,14 +637,17 @@ final class IntelligenceEngine: ObservableObject {
         let oldestDay = AnalyticsEngine.dayString(nowLocalMidnight - (maxDays - 1) * 86_400, offsetSec: tzOffset)
         let gate7 = Array((await repo.dailyMetrics(fromDay: oldestDay, toDay: newestDay))
             .sorted { $0.day < $1.day }.suffix(7))
+        // One read of each, here, feeds both the rows and their provenance.
+        let waistCm = bodyMeasurements.estimateWaistCm()
+        let weightKg = bodyMeasurements.estimateWeightKg()
         let rows = Self.fitnessAgeRows(
-            gateDays: gate7, age: profile.age, sex: profile.sex, waistCm: profile.waistCm,
-            heightCm: profile.heightCm, weightKg: profile.weightKg, computedId: computedId,
+            gateDays: gate7, age: profile.age, sex: profile.sex, waistCm: waistCm,
+            heightCm: profile.heightCm, weightKg: weightKg, computedId: computedId,
             satKey: Self.saturdayKey(onOrBefore: newestDay))
         if !rows.isEmpty {
             try? await store.persistMetricSeriesWithProvenance(
                 points: rows,
-                provenance: Self.vo2MaxProvenance(points: rows, waistCm: profile.waistCm),
+                provenance: Self.vo2MaxProvenance(points: rows, waistCm: waistCm),
                 deviceId: computedId
             )
         }
@@ -894,7 +901,7 @@ final class IntelligenceEngine: ObservableObject {
         // Kotlin post-offload gate makes the same point in its own words: "captured before the run,
         // written only on success".
         let owedToken = RescoreBackgroundScheduler.markRescoreOwed(passStarting: true)
-        let up = UserProfile(weightKg: profile.weightKg, heightCm: profile.heightCm,
+        let up = UserProfile(weightKg: bodyMeasurements.estimateWeightKg(), heightCm: profile.heightCm,
                              age: Double(profile.age), sex: profile.sex,
                              stepTicksPerStep: profile.stepTicksPerStep)
 
@@ -2611,14 +2618,17 @@ final class IntelligenceEngine: ObservableObject {
         for d in faPriorDaily { faGateByDay[d.day] = d }
         for d in dailies { faGateByDay[d.day] = d }
         let faGate7 = Array(faGateByDay.values.sorted { $0.day < $1.day }.suffix(7))
+        // One read of each, here, feeds both the rows and their provenance.
+        let faWaistCm = bodyMeasurements.estimateWaistCm()
+        let faWeightKg = bodyMeasurements.estimateWeightKg()
         let faPts = Self.fitnessAgeRows(
-            gateDays: faGate7, age: profile.age, sex: profile.sex, waistCm: profile.waistCm,
-            heightCm: profile.heightCm, weightKg: profile.weightKg, computedId: computedId,
+            gateDays: faGate7, age: profile.age, sex: profile.sex, waistCm: faWaistCm,
+            heightCm: profile.heightCm, weightKg: faWeightKg, computedId: computedId,
             satKey: IntelligenceEngine.saturdayKey(onOrBefore: newestDay))
         if !faPts.isEmpty {
             try? await store.persistMetricSeriesWithProvenance(
                 points: faPts,
-                provenance: Self.vo2MaxProvenance(points: faPts, waistCm: profile.waistCm),
+                provenance: Self.vo2MaxProvenance(points: faPts, waistCm: faWaistCm),
                 deviceId: computedId
             )
         }

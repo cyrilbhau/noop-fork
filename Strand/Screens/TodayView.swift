@@ -324,6 +324,9 @@ struct TodayView: View {
     }
     @State private var workoutDetail: WorkoutDetailTarget?
     @State private var appleDays: [AppleDaily] = []
+    /// The dated weight the Weight tile shows, resolved through `BodyMeasurementProvider` (stage 1
+    /// specification §8.4). Nil means the tile falls back to the profile value.
+    @State private var weightReading: ResolvedBodyMeasurement?
     // Design Reset / #582, the pinned "Your cards" values (Stress / Fitness age / Vitality), surfaced
     // on Today so the buried Explore features sit on the home screen. Loaded in loadAll; nil hides the row.
     @State private var stressToday: Double?
@@ -4133,8 +4136,8 @@ struct TodayView: View {
         case .weight:
             StatTile(
                 label: "Weight",
-                value: weightTile(aLatest?.weightKg).value,
-                caption: weightTile(aLatest?.weightKg).caption,
+                value: weightTile(weightReading).value,
+                caption: weightTile(weightReading).caption,
                 accent: StrandPalette.accent,
                 sparkline: sparks["weight"],
                 sparkColor: StrandPalette.accent
@@ -4691,7 +4694,10 @@ struct TodayView: View {
         // trend. "my-whoop" covers imported WHOOP CSV (Layer 1) + computed DailyMetric (Layer 3).
         async let respRateSpark      = sparkValuesExplore("resp_rate", source: "my-whoop", window: 14)
         async let stepsAppleSpark    = sparkValues("steps", source: "apple-health", window: 14)
-        async let weightSpark        = sparkValues("weight", source: "apple-health", window: 90)
+        // Stage 1 specification §8.4, ruling R26: the weight read belongs to the provider. This view's
+        // window is the trailing 90 days (read as 91, exactly as `sparkValues` reads) and its tile
+        // shows the latest reading whichever day is selected.
+        async let weightSeriesA      = bodyMeasurements.displayWeightSeries(days: 91, trailingDays: 90)
         async let activeKcalSpark    = sparkValues("active_kcal", source: "apple-health", window: 14)
 
         sparks["recovery"]        = await recoverySpark
@@ -4710,7 +4716,8 @@ struct TodayView: View {
         // must run AFTER sparks["steps"] is assigned from the Apple-Health read above (unchanged order).
         let strapSteps = repo.days.suffix(14).compactMap { $0.steps.map(Double.init) }
         if !strapSteps.isEmpty { sparks["steps"] = strapSteps }
-        sparks["weight"]      = await weightSpark
+        let weightSeries = await weightSeriesA
+        sparks["weight"]      = weightSeries.points.map { $0.value }
         sparks["active_kcal"] = await activeKcalSpark
 
         // Steps ESTIMATE per day (WHOOP 4.0 motion → calibrated steps), the Mi-Band series, workout +
@@ -4748,6 +4755,7 @@ struct TodayView: View {
 
         workouts = await workoutsA
         appleDays = await appleDaysA
+        weightReading = bodyMeasurements.displayWeight(from: weightSeries, asOf: .latest, appleRows: appleDays)
         // Mi Band (Mi Fitness import), distinct days across its representative metric keys.
         let xSteps = await xStepsA
         let xSleep = await xSleepA
@@ -4783,6 +4791,7 @@ struct TodayView: View {
             stepsEstByDay: stepsEstByDay,
             workouts: workouts,
             appleDays: appleDays,
+            weightReading: weightReading,
             xiaomiDays: xiaomiDays,
             xiaomiSleeps: xiaomiSleeps,
             stressToday: stressToday,
@@ -4802,6 +4811,7 @@ struct TodayView: View {
         stepsEstByDay = c.stepsEstByDay
         workouts = c.workouts
         appleDays = c.appleDays
+        weightReading = c.weightReading
         xiaomiDays = c.xiaomiDays
         xiaomiSleeps = c.xiaomiSleeps
         stressToday = c.stressToday
@@ -5209,11 +5219,17 @@ struct TodayView: View {
     /// sparse-but-recent value still renders); when neither carries a weight, falls back to the user's
     /// self-reported profile weight instead of ", " (#204). Always formatted through the shared
     /// `UnitFormatter` so the Imperial/Metric toggle reaches this tile. Mirrors Android's `weightTile`.
-    private func weightTile(_ appleWeightKg: Double?) -> (value: String, caption: String) {
-        if let kg = appleWeightKg ?? sparks["weight"]?.last {
-            return (UnitFormatter.massFromKilograms(kg, system: unitSystem), String(localized: "latest"))
-        }
-        return (UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem), String(localized: "from profile"))
+    /// `dated` is the reading `loadHistoryWide` resolved through `BodyMeasurementProvider`; without one
+    /// the provider supplies the profile value as it is now.
+    private func weightTile(_ dated: ResolvedBodyMeasurement?) -> (value: String, caption: String) {
+        let shown = bodyMeasurements.displayWeightValue(dated)
+        let caption = dated != nil ? String(localized: "latest") : String(localized: "from profile")
+        return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
+    }
+
+    /// The one source of body weight and waist for this view.
+    private var bodyMeasurements: BodyMeasurementProvider {
+        BodyMeasurementProvider.live(repository: repo, profile: profile)
     }
 
     // MARK: - Derived text
@@ -5456,6 +5472,9 @@ struct TodayHistoryWideCache {
     let stepsEstByDay: [String: Int]
     let workouts: [WorkoutRow]
     let appleDays: [AppleDaily]
+    /// The Weight tile's dated reading, resolved from `appleDays` and the weight spark of this same
+    /// load, so a restore cannot pair one load's rows with another's reading.
+    let weightReading: ResolvedBodyMeasurement?
     let xiaomiDays: Int
     let xiaomiSleeps: Int
     let stressToday: Double?

@@ -606,11 +606,14 @@ struct RedesignTodayView: View {
         }
         switch metric {
         case .weight:
-            let kg = dayModel.weightKg
+            // Resolved through the one body-measurement provider (stage 1 specification §8.4): the
+            // day model's dated reading, else the profile value as it is now.
+            let dated = dayModel.bodyWeight
+            let shown = BodyMeasurementProvider.live(repository: repo, profile: profile).displayWeightValue(dated)
             return MetricRowContent(
                 title: "Weight", color: NoopTheme.temp,
-                subtitle: kg == nil ? String(localized: "from profile") : String(localized: "latest"),
-                value: UnitFormatter.massFromKilograms(kg ?? profile.weightKg, system: unitSystem), unit: nil,
+                subtitle: dated == nil ? String(localized: "from profile") : String(localized: "latest"),
+                value: UnitFormatter.massFromKilograms(shown.value, system: unitSystem), unit: nil,
                 sparkKey: "weight", route: .metric("weight"))
         default:
             // Score rows retain their existing hero-only presentation; A4 is a separate follow-up.

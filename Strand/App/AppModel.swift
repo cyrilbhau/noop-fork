@@ -60,6 +60,11 @@ final class AppModel: ObservableObject {
     let repo: Repository
     /// User profile (age/sex/body/HR-max) for zones, calories, baselines.
     let profile = ProfileStore()
+    /// The one source of body weight and waist (stage 1 specification §8.4): the instance the
+    /// intelligence engine holds for the app's lifetime, shared by every reader of `repo`.
+    var bodyMeasurements: BodyMeasurementProvider {
+        BodyMeasurementProvider.live(repository: repo, profile: profile)
+    }
     /// Behaviour settings: double-tap action, wear automation, zone coaching, smart alarm, illness watch.
     let behavior = BehaviorStore()
     /// On-device WHOOP-style recovery/strain/sleep computation from raw strap streams.
@@ -1041,7 +1046,7 @@ final class AppModel: ObservableObject {
                                   method: PuffinExperiment.effortMethod, sex: profile.sex) : nil
         // Estimate calories from the captured HR window (same Keytel/Harris–Benedict model the
         // auto-detector uses) so a manual session shows energy too, not just duration/strain. (#117)
-        let up = UserProfile(weightKg: profile.weightKg, heightCm: profile.heightCm,
+        let up = UserProfile(weightKg: bodyMeasurements.estimateWeightKg(), heightCm: profile.heightCm,
                              age: Double(profile.age), sex: profile.sex)
         let kcal = samples.count >= 2
             // #983: same measured resting HR as the strain above, not nil. The calories model's
