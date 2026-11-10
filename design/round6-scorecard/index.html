@@ -9,9 +9,10 @@
 </head>
 <body>
 <div class="controls"><button id="replay">Replay load</button><span>Round 6 · Weigh-in and cut scorecard (Stage 1) · synthetic data only</span></div>
-<p class="legend"><b>Every number here is invented.</b> "Fixture Person" starts a fictional cut at 88.5 kg on Fri 4 Sep 2026 with a target of 80.0 kg. The rule values in the pictures (a 0.4–0.8 kg/week band, a 150 g protein floor, two-week windows) are placeholders, not anyone's real parameters. Signal states use three existing tokens: <b style="color:var(--recovery)">met</b> is the Recovery green, <b style="color:var(--rec-mid)">not met</b> is the Recovery mid amber, <b style="color:#8A8A93">unknown</b> is neutral grey with the dashed "not measured" ring. Each state also has its own shape and word, so colour is never the only carrier. Frames are built by <code>scorecard.js</code>; see <code>README.md</code> for the frame list and the decisions being asked.</p>
+<p class="legend"><b>Every number here is invented.</b> "Fixture Person" is the fictional subject of the stage 1 specification's fixture (§13): a cut from Mon 6 Jan 2031, target 94.0 kg, weighed on Wednesdays. Each frame is that fixture on a stated day, run through a design model of the specified algorithm (<code>model.js</code>, checked against all 22 rows of the specification's table), then worded with the specification's strings. Signal states use three existing tokens: <b style="color:var(--recovery)">met</b> is the Recovery green, <b style="color:var(--rec-mid)">not met</b> is the Recovery mid amber, <b style="color:#8A8A93">unknown</b> is neutral grey with the dashed "not measured" ring. Each state also has its own shape and word. Rule states are neutral. See <code>README.md</code> for the frame list and the decisions being asked.</p>
 <div id="boards"></div>
 <script src="../system/noop.js"></script>
+<script src="model.js"></script>
 <script src="scorecard.js"></script>
 </body>
 </html>

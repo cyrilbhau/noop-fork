@@ -138,14 +138,14 @@ section{flex:none}
 /* History */
 .wkh{display:flex;justify-content:space-between;align-items:baseline;padding:20px calc(var(--gutter) + 2px) 8px;font-size:13px;color:var(--t2)}
 .wkh b{font-weight:600;color:var(--t1);font-size:15px}
-.hrow{display:grid;grid-template-columns:1fr 78px 78px;align-items:center;gap:8px;padding:12px 0}
+.hrow{display:grid;grid-template-columns:1fr 78px 86px;align-items:center;gap:8px;padding:12px 0}
 .hrow .d{font-size:15px;font-weight:600;line-height:20px}
 .hrow .m{font-size:12px;color:var(--t2);line-height:16px;margin-top:2px}
 .hrow .x{font-size:17px;font-weight:600;text-align:right;line-height:22px}
 .hrow .x small{font-size:12px;color:var(--t2);font-weight:500;margin-left:2px}
-.hrow .x.none{font-size:13px;font-weight:500;color:var(--t3a)}
+.hrow .x.none{font-size:12px;font-weight:500;color:var(--t3a)}
 .hrow.off .x{color:var(--t2)}
-.colh{display:grid;grid-template-columns:1fr 78px 78px;gap:8px;padding:10px calc(var(--gutter) + 18px) 0;font-size:12px;color:var(--t3a);text-align:right}
+.colh{display:grid;grid-template-columns:1fr 78px 86px;gap:8px;padding:10px calc(var(--gutter) + 18px) 0;font-size:12px;color:var(--t3a);text-align:right}
 .swipe{display:flex;align-items:stretch;margin:0 -18px}
 .swipe .hrow{flex:1;min-width:0;padding-left:18px;grid-template-columns:1fr}
 .swipe .act{width:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:600}
@@ -160,6 +160,40 @@ section{flex:none}
 .notif .nt{font-size:15px;font-weight:600;line-height:20px}
 .notif .nb{font-size:15px;line-height:20px}
 .notif .nw{font-size:13px;color:var(--t2);margin-left:auto;flex:none}
+
+/* Round 6 reconciliation with the stage 1 specification */
+.yc .v.none{color:var(--t3a)}.yc .v.tert{color:var(--t3a)}.yc .v.tert small{color:var(--t3a)}
+.sig .n1{color:var(--t1)}
+.verdict .vt.long{font-size:24px;line-height:30px;letter-spacing:-.4px}
+.verdict .rt{margin-top:8px}
+.verdict .rt.own{font-size:13px;line-height:18px;margin-top:10px}
+.une{display:flex;align-items:flex-start;gap:8px;font-size:15px;line-height:21px;color:var(--t2);margin-top:8px}
+.une svg{flex:none;margin-top:2px}
+.rrow{display:flex;align-items:flex-start;gap:10px;padding:8px 0}
+.rrow svg{flex:none;margin-top:1px}
+.rk{font-size:15px;font-weight:600;line-height:20px}
+.rs{font-size:12px;color:var(--t2);line-height:16px;margin-top:1px}
+.rw{font-size:13px;font-weight:600;line-height:20px;white-space:nowrap;flex:none;color:var(--t2)}
+.rw.fired{color:var(--t1)}.rw.unknown{color:var(--t3a)}
+.card.proj{margin-top:0}
+.selv{background:rgba(255,255,255,.2);border-radius:10px;padding:0 6px}
+.bigin.bad{color:var(--rec-low)}.hint.bad,.gf.bad{color:var(--rec-low)}
+.nrow.bad .val{color:var(--rec-low)}
+.fail{font-size:13px;line-height:18px;color:var(--t2);background:rgba(255,90,79,.14);border-radius:14px;padding:10px 14px;margin-bottom:12px}
+.fail b{color:var(--rec-low);font-weight:600}
+.btn.off{opacity:.38}
+.at{font-size:20px;font-weight:600;letter-spacing:-.3px;margin-top:6px}
+.ad{font-size:15px;color:var(--t2);line-height:21px;margin-top:6px}
+.stepper{display:flex;background:rgba(118,118,128,.24);border-radius:9px;flex:none}
+.stepper span{width:44px;height:32px;display:grid;place-items:center;font-size:20px;color:var(--t1)}
+.pm{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:17px;font-weight:700;line-height:1;color:#000;flex:none}
+.pm.add{background:var(--recovery)}.pm.rem{background:var(--rec-low)}
+.nrow .val{max-width:62%}
+.ax .rrow{display:block}.ax .rk{font-size:32px;line-height:38px}.ax .rs{font-size:26px;line-height:32px}.ax .rw{font-size:28px;line-height:34px;white-space:normal}.ax .rrow svg{width:30px;height:30px}
+.ax .une{font-size:30px;line-height:37px}.ax .une svg{width:28px;height:28px;margin-top:5px}
+.ax .verdict .vt.long{font-size:44px;line-height:50px}.ax .verdict .rt.own{font-size:26px;line-height:32px}
+.ax .yc .v.none{font-size:46px}
+.ax .selv{border-radius:16px}
 
 /* Five-tab bar for placement P3 */
 .tabs5 .tab{font-size:10px}
