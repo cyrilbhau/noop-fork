@@ -554,6 +554,102 @@ final class WeighInCrossIdOccupancyTests: XCTestCase {
         XCTAssertEqual(moved.value, 99.5)
     }
 
+    // MARK: - The exception after a zone change (ruling R39)
+
+    /// The injected zone, switchable between the interrupted edit and its retry.
+    private final class ZoneBox {
+        var zone: TimeZone
+        init(_ zone: TimeZone) { self.zone = zone }
+    }
+
+    /// 07:00 UTC on 2031-01-15 is 21:00 on 2031-01-14 in Honolulu (UTC-10, no daylight saving).
+    private let honolulu = TimeZone(identifier: "Pacific/Honolulu")!
+
+    /// A date edit of a week 1 weight onto week 2, interrupted after its insert while the injected
+    /// zone is UTC; the injected zone is then switched to Honolulu, where the target instant falls on
+    /// the previous local day. Returns the old row and the row the interrupted edit inserted.
+    private func interruptedInUTCThenMovedToHonolulu() async throws
+        -> (store: WhoopStore, weighIns: WeighInStore, original: LabMarkerRow, inserted: LabMarkerRow) {
+        let (store, repo) = try await makeRepo()
+        let original = row(id: "weight-1925622000-0000AAAA", day: "2031-01-08", takenAt: week1Epoch, value: 100.0,
+                           note: "first week", referenceText: "home scale")
+        try await store.upsertLabMarkers([original])
+        let box = ZoneBox(utc)
+        let now = later
+        let weighIns = WeighInStore(repository: repo, provider: nil, timeZone: { box.zone }, now: { now })
+
+        var seamFired = 0
+        weighIns.interruptDateEditForTesting = {
+            seamFired += 1
+            throw Interrupted()
+        }
+        do {
+            _ = try await weighIns.edit(original, value: 99.5, unitSystem: .metric, takenAt: week2)
+            XCTFail("the injected failure must surface to the caller")
+        } catch is Interrupted {
+            // expected
+        } catch {
+            XCTFail("expected the injected failure, got \(error)")
+        }
+        weighIns.interruptDateEditForTesting = nil
+        XCTAssertEqual(seamFired, 1, "the seam is reached exactly once")
+        let interrupted = try await store.labMarkers(deviceId: "my-whoop", markerKey: "weight")
+        XCTAssertEqual(interrupted.count, 2, "the interruption leaves both rows")
+        XCTAssertEqual(interrupted.first, original, "the old row is intact")
+        let inserted = try XCTUnwrap(interrupted.last)
+        XCTAssertEqual(inserted.takenAt, week2Epoch)
+        XCTAssertEqual(inserted.day, "2031-01-15", "the original write stored the day of the instant in UTC")
+
+        box.zone = honolulu
+        // The premise of the ruling: in the new zone the same instant is another local day.
+        XCTAssertEqual(LocalDayWindows(timeZone: honolulu).dayKey(for: week2), "2031-01-14")
+        return (store, weighIns, original, inserted)
+    }
+
+    /// Ruling R39: the stored day derives from the instant and the zone of the original write, so it
+    /// is not compared. The same edit retried after the device changed zone still completes, and the
+    /// surviving row keeps the day the original write stored.
+    func testRetryingAnInterruptedDateEditAfterAZoneChangeCompletes() async throws {
+        let (store, weighIns, original, inserted) = try await interruptedInUTCThenMovedToHonolulu()
+
+        let moved = try await weighIns.edit(original, value: 99.5, unitSystem: .metric, takenAt: week2)
+
+        let afterRetry = try await store.labMarkers(deviceId: "my-whoop", markerKey: "weight")
+        XCTAssertEqual(afterRetry.count, 1, "exactly one row after the retry")
+        XCTAssertEqual(afterRetry.first?.takenAt, week2Epoch, "at the new instant")
+        XCTAssertFalse(afterRetry.contains { $0.takenAt == week1Epoch }, "no row at the old instant")
+        let oldRow = try await stored(store, id: original.id)
+        XCTAssertNil(oldRow, "the old row was deleted")
+        XCTAssertEqual(afterRetry.first?.day, "2031-01-15", "the day stored by the original write is kept")
+        assertSameColumns(afterRetry.first, inserted,
+                          "the surviving row is the one already inserted; nothing new was written")
+        XCTAssertEqual(moved, inserted, "the returned row is the row as stored")
+        let all = try await everything(store)
+        XCTAssertEqual(all, [inserted], "one row in the whole store")
+    }
+
+    /// Ruling R39 relaxes the day only. After the same zone change, a retry carrying another value
+    /// is still refused, and both rows are byte-identical afterwards.
+    func testRetryAfterAZoneChangeIsStillRefusedWhenAnotherColumnDiffers() async throws {
+        let (store, weighIns, original, inserted) = try await interruptedInUTCThenMovedToHonolulu()
+        var seamFired = 0
+        weighIns.interruptDateEditForTesting = { seamFired += 1 }
+        let before = try await everything(store)
+        XCTAssertEqual(before.count, 2)
+
+        await assertThrows(.instantOccupied, "a retry with 99.4 instead of 99.5, after the zone change") {
+            try await weighIns.edit(original, value: 99.4, unitSystem: .metric, takenAt: self.week2)
+        }
+
+        XCTAssertEqual(seamFired, 0, "a refused retry must not reach the insert")
+        let originalAfter = try await stored(store, id: original.id)
+        let insertedAfter = try await stored(store, id: inserted.id)
+        assertSameColumns(originalAfter, original, "the old row")
+        assertSameColumns(insertedAfter, inserted, "the row the interrupted edit inserted")
+        let after = try await everything(store)
+        XCTAssertEqual(after, before, "a refused retry added, removed or changed a row")
+    }
+
     // MARK: - The exception is exact
 
     /// The replacement of the edit below, in every column except `id`: the edited row with the new
