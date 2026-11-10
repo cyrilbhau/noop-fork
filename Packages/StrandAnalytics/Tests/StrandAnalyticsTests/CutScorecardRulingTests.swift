@@ -469,6 +469,9 @@ final class CutScorecardRulingTests: XCTestCase {
         XCTAssertEqual(band(0.8036, 1.2).reason, .belowBand, "0.8036 quantizes to 0.804")
         XCTAssertEqual(band(0.4, 0.8026).reason, .withinBand)
         XCTAssertEqual(band(0.4, 0.8024).reason, .aboveBand, "0.8024 quantizes to 0.802")
+        // Ruling R19: the signal reports the bounds as given in the phase; only the comparison quantizes.
+        XCTAssertEqual(band(0.8034, 1.2).lowPercentPerWeek, 0.8034)
+        XCTAssertEqual(band(0.4, 0.8026).highPercentPerWeek, 0.8026)
 
         // Horizon. 20.001 kg at 5 kg per week is 4.0002 weeks: above 4 as a Double, equal once quantized.
         func project(_ first: Double, _ second: Double, target: Double, horizon: Int) -> CutScorecardProjection {
