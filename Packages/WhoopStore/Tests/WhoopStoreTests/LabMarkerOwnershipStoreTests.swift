@@ -1275,8 +1275,11 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
     /// upsert never changes the stored row count by more than its new identities, never changes a
     /// stored `id` or `deviceId`, and changes only the row it lands on and that row's true copies,
     /// never a conflicting row (ruling A10), (3) a delete removes exactly the named row and its copies, and
-    /// (4) the projected cells always equal the latest reading (greatest `takenAt`, then greatest
-    /// `id`) of each marker and day over every id.
+    /// (4) every projected cell holds a value that a stored reading of that marker and day holds, or
+    /// is an unbacked trace (no stored reading of that marker and day holds a number; rulings A11,
+    /// A13), and every marker and day with a numeric reading has a cell. Ruling A19 superseded the
+    /// earlier invariant that each cell equals the latest reading of its marker and day: a value
+    /// stays projected while any stored reading holds it, latest or not.
     func testGeneratedHistoriesKeepRowsAndProjectionConsistent() async throws {
         var generator = Fx.Generator(seed: 0x1AB0_0C0F_F1CE_0003)
         let devices = [Fx.a, Fx.b, Fx.c, Fx.d, Fx.n]
@@ -1387,7 +1390,19 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
                         updates += 1
                     }
                 }
-                XCTAssertEqual(try Fx.labBookCells(store), expectedCells(try Fx.rows(store)), "\(context): cells")
+                // Ruling A19: a cell holds a number some stored reading of its marker and day holds,
+                // or no stored reading of that marker and day holds a number (an unbacked trace).
+                let rowsNow = try Fx.rows(store)
+                let cellsNow = try Fx.labBookCells(store)
+                for cell in cellsNow {
+                    let numbers = rowsNow.filter { $0.markerKey == cell.key && $0.day == cell.day }
+                        .compactMap(\.value)
+                    XCTAssertTrue(numbers.isEmpty || numbers.contains(cell.value),
+                                  "\(context): cell \(cell) holds a number no stored reading holds")
+                }
+                XCTAssertEqual(Set(cellsNow.map { $0.key + "|" + $0.day }),
+                               Set(expectedCells(rowsNow).map { $0.key + "|" + $0.day }),
+                               "\(context): a marker and day with a numeric reading has a cell")
             }
         }
         XCTAssertGreaterThan(strapDeletes, 50, "too few strap deletes were generated")
