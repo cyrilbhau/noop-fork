@@ -184,7 +184,7 @@ final class CoachPacketModelReviewFixTests: XCTestCase {
         return model
     }
 
-    func testCopiedThenAReloadWithDifferentTextSaysTheClipboardHoldsTheEarlierPacket() async {
+    func testCopiedThenAReloadWithDifferentTextClearsTheCopiedConfirmation() async {
         let model = await copiedA()
         clock.value = clock.value.addingTimeInterval(180)          // back from another app, inside ten minutes
         script.then(.ready(document("B")))
