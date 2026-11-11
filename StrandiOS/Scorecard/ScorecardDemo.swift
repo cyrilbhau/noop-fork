@@ -18,7 +18,8 @@ import WhoopStore
 //   scorecard-live                 the real screen on this simulator's own store (not synthetic:
 //                                  pair it with `-noop.cutScorecardEnabled YES`)
 //   flow-<step>                    one step of a scripted flow on this simulator's own store, driven
-//                                  through the models the buttons call (see "Scripted flows" below)
+//                                  through the models the buttons call (see "Scripted flows" below).
+//                                  Compiled for the simulator only: on a device it shows a message
 //
 // `--demo-scroll <0…1>` opens the scorecard, the weigh-in sheet and the phase sheet part-way down.
 //
@@ -33,7 +34,15 @@ enum ScorecardDemo {
         // The real screen on the simulator's own store and settings, to exercise the live wiring.
         if name == "scorecard-live" { return AnyView(ScorecardView()) }
         // A scripted flow step on the simulator's own store (see "Scripted flows" below).
-        if name.hasPrefix("flow-") { return AnyView(ScorecardFlowHost(step: String(name.dropFirst(5)))) }
+        // The steps write to and delete from the app's own store and settings, so they are compiled
+        // for the simulator only. On a device the name is still recognised, and nothing runs.
+        if name.hasPrefix("flow-") {
+            #if targetEnvironment(simulator)
+            return AnyView(ScorecardFlowHost(step: String(name.dropFirst(5))))
+            #else
+            return AnyView(ScorecardFlowUnavailable())
+            #endif
+        }
         let parts = name.split(separator: "-")
         guard parts.count == 2, let letter = parts[1].first, let number = Int(parts[1].dropFirst()) else { return nil }
         switch (String(parts[0]), letter) {
@@ -567,7 +576,21 @@ private struct ScorecardCardsDemo: View {
 
 // MARK: - Scripted flows (simulator verification)
 
-/// DEBUG-only. `--demo-screen flow-<step>` runs ONE step of a scripted flow through the same model
+#if !targetEnvironment(simulator)
+/// What a `flow-` name shows on a device: a message. It reads and writes nothing.
+private struct ScorecardFlowUnavailable: View {
+    var body: some View {
+        Text(verbatim: "Scripted flows run on the simulator only. Nothing was read or written.")
+            .noopFont(.bodySmall, color: false)
+            .foregroundStyle(NoopTheme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(NoopTheme.Layout.gutter)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(NoopTheme.canvas.ignoresSafeArea())
+    }
+}
+#else
+/// DEBUG-only and simulator-only. `--demo-screen flow-<step>` runs ONE step of a scripted flow through the same model
 /// objects the buttons call (`WeighInSheetModel`, `WeighInHistoryModel`, `ScorecardPhaseDraft`,
 /// `CutScorecardFlag`, `WeighInReminder` over a stub centre), on this simulator's OWN store and
 /// settings and on the real clock, then shows the screen that step leaves behind. The store keeps
@@ -953,4 +976,5 @@ private struct ScorecardFlowHost: View {
         }
     }
 }
+#endif
 #endif
