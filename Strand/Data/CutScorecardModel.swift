@@ -570,16 +570,20 @@ final class WeighInHistoryModel: ObservableObject {
     private let provider: BodyMeasurementProvider
     private let unitSystem: () -> UnitSystem
     private let locale: () -> Locale
+    // Stage 4: the local day the week mark is judged on (stage 1 work package 1-11, ruling R44).
+    private let today: () -> String
     private var generation = 0
     private var revisionObserver: AnyCancellable?
 
     init(weighIns: WeighInStore, provider: BodyMeasurementProvider,
          unitSystem: @escaping () -> UnitSystem,
-         locale: @escaping () -> Locale = { AppLanguage.activeLocale }) {
+         locale: @escaping () -> Locale = { AppLanguage.activeLocale },
+         today: @escaping () -> String = { Repository.localDayKey(Date()) }) {
         self.weighIns = weighIns
         self.provider = provider
         self.unitSystem = unitSystem
         self.locale = locale
+        self.today = today
     }
 
     func load() async {
@@ -593,7 +597,7 @@ final class WeighInHistoryModel: ObservableObject {
         let waists = await weighIns.readings(.waist)
         guard request == generation else { return }
         let history = CutScorecardPresenter.history(weights: weights, waists: waists, appleHealth: apple,
-                                                    unitSystem: system, locale: shownLocale)
+                                                    unitSystem: system, locale: shownLocale, today: today())
         if state != .loaded(history) { state = .loaded(history) }
         if revisionObserver == nil {
             // A write made elsewhere reaches the list when the provider's snapshot changes.

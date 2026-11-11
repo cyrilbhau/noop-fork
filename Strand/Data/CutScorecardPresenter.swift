@@ -819,9 +819,12 @@ enum CutScorecardPresenter {
 
     /// The history list. `weights` and `waists` are `WeighInStore.readings(_:)`, the union across
     /// strap ids of ruling R25; `appleHealth` is the provider's Apple Health weight per day.
+    ///
+    /// `today` (stage 1 work package 1-11, ruling R44): a scan's weight row outranked by a manual
+    /// weigh-in of its week as of `today` is listed without the week's mark; nil judges every row.
     static func history(weights: [LabMarkerRow], waists: [LabMarkerRow],
                         appleHealth: [(day: String, value: Double)],
-                        unitSystem: UnitSystem, locale: Locale) -> WeighInHistory {
+                        unitSystem: UnitSystem, locale: Locale, today: String? = nil) -> WeighInHistory {
         let words = Wording(unitSystem: unitSystem, locale: locale)
         var unlisted = 0
         var entries: [HistoryEntry] = []
@@ -861,8 +864,11 @@ enum CutScorecardPresenter {
 
         // The reading that represents a week is its latest weight: the newest day, a Lab Book reading
         // before an Apple Health value on one day, then the latest instant.
+        // Stage 4 (stage 1 work package 1-11, R44): an outranked scan row stays listed without the mark.
+        let markable = Set(BodyMeasurementResolver.withoutOutrankedScans(weights, asOf: today).map(\.id))
         var representative: [String: Int] = [:]
         for (index, entry) in entries.enumerated() where entry.weightKg != nil {
+            if let row = entry.weightRow, !markable.contains(row.id) { continue }
             guard let week = CutScorecard.weekStart(containing: entry.day) else { continue }
             representative[week] = index
         }
