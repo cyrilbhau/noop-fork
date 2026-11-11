@@ -964,8 +964,7 @@ public enum CutScorecard {
     ///
     /// Kotlin twin: `CutScorecard.weekStart`.
     public static func weekStart(containing day: String) -> String? {
-        guard dayNumber(day) != nil else { return nil }
-        return WeeklyDigestEngine.mondayOfWeek(containing: day)
+        CanonicalDay.weekStart(containing: day)
     }
 
     /// Round to three decimals, halves away from zero. Every comparison in `evaluate` uses it.
@@ -1032,6 +1031,9 @@ public enum CutScorecard {
     // 0001 to 9999 is accepted, so that a day has exactly one key, string and calendar order agree, and
     // the integer date arithmetic (Sakamoto's weekday, the Julian Day Number) stays inside the range in
     // which it is correct and cannot overflow.
+    // The rule itself now lives in `CanonicalDay`, which `dayNumber` and `dayKey` below call. The two
+    // bounds stay written out here as well, equal to `CanonicalDay`'s, because the parity ledger checks
+    // each literal against its Kotlin twin and cannot check a forwarded constant.
     /// 0001-01-01 as a Julian Day Number. It is a Monday, so no week starts before it.
     private static let firstDayNumber = 1_721_426
     /// 9999-12-31 as a Julian Day Number.
@@ -1044,18 +1046,14 @@ public enum CutScorecard {
     ///
     /// Kotlin twin: `CutScorecard.dayNumber`.
     private static func dayNumber(_ key: String) -> Int? {
-        guard key.utf8.count == 10, let (y, m, d) = WeeklyDigestEngine.parseYMD(key),
-              y >= 1, y <= 9999, WeeklyDigestEngine.formatYMD(y, m, d) == key else { return nil }
-        return WeeklyDigestEngine.julianDayNumber(y, m, d)
+        CanonicalDay.dayNumber(key)
     }
 
     /// The day key of a Julian Day Number, clamped to the representable range.
     ///
     /// Kotlin twin: `CutScorecard.dayKey`.
     private static func dayKey(_ number: Int) -> String {
-        let clamped = min(max(number, firstDayNumber), lastDayNumber)
-        let (y, m, d) = WeeklyDigestEngine.fromJulianDayNumber(clamped)
-        return WeeklyDigestEngine.formatYMD(y, m, d)
+        CanonicalDay.clampedKey(dayNumber: number)
     }
 
     /// Validate one input item in the order §6.5 lists the causes. Returns its day number when it is
