@@ -42,6 +42,13 @@ enum ScorecardLayout {
     static let historyWaistColumn: CGFloat = 86
     /// `.dim`: a sheet's Cancel while a save is in flight.
     static let busyOpacity: Double = 0.4
+    /// `.ax .verdict .vt.long` (frame B27): the wrapping verdict title stops growing here, about
+    /// 46 pt, so that it stays the largest text on its card at every text size without one long
+    /// word ("carbohydrate") running off it. The scale is the guard for a narrower phone.
+    static let verdictTitleMaxTextSize: DynamicTypeSize = .accessibility3
+    static let verdictTitleMinScale: CGFloat = 0.75
+    /// Frame B26, `.sec .skb`: the placeholder of a section title.
+    static let skeletonSectionTitleWidth: CGFloat = 140
 
     /// The frames' `data-ambient`, in the mockups' 402 pt design space: a green wash that grows with
     /// the count of met signals and an amber one that grows with the count of signals not met.
@@ -82,7 +89,9 @@ struct ScorecardContext {
             },
             now: { Date() },
             timeZone: { TimeZone.current },
-            locale: { AppLanguage.activeLocale })
+            // The active language with the Clock format setting's hour cycle (#1821): the weigh-in
+            // time then reads as every other time in the app does. Dates and numbers are unaffected.
+            locale: { AppClock.formattingLocale })
     }
 
     /// The local day the clock is on.
@@ -239,20 +248,41 @@ struct ScorecardSectionHeader: View {
 }
 
 /// A number and its smaller unit. A nil value is the presenter's mark for "not measured", in the
-/// secondary colour, with no unit.
+/// secondary colour, with no unit. `countsUp` rolls the digits up from the design system's zero
+/// form of the same number when the value appears (the frames' `data-count`); under Reduce Motion
+/// the value is simply shown. The words are the presenter's either way: nothing is formatted here.
 struct ScorecardValueText: View {
     let value: String?
     let unit: String?
     let style: NoopType
     var color: Color = NoopTheme.textPrimary
+    var countsUp = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var revealed = false
+
+    /// The zero form while the count-up is pending; the value itself everywhere else.
+    private func shownText(_ value: String) -> String {
+        guard countsUp, !reduceMotion, !revealed, let zero = NoopRing.countUpStartLabel(value) else { return value }
+        return zero
+    }
 
     var body: some View {
         if let value {
             HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
-                Text(verbatim: value)
+                Text(verbatim: shownText(value))
                     .noopFont(style, color: false)
                     .foregroundStyle(color)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.numericText())
+                    .accessibilityLabel(Text(verbatim: value))
+                    .onAppear {
+                        guard countsUp, !revealed else { return }
+                        if reduceMotion {
+                            revealed = true
+                        } else {
+                            withAnimation(NoopTheme.Motion.countUp) { revealed = true }
+                        }
+                    }
                 if let unit, !unit.isEmpty {
                     Text(verbatim: unit).noopFont(.unit)
                         .fixedSize(horizontal: false, vertical: true)

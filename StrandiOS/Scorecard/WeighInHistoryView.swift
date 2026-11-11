@@ -10,10 +10,25 @@ import StrandDesign
 // The list draws `WeighInHistoryModel` and decides nothing: which rows exist, what each says and
 // whether it can be edited are the presenter's.
 
-/// The weigh-in history, pushed from the scorecard.
+/// The weigh-in history, pushed from the scorecard. Like the scorecard screen it exists only while
+/// the feature is on: when `noop.cutScorecardEnabled` goes off the list, with its add, edit and
+/// delete, is torn down and the screen leaves the stack.
 struct WeighInHistoryView: View {
+    @ObservedObject private var flag = CutScorecardFlag.shared
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        ScorecardContextReader { WeighInHistoryScreen(context: $0) }
+        let reachable = CutScorecardPresenter.screenIsReachable(flagEnabled: flag.isEnabled)
+        Group {
+            if reachable {
+                ScorecardContextReader { WeighInHistoryScreen(context: $0) }
+            } else {
+                NoopTheme.canvas.ignoresSafeArea()
+            }
+        }
+        .onChangeCompat(of: reachable) { if !$0 { dismiss() } }
+        // The flag can go off while this screen is on a tab that is not showing.
+        .onAppear { if !reachable { dismiss() } }
     }
 }
 
@@ -230,12 +245,22 @@ struct WeighInHistoryScreen: View {
         .padding(.top, NoopTheme.Layout.sectionTop)
     }
 
+    /// Frame D5: the column titles, then one card of five rows, as the loaded list is laid out.
     private var loading: some View {
-        VStack(spacing: NoopTheme.Layout.cardGap) {
-            ForEach(0..<5, id: \.self) { _ in
-                NoopGlassCard { ScorecardSkeletonLines(styles: [.rowTitle, .caption]) }
-                    .noopSkeleton(true)
+        VStack(spacing: NoopTheme.Layout.s) {
+            if !stacks {
+                columnTitles.padding(.horizontal, NoopTheme.Layout.l)
             }
+            NoopGlassCard(flush: true) {
+                VStack(spacing: 0) {
+                    ForEach(0..<5, id: \.self) { index in
+                        if index > 0 { FormKitDivider() }
+                        ScorecardSkeletonLines(styles: [.rowTitle, .caption])
+                            .padding(.vertical, NoopTheme.Layout.rowVerticalPadding)
+                    }
+                }
+            }
+            .noopSkeleton(true)
         }
         .padding(.horizontal, NoopTheme.Layout.gutter)
         .padding(.top, NoopTheme.Layout.sectionTop)

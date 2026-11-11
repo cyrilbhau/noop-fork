@@ -10,9 +10,24 @@ import StrandDesign
 // word and every number are the presenter's. Loading shows a skeleton of the same layout.
 
 /// The scorecard screen, pushed from its Today card, the Today weight row and the Health tab's row.
+/// It exists only while the feature is on: when `noop.cutScorecardEnabled` goes off, wherever that
+/// was done, the screen and every sheet it presents are torn down and it leaves the stack.
 struct ScorecardView: View {
+    @ObservedObject private var flag = CutScorecardFlag.shared
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        ScorecardContextReader { ScorecardScreen(context: $0) }
+        let reachable = CutScorecardPresenter.screenIsReachable(flagEnabled: flag.isEnabled)
+        Group {
+            if reachable {
+                ScorecardContextReader { ScorecardScreen(context: $0) }
+            } else {
+                NoopTheme.canvas.ignoresSafeArea()
+            }
+        }
+        .onChangeCompat(of: reachable) { if !$0 { dismiss() } }
+        // The flag can go off while this screen is on a tab that is not showing.
+        .onAppear { if !reachable { dismiss() } }
     }
 }
 
@@ -27,6 +42,8 @@ struct ScorecardScreen: View {
     @ObservedObject private var model: CutScorecardModel
     @State private var sheet: ScorecardSheet?
     @State private var showHistory = false
+    /// Set only by the debug demo, whose screens run on a synthetic context and not on the flag.
+    @Environment(\.scorecardContextOverride) private var demoContext
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
     init(context: ScorecardContext) {
@@ -64,9 +81,12 @@ struct ScorecardScreen: View {
             }
         }
         .navigationDestination(isPresented: $showHistory) {
-            WeighInHistoryScreen(context: context)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(.hidden, for: .navigationBar)
+            Group {
+                // In the app the pushed history follows the flag as this screen does.
+                if demoContext == nil { WeighInHistoryView() } else { WeighInHistoryScreen(context: context) }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .sheet(item: $sheet) { which in
             switch which {
@@ -300,10 +320,11 @@ struct ScorecardContent: View {
             Text(verbatim: verdict.title)
                 .noopFont(.statNumber, color: false)
                 .fontWeight(.bold)
+                .minimumScaleFactor(ScorecardLayout.verdictTitleMinScale)
                 .fixedSize(horizontal: false, vertical: true)
                 // A verdict can hold one long word ("carbohydrate"), which cannot wrap: past this
-                // size it would run off the card.
-                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                // size it would run off the card. Up to it the title stays the largest text here.
+                .dynamicTypeSize(...ScorecardLayout.verdictTitleMaxTextSize)
         }
         .foregroundStyle(color)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -433,7 +454,7 @@ struct ScorecardContent: View {
         NoopGlassCard {
             VStack(alignment: .leading, spacing: 0) {
                 Text(verbatim: curve.title).noopFont(.footnote)
-                ScorecardValueText(value: curve.value, unit: curve.unit, style: .tileNumber)
+                ScorecardValueText(value: curve.value, unit: curve.unit, style: .tileNumber, countsUp: true)
                     .padding(.top, NoopTheme.Layout.xs)
                 SourceCaption(verbatim: curve.provenance)
                     .padding(.top, NoopTheme.Layout.s)
@@ -578,6 +599,9 @@ struct ScorecardSkeleton: View {
 
     private var sectionTitle: some View {
         ScorecardSkeletonLines(styles: [.sectionTitle])
+            .frame(width: ScorecardLayout.skeletonSectionTitleWidth)
+            .noopSkeleton(true, cornerRadius: NoopTheme.Layout.tileRadius)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, NoopTheme.Layout.sectionTop)
             .padding(.bottom, NoopTheme.Layout.sectionBottom)
             .padding(.horizontal, NoopTheme.Layout.sectionSide)
