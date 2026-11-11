@@ -153,18 +153,16 @@ struct RecoveryDetailModel {
                                                    sleepPerfPercent: restScore)?.drivers ?? []
         }()
         func points(_ label: String) -> Int? { drivers.first(where: { $0.label == label })?.deltaPoints }
-        func band(_ state: BaselineState?) -> ClosedRange<Double>? {
-            guard let state, state.usable else { return nil }
-            let sigma = Baselines.sigma(state)
-            return (state.baseline - sigma)...(state.baseline + sigma)
-        }
         let factors = [
-            RecoveryFactor(kind: .hrv, value: breakdownRow?.avgHrv, typical: band(baselines?.hrv),
+            RecoveryFactor(kind: .hrv, value: breakdownRow?.avgHrv,
+                           typical: ChargeTypicalBand.range(baselines?.hrv),
                            deltaPoints: points("Heart rate variability")),
             RecoveryFactor(kind: .restingHR, value: breakdownRow?.restingHr.map(Double.init),
-                           typical: band(baselines?.restingHR), deltaPoints: points("Resting heart rate")),
+                           typical: ChargeTypicalBand.range(baselines?.restingHR),
+                           deltaPoints: points("Resting heart rate")),
             RecoveryFactor(kind: .sleep, value: restScore, typical: nil, deltaPoints: points("Sleep quality")),
-            RecoveryFactor(kind: .respiratory, value: breakdownRow?.respRateBpm, typical: band(baselines?.resp),
+            RecoveryFactor(kind: .respiratory, value: breakdownRow?.respRateBpm,
+                           typical: ChargeTypicalBand.range(baselines?.resp),
                            deltaPoints: points("Respiratory rate")),
         ]
 
