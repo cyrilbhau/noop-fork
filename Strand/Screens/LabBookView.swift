@@ -238,8 +238,10 @@ struct LabBookView: View {
                 // packed units, US 2-digit dates, a Status column carried into note; any other file
                 // takes the generic (date,marker,value,unit) path.
                 let isWhoop = WhoopBiomarkerExportParser.matches(data: data)
+                // Stage 4: while the body record is on, scan and benchmark names resolve to their keys.
+                let scope = BodyRecordSettings.csvScope(bodyRecordEnabled: BodyRecordSettings.enabledFlag.isEnabled)
                 let result = isWhoop ? WhoopBiomarkerExportParser.parse(data: data)
-                                     : LabMarkerCsvImport.parse(data: data)
+                                     : LabMarkerCsvImport.parse(data: data, scope: scope)
                 let sourceId = isWhoop ? WhoopBiomarkerExportParser.sourceId : LabMarkerCsvImport.sourceId
                 guard !result.fileTooLarge else {
                     csvSummary = String(localized: "That file is too large for a markers CSV import.")
