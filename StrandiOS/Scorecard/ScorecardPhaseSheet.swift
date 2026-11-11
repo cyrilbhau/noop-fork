@@ -19,6 +19,9 @@ struct ScorecardPhaseSheet: View {
     /// What was typed into each field. A field never typed into shows the draft's own value.
     @State private var typed: [ScorecardPhaseDraft.Field: String] = [:]
     @State private var showsCalendar = false
+    /// `CutScorecardSettings.phasesNeedAttention`, as the sheet opened and after a discard.
+    @State private var phasesNeedAttention: Bool
+    @State private var asksToDiscardPhases = false
     @FocusState private var focused: ScorecardPhaseDraft.Field?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -29,13 +32,15 @@ struct ScorecardPhaseSheet: View {
         self.onSaved = onSaved
         _draft = State(initialValue: draft
             ?? ScorecardPhaseDraft.current(settings: context.settings, today: context.today))
+        _phasesNeedAttention = State(initialValue: context.settings.phasesNeedAttention)
     }
 
     private var shown: ScorecardPhaseSheetPresentation {
         let today = context.today
         return CutScorecardPresenter.phaseSheet(
             draft, today: today, previousPhaseName: context.settings.activePhase(on: today)?.name,
-            unitSystem: context.unitSystem(), locale: context.locale())
+            unitSystem: context.unitSystem(), locale: context.locale(),
+            phasesNeedAttention: phasesNeedAttention)
     }
 
     var body: some View {
@@ -43,6 +48,9 @@ struct ScorecardPhaseSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    if let note = shown.storedPhasesNote {
+                        storedPhasesNotice(note, shown: shown)
+                    }
                     ForEach(Array(shown.groups.enumerated()), id: \.element.id) { index, group in
                         groupTitle(group.title)
                         if index == 0 {
@@ -106,6 +114,32 @@ struct ScorecardPhaseSheet: View {
         .presentationDragIndicator(.visible)
     }
 
+    /// Why Save is off while the stored phases cannot be read, and the one explicit way on: giving
+    /// them up, asked once. Nothing is removed without that answer.
+    @ViewBuilder
+    private func storedPhasesNotice(_ note: String, shown: ScorecardPhaseSheetPresentation) -> some View {
+        ScorecardFootnote(text: note, color: NoopTheme.recoveryLow)
+        if let title = shown.discardStoredPhasesTitle, let question = shown.discardStoredPhasesQuestion {
+            Button { asksToDiscardPhases = true } label: {
+                Text(verbatim: title)
+            }
+            .buttonStyle(ScorecardDangerButton())
+            .formKitGutter()
+            .padding(.top, NoopTheme.Layout.m)
+            .confirmationDialog(Text(verbatim: title), isPresented: $asksToDiscardPhases, titleVisibility: .visible) {
+                Button(role: .destructive) {
+                    context.settings.discardUnreadablePhases()
+                    phasesNeedAttention = context.settings.phasesNeedAttention
+                } label: {
+                    Text(verbatim: title)
+                }
+                Button(role: .cancel) {} label: { Text(verbatim: shown.cancelTitle) }
+            } message: {
+                Text(verbatim: question)
+            }
+        }
+    }
+
     private func groupTitle(_ title: String) -> some View {
         Text(verbatim: title)
             .noopFont(.footnote)
@@ -140,7 +174,7 @@ struct ScorecardPhaseSheet: View {
             }
         }
         if row.input == .date, showsCalendar {
-            DatePicker(selection: startDate, displayedComponents: [.date]) { EmptyView() }
+            DatePicker(selection: startDate, in: earliestStartDate..., displayedComponents: [.date]) { EmptyView() }
                 .datePickerStyle(.graphical)
                 .labelsHidden()
                 .tint(NoopTheme.textSecondary)
@@ -161,7 +195,8 @@ struct ScorecardPhaseSheet: View {
 
     private func field(_ row: ScorecardPhaseRow) -> some View {
         let color = row.isInvalid ? NoopTheme.recoveryLow : NoopTheme.textPrimary
-        return HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
+        // A percent sign sits against its number ("0.25%"); a word or a unit keeps its gap.
+        return HStack(alignment: .firstTextBaseline, spacing: row.suffixAttaches ? 0 : NoopTheme.Layout.xs) {
             TextField(text: text(for: row),
                       prompt: row.placeholder.map { Text(verbatim: $0).foregroundColor(NoopTheme.textTertiary) }) {
                 Text(verbatim: row.label)
@@ -206,6 +241,11 @@ struct ScorecardPhaseSheet: View {
         Binding(
             get: { CutScorecardPresenter.phaseStartDate(draft, timeZone: context.timeZone()) ?? context.now() },
             set: { draft = CutScorecardPresenter.phaseDraft(draft, startingOn: $0, timeZone: context.timeZone()) })
+    }
+
+    /// The first day the date control offers: a phase cannot start before the one before it.
+    private var earliestStartDate: Date {
+        CutScorecardPresenter.phaseEarliestStartDate(draft, timeZone: context.timeZone()) ?? .distantPast
     }
 
     /// Monday first, as the weekly series is counted.
