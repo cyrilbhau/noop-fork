@@ -15,7 +15,11 @@ import StrandImport
 // between Today (Apple Health) and Settings (profile) included.
 //
 // The companion source scan is `Tools/test_body_measurement_single_resolver.py` (class
-// `OneNumberPerVariableScanTests`): it ties each view file to the member these tests pin.
+// `OneNumberPerVariableScanTests`): it ties each view file to the member these tests pin. Its
+// "newest-as-latest" pattern constrains the labels a weight or waist series can reach, which are the
+// ones `BodyMeasurementSourcePage` words below. A string that names one other metric (the steps
+// chart's VoiceOver summary, "Steps chart, …, latest … steps") is not a body-series readout and is
+// excluded there by name (`NOT_A_BODY_SERIES`).
 //
 // API ASSUMED BY THESE TESTS (new; everything else is used as it exists today)
 //

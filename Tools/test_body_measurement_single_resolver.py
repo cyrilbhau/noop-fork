@@ -315,12 +315,24 @@ class BodyMeasurementSingleResolverTests(unittest.TestCase):
 # lab-category-read: Lab Book rows read by category, which carries the `weight` and `waist` rows
 #   past the `lab-marker-key` pattern (the Coach roll-up, listed under LIMITS above until R41).
 # newest-as-latest: a page of ONE source's series calling its newest point "Latest". Scanned only in
-#   the source pages; the wording comes from `BodyMeasurementSourcePage`.
+#   the source pages; the wording comes from `BodyMeasurementSourcePage`. It constrains the labels a
+#   weight or waist series can reach: the generic stat labels of a metric page (`"Latest"`,
+#   `"Latest reading"`) and an interpolated `, latest \(…)` label. A string that names one metric
+#   which is not a body measurement cannot be shown for a weight or a waist, so it is not a readout
+#   of either; `NOT_A_BODY_SERIES` lists those strings.
 R41_PATTERNS: dict[str, re.Pattern[str]] = {
     "weight-metric-route": re.compile(r"\.metric\(\s*\"(?:weight|waist)\"\s*\)"),
     "lab-category-read": re.compile(r"\blabMarkers\([^)]*\bcategory:"),
     "newest-as-latest": re.compile(r"\"Latest(?: reading)?\"|, latest \\\("),
 }
+
+# Lines the newest-as-latest pattern does not constrain: string literals that name a metric which is
+# not body weight or waist. Today that is the steps chart's VoiceOver summary ("Steps chart, …,
+# latest … steps, …"), which predates ruling R41 and is drawn for the steps metric only.
+# ``test_r41_allowlist_entries_still_match`` fails when an entry here stops matching.
+NOT_A_BODY_SERIES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\"Steps chart, "),
+)
 
 # The pages that list one source's body-measurement series.
 SOURCE_PAGES = (
@@ -387,17 +399,26 @@ def call_arguments(text: str, callee: str) -> list[str]:
     return found
 
 
+def r41_matches(name: str, line: str) -> bool:
+    """True when `line` is an occurrence of the R41 pattern `name`."""
+    if not R41_PATTERNS[name].search(line):
+        return False
+    if name == "newest-as-latest" and any(other.search(line) for other in NOT_A_BODY_SERIES):
+        return False
+    return True
+
+
 def r41_occurrences() -> list[tuple[str, int, str, str]]:
     found: list[tuple[str, int, str, str]] = []
     for path in swift_files():
         file = path.relative_to(ROOT).as_posix()
         lines = strip_comments(path.read_text(encoding="utf-8"))
-        for name, pattern in R41_PATTERNS.items():
+        for name in R41_PATTERNS:
             scope = R41_SCOPE[name]
             if scope is not None and file not in scope:
                 continue
             for number, line in enumerate(lines, start=1):
-                if pattern.search(line):
+                if r41_matches(name, line):
                     found.append((file, number, name, line.strip()))
     return found
 
@@ -415,15 +436,27 @@ class OneNumberPerVariableScanTests(unittest.TestCase):
                                  'Text("Latest reading").strandOverline()',
                                  r'.accessibilityLabel("\(displayName(for: key)), latest \(latestLabel(latest, key: key))")'],
         }
+        # The five metric-page sites the pattern was written for, as they read before ruling R41.
+        samples["newest-as-latest"] += [
+            '("Latest", heroValue),',
+            'StatTile(label: "Latest", value: latestPoint.map { fmt($0.value) } ?? "—",',
+            'return ([String(localized: "Latest reading"), date] + (source.map { [$0] } ?? [])).joined(separator: " · ")',
+            # A body series worded like the steps summary is still an occurrence.
+            r'return String(localized: "Weight chart, \(points.count) readings, latest \(latest.value) kg")',
+        ]
         self.assertEqual(set(samples), set(R41_PATTERNS))
         for name, lines in samples.items():
             for line in lines:
-                self.assertRegex(line, R41_PATTERNS[name], f"{name} must match: {line}")
+                self.assertTrue(r41_matches(name, line), f"{name} must match: {line}")
         for line in ['route: .metric("steps")', "case .metric(let key):", ".metricDetail(key: \"weight\")",
                      'store.labMarkers(deviceId: id, markerKey: key)', 'private enum Aggregate { case latest, mean }',
-                     'String(localized: "latest")', 'StatGridItem("Lowest", value: low.value)']:
-            for name, pattern in R41_PATTERNS.items():
-                self.assertNotRegex(line, pattern, f"{name} must not match: {line}")
+                     'String(localized: "latest")', 'StatGridItem("Lowest", value: low.value)',
+                     # The steps chart's VoiceOver summaries: one named metric, not a body measurement.
+                     r'return String(localized: "Steps chart, \(buckets.count) daily \(noun), latest \(latest.mean) steps, \(period)")',
+                     r'return String(localized: "Steps chart, \(buckets.count) weekly \(noun), latest \(latest.mean) average steps per observed day, \(period)")',
+                     r'return String(localized: "Steps chart, \(buckets.count) monthly \(noun), latest \(latest.mean) average steps per observed day, \(period)")']:
+            for name in R41_PATTERNS:
+                self.assertFalse(r41_matches(name, line), f"{name} must not match: {line}")
 
     def test_no_surface_bypasses_the_resolver_or_calls_a_source_series_latest(self) -> None:
         offenders = []
@@ -450,6 +483,11 @@ class OneNumberPerVariableScanTests(unittest.TestCase):
                             f"{file} no longer contains a pattern it is allowed ({reason}); remove the entry")
         for file in SOURCE_PAGES:
             self.assertTrue((ROOT / file).is_file(), f"source page {file} is missing")
+        pages = "\n".join(code(file) for file in SOURCE_PAGES)
+        for other in NOT_A_BODY_SERIES:
+            self.assertTrue(any(other.search(line) and R41_PATTERNS["newest-as-latest"].search(line)
+                                for line in pages.splitlines()),
+                            f"NOT_A_BODY_SERIES entry {other.pattern} excuses no line any more; remove it")
 
     def test_estimates_read_the_provider_and_nothing_else(self) -> None:
         """Calories, fitness age, VO2max, Health readiness and the Test Centre prefill."""
