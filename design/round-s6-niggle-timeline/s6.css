@@ -1,0 +1,107 @@
+/* Round S6 · local styles. Loaded after design/system/noop.css and design/round6-scorecard/scorecard.css, which supply the
+   tokens, cards, rows, sheets, skeleton blocks and the AX5 switch. Nothing here adds a colour: every value below is an
+   existing token or the neutral text greys round 6 already uses. */
+.lnk.nb{margin:0;font-weight:500}
+.nrow .val.strong{color:var(--t1)}
+.banner.col{flex-direction:column;align-items:flex-start}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+.quiet{font-size:15px;line-height:21px;color:var(--t2)}
+.own{font-size:17px;line-height:24px;color:var(--t1)}
+.fail span{color:var(--t2)}
+
+/* text field */
+.fld2{background:rgba(118,118,128,.18);border-radius:14px;padding:13px 14px;min-height:48px;border:1px solid transparent}
+.fld2 .v{font-size:16px;line-height:22px;color:var(--t1);display:flex;align-items:center;flex-wrap:wrap;word-break:break-word}
+.fld2 .v .ph{color:var(--t3a)}
+.fld2 .caret{display:inline-block;width:2px;height:20px;border-radius:1px;background:#F5F5F7;margin-left:2px}
+.fld2.bad{border-color:rgba(255,90,79,.6)}
+
+/* niggle rows */
+.ng{padding:12px 0}
+.ng .top{display:flex;align-items:flex-start;gap:12px}
+.ng .k{font-size:16px;font-weight:600;line-height:21px}
+.ng .m{font-size:13px;color:var(--t2);line-height:18px;margin-top:2px}
+.ng .dc{font-size:22px;font-weight:600;letter-spacing:-.4px;line-height:26px;white-space:nowrap;flex:none}
+.ng .lb{font-size:15px;font-weight:600;line-height:20px;margin-top:10px}
+.ng .lb.none{font-weight:500;color:var(--t2)}
+.ng .ac{font-size:15px;line-height:20px;color:var(--t1);margin-top:2px}
+.ng .nx{font-size:13px;color:var(--t2);line-height:18px;margin-top:6px}
+.disc{display:flex;align-items:center;gap:10px;padding:13px 0}
+.disc .t{font-size:16px;font-weight:500;flex:1}
+.disc .val{font-size:15px;color:var(--t2)}
+.disc .dchev{color:var(--t3a);display:inline-flex}
+
+/* niggle detail */
+.tri .dcbig{font-size:34px;font-weight:700;letter-spacing:-.6px;line-height:41px;margin-top:4px}
+.tri .lbbig{font-size:20px;font-weight:600;letter-spacing:-.3px;line-height:26px;margin-top:10px}
+.tri .lbbig.none{font-weight:500;color:var(--t2)}
+.tri .acbig{font-size:17px;line-height:23px;margin-top:2px}
+.tri .rt{font-size:15px;line-height:21px;margin-top:8px}
+.tri .rt.t2{color:var(--t2)}
+.tri .rt.own2{font-size:13px;line-height:18px;margin-top:10px}
+.up{display:flex;gap:12px;align-items:flex-start;padding:12px 0}
+.up .k{font-size:15px;font-weight:600;line-height:20px}
+.up .m{font-size:13px;color:var(--t2);line-height:18px;margin-top:2px}
+.up.off .k,.up.off .d{color:var(--t3a)}
+.dt{flex:none;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.dt .d{font-size:14px;color:var(--t2);line-height:20px;white-space:nowrap}
+.dt .est{margin-left:0}
+
+/* rules */
+.rc{padding:14px 18px}
+.rc .top{display:flex;align-items:flex-start;gap:12px}
+.rc .k{font-size:16px;font-weight:600;line-height:21px}
+.rc .ac{font-size:15px;line-height:20px;margin-top:2px}
+.rc .grip{color:var(--t3a);display:inline-flex;margin-top:2px}
+.rc.drag{background:var(--card2);transform:scale(1.03);box-shadow:0 18px 40px rgba(0,0,0,.55)}
+.pv{font-size:13px;color:var(--t2);line-height:19px;margin-top:10px}
+.card > .pv:first-child{margin-top:0;font-size:15px;line-height:21px;color:var(--t1)}
+
+/* recovery context */
+.phase .meta.fr{font-size:15px;line-height:21px;margin-top:8px}
+.cv .lab.l2{margin-top:10px;display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.cv .big small{font-size:15px}
+.kvr{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:3px 0}
+.kvr .tv{font-size:15px;font-weight:600;white-space:nowrap}
+.kvr .tv small{font-size:13px;color:var(--t2);font-weight:500;margin-left:3px}
+.kv .v.sm{font-size:15px;font-weight:500;letter-spacing:0;line-height:21px}
+.kv .k + .v + .k{margin-top:2px}
+
+/* timeline */
+.tlc{position:relative}
+.tl{display:flex;gap:12px;align-items:flex-start;padding:12px 0;position:relative}
+.tl .mk{flex:none;margin-top:1px;position:relative;z-index:1}
+.tl .k{font-size:16px;font-weight:600;line-height:21px}
+.tl .m{font-size:13px;color:var(--t2);line-height:18px;margin-top:2px}
+.tl .m.w{color:var(--t1)}
+.railine{position:absolute;left:27.25px;top:22px;bottom:22px;width:1.5px;border-radius:1px;background:rgba(255,255,255,.14)}
+
+/* Largest accessibility size (AX5): one column, type scaled as round 6 scales it, nothing truncates. */
+.ax .lnk.nb{font-size:30px;line-height:38px}
+.ax .gh,.ax .gf{font-size:26px;line-height:32px}
+.ax .quiet{font-size:30px;line-height:37px}.ax .own{font-size:34px;line-height:42px}
+.ax .fld2 .v{font-size:32px;line-height:40px}.ax .fld2 .caret{height:38px;width:3px}
+.ax .seg{flex-direction:column}.ax .seg span{font-size:28px;line-height:34px;padding:12px 0}
+.ax .toggle{transform:scale(1.5);transform-origin:left center;margin-right:26px}
+.ax .nrow svg{width:36px;height:36px;flex:none}
+.ax .ng .top{display:block}
+.ax .ng .k{font-size:32px;line-height:38px}.ax .ng .m{font-size:26px;line-height:32px}
+.ax .ng .dc{font-size:44px;line-height:50px;margin-top:6px}
+.ax .ng .lb{font-size:32px;line-height:38px}.ax .ng .ac{font-size:30px;line-height:37px}.ax .ng .nx{font-size:26px;line-height:32px}
+.ax .disc{flex-wrap:wrap}.ax .disc .t{font-size:32px;line-height:38px}.ax .disc .val{font-size:28px}.ax .disc .dchev svg{width:30px;height:30px}
+.ax .tri .dcbig{font-size:52px;line-height:58px}.ax .tri .lbbig{font-size:40px;line-height:46px}.ax .tri .acbig{font-size:34px;line-height:42px}
+.ax .tri .rt{font-size:30px;line-height:37px}.ax .tri .rt.own2{font-size:26px;line-height:32px}
+.ax .up,.ax .tl{flex-wrap:wrap}
+.ax .up .k{font-size:32px;line-height:38px}.ax .up .m{font-size:26px;line-height:32px}
+.ax .dt{order:-1;width:100%;text-align:left;align-items:flex-start}
+.ax .dt .d{font-size:28px;line-height:34px;white-space:normal}
+.ax .two{grid-template-columns:1fr}
+.ax .rc .k{font-size:32px;line-height:38px}.ax .rc .ac{font-size:30px;line-height:37px}.ax .rc .grip svg{width:34px;height:34px}
+.ax .pv{font-size:26px;line-height:32px}
+.ax .phase .meta.fr{font-size:30px;line-height:37px}
+.ax .kvr{display:block}.ax .kvr .tv{font-size:32px;line-height:38px;white-space:normal}.ax .kvr .tv small{font-size:26px}
+.ax .kv .v.sm{font-size:30px;line-height:37px}
+.ax .tl .mk{display:none}
+.ax .tl .k{font-size:32px;line-height:38px}.ax .tl .m{font-size:26px;line-height:32px}
+.ax .banner{display:block}.ax .banner .bt{font-size:30px;line-height:37px}
+.ax .empty .et{font-size:36px;line-height:42px}.ax .empty .ed{font-size:30px;line-height:37px}

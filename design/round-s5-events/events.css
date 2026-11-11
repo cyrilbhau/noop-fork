@@ -1,0 +1,88 @@
+/* Round S5 · Events layer (Stage 5). Local styles only. design/system/noop.css and round 6's scorecard.css are
+   loaded first and are not edited; everything here is built from their tokens (--t1, --t2, --t3a, --card2,
+   --line, --rec-low). No new colour is introduced: an event has no colour of its own. */
+
+/* Events list rows */
+.erow{display:flex;align-items:flex-start;gap:12px;padding:13px 0}
+.erow .et1{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:16px;font-weight:600;line-height:21px}
+.erow .en{font-size:13px;color:var(--t2);line-height:18px;margin-top:2px;overflow-wrap:anywhere}
+.erow .er{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:none}
+.erow .edt{font-size:15px;color:var(--t2);line-height:21px;white-space:nowrap}
+.ptag{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;background:rgba(255,255,255,.08);font-size:11px;font-weight:600;color:var(--t2)}
+.swipe .erow{flex:1;min-width:0;padding-left:18px}
+.swipe .erow .er{display:none}
+.empty .btn + .btn{margin-top:10px}
+
+/* Chart mark row and caption */
+svg.evplot{display:block;margin-top:10px}
+.evcap{margin-top:8px}
+.evl{display:flex;align-items:flex-start;gap:6px;font-size:13px;color:var(--t2);line-height:18px}
+.evl svg{flex:none;margin-top:5px}
+.evmore{font-size:13px;color:var(--t3a);line-height:18px;padding-left:14px}
+.cv .evcap + .kv{margin-top:12px}
+
+/* Scorecard event note */
+.evnote{padding:14px 18px}
+.evnote .evh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.evnote .evh.second{margin-top:10px}
+.evnote .evl{font-size:15px;color:var(--t1);line-height:21px}
+.evnote .evl svg{margin-top:7px}
+.evnote .evmore{font-size:15px;line-height:21px}
+.evnote .evfoot{font-size:12px;color:var(--t3a);line-height:17px;margin-top:10px}
+
+/* Event sheet: a full-height sheet that flows with its content, so no text size can clip it */
+.screen > .sheet.flow{position:relative;z-index:5;margin-top:-42px;min-height:810px;padding-bottom:40px}
+.sbar .sv{justify-self:end;font-weight:600}
+.frm{background:rgba(118,118,128,.18);border-radius:14px;padding:0 14px;margin-top:12px}
+.frm.busy{opacity:.45}
+.frow{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:50px;padding:8px 0}
+.frow + .frow,.frm .cal + .frow,.frm .ferr + .frow{border-top:1px solid var(--line)}
+.frow.stack{display:block;padding:12px 0}
+.frow.stack .fk{display:block;margin-bottom:8px}
+.fk{font-size:16px;font-weight:500}
+.fv{font-size:16px;color:var(--t2);display:inline-flex;align-items:center;gap:6px}
+.fv .ud{font-size:15px;color:var(--t3a);line-height:1}
+.fin{font-size:16px;color:var(--t1);display:inline-flex;align-items:center;text-align:right}
+.fin.ph{color:var(--t3a)}
+.fin .caret{display:inline-block;width:2px;height:20px;border-radius:1px;background:#F5F5F7;margin:0 2px}
+.frm .datechip{margin-top:0}
+.frm .datechip.bad{color:var(--rec-low)}
+.frm .cal{margin:0 0 10px;background:none;padding:4px 0 6px}
+.ferr{font-size:13px;color:var(--rec-low);line-height:18px;padding:0 0 10px;text-align:right}
+.fnotebox{font-size:16px;line-height:22px;min-height:66px;overflow-wrap:anywhere}
+.fnotebox.ph{min-height:44px}
+.fcount{font-size:12px;color:var(--t3a);text-align:right;margin-top:6px}
+.ffoot{font-size:13px;color:var(--t2);line-height:18px;padding:8px 14px 0}
+.esheet .fail{margin:8px 0 0}
+.esheet .fail .lnk{display:flex;margin-top:6px;font-size:13px}
+.kmenu{position:absolute;right:16px;top:124px;width:230px;z-index:9;background:#2C2C31;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:4px 14px;box-shadow:0 18px 40px rgba(0,0,0,.5)}
+.kmenu div{display:flex;justify-content:space-between;align-items:center;font-size:16px;line-height:22px;padding:10px 0}
+.kmenu div + div{border-top:1px solid var(--line)}
+.kmenu b{font-weight:600;width:16px;text-align:right}
+
+/* Settings: another stage's card, drawn only to show position */
+.stubbar{width:46%;height:14px;border-radius:7px;background:rgba(255,255,255,.10)}
+
+/* Largest accessibility size (AX5): one column, type scaled as round 6 does, nothing truncates a date */
+.ax .gh,.ax .gf{font-size:26px;line-height:32px}
+.ax .erow{display:block;padding:18px 0}
+.ax .erow .et1{font-size:32px;line-height:38px}
+.ax .erow .en{font-size:26px;line-height:32px}
+.ax .erow .er{align-items:flex-start;margin-top:4px}
+.ax .erow .edt{font-size:28px;line-height:34px;white-space:normal}
+.ax .ptag{height:auto;font-size:24px;line-height:30px;padding:2px 12px}
+.ax .evl{font-size:26px;line-height:32px;gap:10px}
+.ax .evl svg{width:14px;height:14px;margin-top:9px}
+.ax .evmore{font-size:26px;line-height:32px;padding-left:24px}
+.ax .evnote .evh{display:block}.ax .evnote .evh .chev{display:none}
+.ax .evnote .evl{font-size:30px;line-height:37px}.ax .evnote .evl svg{margin-top:12px}
+.ax .evnote .evmore{font-size:30px;line-height:37px}
+.ax .evnote .evfoot{font-size:26px;line-height:32px}
+.ax .toggle{transform:scale(1.25);transform-origin:left center;margin:6px 0}
+.ax .frow{display:block;padding:14px 0}
+.ax .fk{display:block;font-size:30px;line-height:36px;margin-bottom:8px}
+.ax .fv,.ax .fin{font-size:30px;line-height:36px}
+.ax .seg{flex-direction:column;border-radius:16px}.ax .seg span{font-size:28px;line-height:34px;padding:12px 0;border-radius:14px}
+.ax .fnotebox{font-size:30px;line-height:37px}
+.ax .ffoot{font-size:26px;line-height:32px}
+.ax .stubbar{height:28px}
