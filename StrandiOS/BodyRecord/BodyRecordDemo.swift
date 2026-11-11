@@ -312,7 +312,7 @@ private struct BodyRecordDemoHost: View {
         case .benchmarkDetail(let key):
             BenchmarkDetailScreen(context: context, key: key)
         case .labEditor:
-            MarkerEditorView { _ in }
+            MarkerEditorView { _ in true }
         case .history(let on):
             BodyRecordDemoHistory(weighIns: context.weighIns, bodyRecordOn: on)
         }
