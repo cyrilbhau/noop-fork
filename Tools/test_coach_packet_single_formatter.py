@@ -219,7 +219,7 @@ class AssemblerFunnelTests(unittest.TestCase):
     def test_the_assembler_reads_through_the_named_funnels(self) -> None:
         text = code(ASSEMBLER)
         for call in ("resolvedSteps(", "workoutRows(", "WorkoutSource.classify(", "chargeBaselines",
-                     "LocalDayWindows(", ".refresh()", "CoachPacket.render(", "CoachPacket.privacyViolations("):
+                     "LocalDayWindows(", ".refresh()", "CoachPacket.render(", "CoachPacket.scan("):
             self.assertIn(call, text, f"{ASSEMBLER} must contain {call}")
         self.assertRegex(text, r"\.current\(\s*\.weight\s*,\s*consumer:\s*\.display\s*\)")
 
