@@ -1,0 +1,155 @@
+/* Round S3 · Protein and intake (Stage 3). Local styles only.
+   index.html loads design/system/noop.css, then the approved stage 1 round's scorecard.css (tiles, cards,
+   rows, sheets, skeletons, the AX5 switch, --t3a and the --sig-* aliases), then this file. Neither of those
+   two files is edited. Everything here is built from existing tokens; there is no new colour. */
+
+/* annotations on states sheets (not part of the app) */
+.slab{padding:0 2px 6px;min-height:42px;display:flex;align-items:flex-end}
+.stack{display:flex;flex-direction:column;gap:14px}
+.stack .slab{min-height:0;padding-top:4px}
+
+/* protein card in Your cards: the value tile plus a small ring */
+.pv{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto}
+.pv .v{margin-top:0}
+.pv svg{flex:none}
+
+/* intake screen */
+.dayline{font-size:15px;color:var(--t2);line-height:20px;padding:2px calc(var(--gutter) + 2px) 0}
+.pc .prow{display:flex;align-items:center;gap:18px;margin-top:12px}
+.pc .prow > svg{flex:none}
+.big.none{color:var(--t2)}
+.pc .of{margin-top:4px}
+.pl{font-size:17px;font-weight:600;line-height:22px;margin-top:8px}
+.pl.none{color:var(--t2);font-weight:500}
+.ec .eh{font-size:24px;font-weight:600;letter-spacing:-.5px;line-height:30px;margin-top:6px}
+.ec .eh.none{color:var(--t2)}
+.ec .el{font-size:15px;line-height:21px;margin-top:4px}
+.sup{display:flex;align-items:center;gap:12px;padding:13px 0}
+.sup svg{flex:none}
+.sup .t{font-size:16px;font-weight:500;line-height:21px}
+svg.dc{display:block;margin-top:2px}
+.lg{display:flex;gap:16px;margin-top:10px;font-size:12px;color:var(--t2);line-height:16px}
+.lg span{display:inline-flex;align-items:center;gap:6px}
+.srcrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0}
+.sl{font-size:16px;font-weight:500;line-height:21px;min-width:0}
+.sl.note{font-size:13px;font-weight:400;color:var(--t2);line-height:18px}
+.sr{font-size:15px;color:var(--t1);white-space:nowrap}
+.sr.stale{color:var(--t2)}
+.smsg{font-size:15px;line-height:21px;padding:13px 0}
+.smsg + .srcrow{padding-top:0}
+.erow{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;column-gap:16px;padding:13px 0}
+.et{font-size:16px;font-weight:500}
+.ex{font-size:15px;text-align:right;min-width:52px}
+
+/* quick-add sheet */
+.fld .caret,.fbox .caret{display:inline-block;width:2px;height:22px;border-radius:1px;background:#F5F5F7;margin:0 2px;vertical-align:-3px}
+.fld{border:1px solid transparent}
+.fld.bad{border-color:var(--rec-low)}
+.fld.bad .v{color:var(--rec-low)}
+.fld .k.ph{color:var(--t3a)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chipx{display:inline-flex;flex-direction:column;justify-content:center;gap:1px;min-height:46px;padding:6px 14px;border-radius:14px;background:rgba(118,118,128,.24);font-size:14px;line-height:18px}
+.chipx b{font-weight:600}
+.chipx small{font-size:12px;color:var(--t2);line-height:16px}
+.chipx.on{background:rgba(255,255,255,.18)}
+.chipx.plus{color:var(--t2)}
+.addp{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;margin-top:16px}
+.dayl{background:rgba(118,118,128,.18);border-radius:16px;padding:2px 14px;margin-top:10px}
+.dr{display:flex;justify-content:space-between;align-items:center;min-height:40px;font-size:16px;color:var(--t2)}
+.dr.on{color:var(--t1);font-weight:600}
+
+/* settings card */
+.srow{padding:13px 0}
+.srow .t{font-size:16px;font-weight:500;margin-bottom:10px}
+.fbox{display:inline-flex;align-items:center;justify-content:flex-end;min-width:58px;height:32px;padding:0 10px;border-radius:9px;background:rgba(118,118,128,.24);font-size:16px;flex:none;border:1px solid transparent}
+.fbox.on{border-color:rgba(255,255,255,.5)}
+.fbox.bad{color:var(--rec-low);border-color:var(--rec-low)}
+.un{font-size:15px;color:var(--t2);flex:none;margin-left:-4px}
+.kb{margin:26px 16px 0}
+.hkapp{display:flex;align-items:center;gap:12px;margin-top:8px}
+.hkapp .ai{width:44px;height:44px;border-radius:11px;background:#000;border:1px solid rgba(255,255,255,.14);display:grid;place-items:center;flex:none}
+.hkp{font-size:15px;line-height:21px;color:var(--t2);margin-top:14px}
+
+/* system surfaces: copied from the approved round 4 page (design/round4/system.html), unchanged */
+.wall{background:radial-gradient(120% 70% at 20% 0%,#2A2152 0%,rgba(42,33,82,0) 60%),radial-gradient(90% 60% at 100% 40%,#0F3B45 0%,rgba(15,59,69,0) 65%),linear-gradient(180deg,#0E0F1A 0%,#06070B 100%)}
+.wg{border-radius:24px;background:rgba(24,24,28,.62);backdrop-filter:blur(30px) saturate(150%);border:1px solid rgba(255,255,255,.07);padding:18px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.wg.s{width:166px;height:166px}
+.wg.m{width:352px;height:166px}
+.wg .n{font-weight:300;letter-spacing:-1.4px;line-height:1;font-variant-numeric:tabular-nums}
+.wg .n small{font-size:14px;font-weight:400;letter-spacing:0;color:rgba(255,255,255,.5);margin-left:3px}
+.wg .c{font-size:12px;color:rgba(255,255,255,.5);font-weight:400;margin-top:6px}
+.wlabel{font-size:12px;color:rgba(255,255,255,.72);text-align:center;margin-top:7px;font-weight:400}
+.lockdate{text-align:center;font-size:20px;font-weight:500;color:rgba(255,255,255,.85);margin-top:56px}
+.lockclock{text-align:center;font-size:104px;font-weight:200;letter-spacing:-3px;line-height:1;color:rgba(255,255,255,.92)}
+.acc{display:flex;justify-content:center;gap:12px;margin-top:14px}
+.acc .circ{width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.14);backdrop-filter:blur(20px);display:grid;place-items:center}
+.acc .rect{height:58px;border-radius:16px;background:rgba(255,255,255,.14);backdrop-filter:blur(20px);padding:9px 14px;width:160px}
+.acc .rect b{display:block;font-size:13px;font-weight:600}
+.acc .rect span{display:block;font-size:12px;color:rgba(255,255,255,.72);margin-top:2px}
+.appicon{width:38px;height:38px;border-radius:9px;background:#000;border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;flex:none;position:relative;overflow:hidden}
+/* round 4's .notif, renamed because scorecard.css uses that name for the in-Settings preview */
+.lnotif{border-radius:24px;background:rgba(38,38,44,.72);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(255,255,255,.06);padding:13px 15px;display:flex;gap:12px;align-items:flex-start}
+.lnotif .t{font-size:15px;font-weight:600;line-height:20px}
+.lnotif .b{font-size:15px;line-height:20px;color:rgba(255,255,255,.88);font-weight:400}
+.lnotif .tm{font-size:13px;color:rgba(255,255,255,.45);white-space:nowrap}
+.screen > .lnwrap{position:absolute;left:12px;right:12px;bottom:120px}
+
+/* protein widget, laid out with the round 4 pieces above */
+.wfam{display:flex;flex-direction:column;align-items:center;gap:22px;margin-top:18px}
+.wrow{display:flex;gap:20px;align-items:flex-start;justify-content:center}
+.wlock{width:166px}
+.wlock .acc{margin-top:0}
+.wg.m{justify-content:center}
+.wm{display:flex;align-items:center;gap:18px}
+.wm > svg{flex:none}
+.wm .n{margin-top:8px}
+.wh{font-size:12px;font-weight:500;letter-spacing:.01em;color:rgba(255,255,255,.85)}
+.wt{font-size:22px;font-weight:300;letter-spacing:-.4px;line-height:26px}
+.wt2{font-size:16px;font-weight:400;line-height:21px;margin-top:6px}
+.wg .dimmed,.wg .n.dimmed small{color:var(--t3a)}
+.wg .n.none{color:rgba(255,255,255,.5)}
+.rd{display:block;border-radius:6px;background:rgba(255,255,255,.12)}
+.rd.rdc{border-radius:50%;flex:none}
+.cg{font-size:20px;font-weight:600}
+
+/* largest accessibility size (AX5): the new pieces follow scorecard.css's .ax switch */
+.ax .dayline{font-size:28px;line-height:34px}
+.ax .pv{display:block}
+.ax .pv svg{margin-top:10px}
+.ax .pc .prow{display:block}
+.ax .pc .prow > svg{display:block;margin-bottom:14px}
+.ax .pl{font-size:32px;line-height:38px}
+.ax .ec .eh{font-size:40px;line-height:46px}
+.ax .ec .el{font-size:30px;line-height:36px}
+.ax .sup{align-items:flex-start;gap:16px}
+.ax .sup svg{width:38px;height:38px}
+.ax .sup .t{font-size:32px;line-height:38px}
+.ax .lg{display:block;font-size:26px;line-height:34px}
+.ax .lg span{display:flex;gap:12px}
+.ax .lg svg{width:20px;height:20px}
+.ax .srcrow{display:block}
+.ax .sl{font-size:32px;line-height:38px}
+.ax .sl.note{font-size:26px;line-height:32px}
+.ax .sr{font-size:28px;line-height:34px;white-space:normal;margin-top:4px}
+.ax .smsg{font-size:30px;line-height:36px}
+.ax .banner{display:block}
+.ax .banner .bt{font-size:32px;line-height:38px}
+.ax .banner .bd{font-size:26px;line-height:32px}
+.ax .gh,.ax .gf{font-size:26px;line-height:32px}
+.ax .srow .t{font-size:32px;line-height:38px}
+.ax .seg{flex-direction:column;border-radius:16px}
+.ax .seg span{font-size:28px;line-height:34px;padding:12px 0;border-radius:14px}
+.ax .fbox{height:auto;min-width:0;font-size:30px;line-height:36px;padding:8px 14px;border-radius:14px}
+.ax .un{font-size:28px;line-height:34px;margin-left:0}
+.ax .notif{display:block}
+.ax .notif .nt,.ax .notif .nb{font-size:30px;line-height:36px}
+.ax .notif .nw{font-size:26px;margin-left:0}
+.ax .notif .row{display:block}
+.ax .fld{display:block}
+.ax .fld .k{display:block;font-size:28px;line-height:34px}
+.ax .fld .v{display:block;font-size:46px;line-height:54px}
+.ax .fld .v small{font-size:28px}
+.ax .fld .caret{height:40px;width:3px}
+.ax .chipx{font-size:28px;line-height:34px;padding:10px 18px;border-radius:20px}
+.ax .chipx small{font-size:24px;line-height:30px}
+.ax .addp{font-size:30px;line-height:36px}
