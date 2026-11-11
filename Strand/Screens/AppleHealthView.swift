@@ -52,6 +52,8 @@ struct AppleHealthView: View {
     @EnvironmentObject private var health: HealthKitBridge
     @EnvironmentObject private var model: AppModel
     #endif
+    /// Observed so the single-reading caption of a weight chart follows the scorecard flag (ruling R41).
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
 
     // Imperial/Metric display preference (D#103). Weight and lean mass (stored kg) re-label to lb here;
     // every other Apple Health metric is unit-agnostic. Display-only.
@@ -690,7 +692,7 @@ struct AppleHealthView: View {
                 } else if let only = vals.last {
                     // A single point is not a line — present the lone reading,
                     // never an "empty" state when the series has data.
-                    singlePoint(only, fmt: fmt, accent: StrandPalette.sample(stops: gradient.stops, at: 0.85))
+                    singlePoint(only, key: key, fmt: fmt, accent: StrandPalette.sample(stops: gradient.stops, at: 0.85))
                 } else {
                     emptyChart
                 }
@@ -700,9 +702,12 @@ struct AppleHealthView: View {
     }
 
     /// Lone-reading body for series with exactly one point in range.
-    private func singlePoint(_ value: Double, fmt: (Double) -> String, accent: Color) -> some View {
+    /// `key` is the series: a lone weight reading is this source's, and with the scorecard flag on
+    /// it is not called the latest one (ruling R41).
+    private func singlePoint(_ value: Double, key: String, fmt: (Double) -> String, accent: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Latest reading").strandOverline()
+            Text(LocalizedStringKey(BodyMeasurementSourcePage.newestReadingLabel(
+                key: key, policy: scorecardFlag.displayPolicy))).strandOverline()
             Text(fmt(value)).font(StrandFont.number(34)).foregroundStyle(accent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

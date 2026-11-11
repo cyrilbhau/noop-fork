@@ -730,6 +730,22 @@ private struct MetricRow: View {
 struct MetricDetailView: View {
     let metric: MetricDescriptor
     @EnvironmentObject var repo: Repository
+    /// Ruling R41: a page of one source's weight or waist series names its source and never calls
+    /// its newest point "latest". Observed, so the wording follows the scorecard flag; every other
+    /// metric, and the flag-off state, keep the base wording.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+
+    /// The page's title: the metric's, and for a body measurement with the flag on its source too.
+    var pageTitle: String {
+        BodyMeasurementSourcePage.title(metric.title, key: metric.key, sourceLabel: metric.sourceLabel,
+                                        policy: scorecardFlag.displayPolicy)
+    }
+
+    /// The label of the stat that carries the newest point of the series.
+    var newestLabel: LocalizedStringKey {
+        LocalizedStringKey(BodyMeasurementSourcePage.newestLabel(key: metric.key, sourceLabel: metric.sourceLabel,
+                                                                 policy: scorecardFlag.displayPolicy))
+    }
     /// #430 parity: the detail carries the SAME backdrop as the screen that pushed it — the day-cycle sky
     /// when the setting is on, the plain canvas when off — so a Key-Metrics tile tap doesn't jar from the
     /// liquid Today's sky to a flat page. Same keys TodayView/LiquidTodayView gate on; "Sky behind cards"
@@ -1103,7 +1119,7 @@ struct MetricDetailView: View {
             }
             .ignoresSafeArea()
         }
-        .navigationTitle(metric.title)
+        .navigationTitle(pageTitle)
         .task(id: loadTaskID) { await load() }
         // Range changes the window, hence the correlation inputs — recompute the
         // cached scan rather than letting `correlationCard` run it inside body.
@@ -1342,7 +1358,7 @@ struct MetricDetailView: View {
                 // is never crushed into a letter-per-line column by the range pill (2026-07-02).
                 if !isStepsDetail { VStack(alignment: .leading, spacing: 2) {
                     Text(MetricCatalog.categoryDisplayName(metric.category).uppercased()).strandOverline()
-                    Text(metric.title)
+                    Text(pageTitle)
                         .font(StrandFont.title2)
                         .foregroundStyle(StrandPalette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1458,7 +1474,7 @@ struct MetricDetailView: View {
         return VStack(alignment: .leading, spacing: 8) {
             if !isStepsDetail { VStack(alignment: .leading, spacing: 2) {
                 Text(MetricCatalog.categoryDisplayName(metric.category).uppercased()).strandOverline()
-                Text(metric.title)
+                Text(pageTitle)
                     .font(StrandFont.title2)
                     .foregroundStyle(StrandPalette.textPrimary)
             } }
@@ -1590,7 +1606,7 @@ struct MetricDetailView: View {
                 ChartFooter([
                     ("Window", effectiveRange.label),
                     ("Points", "\(windowed.count)"),
-                    ("Latest", heroValue),
+                    (newestLabel, heroValue),
                 ])
             }
         }
@@ -1645,7 +1661,7 @@ struct MetricDetailView: View {
                          caption: deltaCaption, accent: StrandPalette.textPrimary,
                          delta: cmp.pctChange.map { "\($0 >= 0 ? "+" : "")\(String(format: "%.1f", $0))%" },
                          deltaColor: deltaColor)
-                StatTile(label: "Latest", value: latestPoint.map { fmt($0.value) } ?? "—",
+                StatTile(label: newestLabel, value: latestPoint.map { fmt($0.value) } ?? "—",
                          caption: latestCaption(windowed: windowed, effectiveRange: effectiveRange), accent: accent)
             }
         }
@@ -1667,7 +1683,7 @@ struct MetricDetailView: View {
                      accent: StrandPalette.textPrimary)
             StatTile(label: "Max", value: fmt(s.max),
                      accent: StrandPalette.textPrimary)
-            StatTile(label: "Latest", value: latestPoint.map { fmt($0.value) } ?? "—",
+            StatTile(label: newestLabel, value: latestPoint.map { fmt($0.value) } ?? "—",
                      caption: latestCaption(windowed: windowed, effectiveRange: effectiveRange), accent: accent)
             StatTile(label: "Δ vs prev", value: deltaText ?? "—",
                      caption: deltaCaption, accent: StrandPalette.textPrimary,
@@ -2203,7 +2219,7 @@ extension MetricDetailView {
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .noopAmbientBackground(
             AmbientPreset.metricDetail.blobs(intensity: AmbientIntensity(rawValue: ambientIntensityRaw) ?? .balanced))
-        .navigationTitle(metric.title)
+        .navigationTitle(pageTitle)
         .task(id: loadTaskID) { await load() }
         .onChange(of: range) { _, _ in
             selectedChartX = nil
@@ -2392,7 +2408,7 @@ extension MetricDetailView {
         return NoopGlassCard {
             VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
                 StatGrid([
-                    StatGridItem("Latest", value: latestValue?.value, unit: latestValue?.unit),
+                    StatGridItem(newestLabel, value: latestValue?.value, unit: latestValue?.unit),
                     StatGridItem("Trend", value: trend,
                                  unit: hasDelta ? String(localized: "vs prev \(effectiveRange.name)") : nil),
                     StatGridItem("Lowest", value: low.value, unit: low.unit),
@@ -2412,7 +2428,9 @@ extension MetricDetailView {
         guard let point = latest(in: windowed),
               let date = latestCaption(windowed: windowed, effectiveRange: effectiveRange) else { return nil }
         let source = readingRows(windowed: [point]).first?.source
-        return ([String(localized: "Latest reading"), date] + (source.map { [$0] } ?? [])).joined(separator: " · ")
+        let label = BodyMeasurementSourcePage.newestReadingLabel(key: metric.key, policy: scorecardFlag.displayPolicy)
+        return ([String(localized: String.LocalizationValue(label)), date] + (source.map { [$0] } ?? []))
+            .joined(separator: " · ")
     }
 
     @ViewBuilder private var redesignAbout: some View {
