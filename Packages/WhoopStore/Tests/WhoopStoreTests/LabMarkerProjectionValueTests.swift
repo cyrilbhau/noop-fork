@@ -209,11 +209,10 @@ final class LabMarkerProjectionValueTests: XCTestCase {
                        "no reading holds 3.4 any more; z-a is the latest reading of the day")
     }
 
-    /// The boundary of A14 that `LabMarkerOwnershipStoreTests.testGeneratedHistoriesKeepRowsAndProjectionConsistent`
-    /// fixes: the deleted reading was the LATEST of the day, so the cell holding its number projected
-    /// that reading, not the earlier one that shares the number. The cell follows the reading that
-    /// is the latest now.
-    func testDeletingTheLatestReadingMovesTheCellEvenWhenAnEarlierReadingSharesItsNumber() async throws {
+    /// Ruling A19: A14 holds literally, so it has no exception for the latest reading. z-a (instant
+    /// T, 3.4) is the latest reading of the day, b (T, 3.0) conflicts with it, and e (one hour before
+    /// T) shares its number. Deleting z-a leaves the cell at 3.4 because e still holds 3.4.
+    func testDeletingTheLatestReadingKeepsTheCellWhileAnEarlierReadingHoldsItsNumber() async throws {
         for perId in [false, true] {
             let store = try await Fx.emptyStoreWithRegistry()
             let latest = Self.reading("z-a", Fx.a, Fx.t3, 3.4)
@@ -230,8 +229,8 @@ final class LabMarkerProjectionValueTests: XCTestCase {
             }
 
             XCTAssertEqual(try ids(store), ["b", "e"])
-            XCTAssertEqual(try cells(store), [Fx.cell(Self.marker, Fx.day3, 3.0)],
-                           "per-id delete: \(perId): b is now the latest reading of the day")
+            XCTAssertEqual(try cells(store), [Fx.cell(Self.marker, Fx.day3, 3.4)],
+                           "per-id delete: \(perId): e still holds 3.4, so the number did not leave the cell")
         }
     }
 
