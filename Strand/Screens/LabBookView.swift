@@ -262,8 +262,9 @@ struct LabBookView: View {
                 }
                 let rows = result.rows.map { r -> LabMarkerRow in
                     // Local noon of the row's literal day: deterministic, so re-importing
-                    // the same file updates in place (natural key
-                    // deviceId+markerKey+takenAt+source) instead of duplicating.
+                    // the same file updates in place (owner-scope identity
+                    // markerKey+takenAt+source, under whichever strap id the reading was
+                    // first stored) instead of duplicating.
                     let epoch = LabBookFormat.noonEpoch(r.day)
                     return LabMarkerRow(
                         id: "\(r.markerKey)-\(epoch)-\(UUID().uuidString.prefix(8))",
@@ -280,7 +281,9 @@ struct LabBookView: View {
                         referenceText: nil
                     )
                 }
-                try await store.upsertLabMarkers(rows)
+                // Owner-scope upsert (ruling R42): a reading already stored under another strap id
+                // is updated where it is, so a re-import after the active strap changed cannot double.
+                try await store.upsertOwnerLabMarkers(rows)
                 await repo.refresh()   // re-resolves the lab-book projection into Compare/Explore/Coach
                 await load()
                 var msg = String(localized: "Imported \(result.importedReadings) readings (\(result.distinctMarkers) markers)")
@@ -468,26 +471,28 @@ struct LabBookView: View {
 
     private func load() async {
         guard let store = await repo.storeHandle() else { return }
-        // Read by category so we cover them all; markers are stored under the strap device id.
-        var all: [LabMarkerRow] = []
-        for category in LabMarkerCategory.allCases {
-            let rows = (try? await store.labMarkers(deviceId: repo.deviceId, category: category.rawValue)) ?? []
-            all.append(contentsOf: rows)
-        }
-        markers = all.sorted { $0.takenAt < $1.takenAt }
+        // Ruling R42: the readings are the owner's, not the strap's. Every reading under every
+        // device id present in the table is listed, through the app's one Lab Book read path; a
+        // reading stored twice is one line, two different readings at one instant are two.
+        markers = await LabBookRows.all(store: store, activeDeviceId: repo.deviceId)
         loaded = true
     }
 
     private func save(_ drafts: [LabMarkerRow]) async {
         guard !drafts.isEmpty, let store = await repo.storeHandle() else { return }
-        try? await store.upsertLabMarkers(drafts)
+        // Owner-scope upsert: saving a reading that is already stored (same marker, instant and
+        // source, under any strap id) updates it where it is. Drafts still carry the active id,
+        // which is where a new reading is written.
+        try? await store.upsertOwnerLabMarkers(drafts)
         await repo.refresh()   // re-resolves the lab-book projection into Compare/Explore/Coach
         await load()
     }
 
     private func delete(_ id: String) async {
         guard let store = await repo.storeHandle() else { return }
-        _ = try? await store.deleteLabMarker(id: id)
+        // The list shows a reading stored under two ids once, so the delete removes every stored
+        // copy of it; otherwise the reading would reappear from the copy.
+        _ = try? await store.deleteLabMarkerAndCopies(id: id)
         await repo.refresh()
         await load()
     }
