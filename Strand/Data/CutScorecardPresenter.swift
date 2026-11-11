@@ -504,7 +504,9 @@ enum CutScorecardPresenter {
             caption = String(localized: "Building: \(min(slow?.consecutiveWeeks ?? 0, slow?.requiredWeeks ?? 0)) of \(slow?.requiredWeeks ?? 0) weeks")
         case .loading, .pastDay: caption = title
         }
-        if status == .phaseNotStarted { cardValue = nil }
+        // No reading inside the phase yet: the card draws the dash (§10.1), never a weight from
+        // before the phase beside "Log your first weigh-in".
+        if status == .phaseNotStarted || status == .noReadings { cardValue = nil }
         let card = CutScorecardCard(status: status, title: cardTitle, value: cardValue,
                                     unit: cardValue == nil ? nil : words.weightUnit, caption: caption,
                                     isDimmed: status == .overdue, opensScorecard: true)
@@ -517,7 +519,7 @@ enum CutScorecardPresenter {
             weight: weightCurve, waist: waistCurve,
             emptyCurvesText: weightCurve == nil ? String(localized: "Not measured yet") : nil,
             projection: projection,
-            logWeighInIsPrimary: isDue || weightCurve == nil || reason == .weighInOverdue,
+            logWeighInIsPrimary: isDue || weightCurve == nil || reason == .weighInOverdue || status == .noReadings,
             historyValue: logged == 1 ? String(localized: "\(logged) weigh-in") : String(localized: "\(logged) weigh-ins"),
             phaseLinkValue: header?.name ?? context.storedPhaseName ?? String(localized: "Not set up"),
             card: card)
@@ -544,6 +546,11 @@ enum CutScorecardPresenter {
         case .profile, .profileDefault: return String(localized: "from profile")
         }
     }
+
+    /// Whether the scorecard screen and the weigh-in history exist. Both pushed screens read this
+    /// one decision and leave the stack when it is false: with the flag off there is no screen
+    /// (specification §9), wherever the flag was switched from.
+    static func screenIsReachable(flagEnabled: Bool) -> Bool { flagEnabled }
 
     /// The card's title, shared with `TodayCardResolver.cardTitle`.
     static var cardTitle: String { String(localized: "Scorecard") }
@@ -770,6 +777,16 @@ enum CutScorecardPresenter {
         return shown
     }
 
+    /// The reminder row's state from the stored switch, the system's present answer and what the
+    /// row shows now. Stored on: on, or denied when the system will not deliver it. Stored off:
+    /// off, except that a row already saying notifications are off keeps saying so for exactly as
+    /// long as that is still true, and stops once they are allowed. The switch itself stays off.
+    static func reminderStatus(storedOn: Bool, systemDenied: Bool,
+                               current: WeighInReminderStatus) -> WeighInReminderStatus {
+        if storedOn { return systemDenied ? .denied : .on }
+        return current == .denied && systemDenied ? .denied : .off
+    }
+
     /// The notification's title (specification §10.10). The reminder and its Settings preview share it.
     static var reminderTitle: String { String(localized: "Weekly weigh-in") }
 
@@ -921,8 +938,31 @@ enum CutScorecardPresenter {
 
     // MARK: - Numbers, units and dates
 
-    /// How one surface writes numbers, units and dates. Dates are day-first as the frames draw them
-    /// ("Wed 29 Jan"), with the locale's own weekday and month words.
+    /// The three ways a scorecard surface writes a day.
+    enum DateStyle { case dayAndDate, shortDay, dayAndDateWithYear }
+
+    /// The one formatter every scorecard date goes through. Dates are day-first as the approved
+    /// frames draw them ("Wed 29 Jan"), with the locale's own weekday and month words. Chinese is
+    /// the exception: a fixed pattern would read "29 1月", so it takes the locale's own field order
+    /// and markers ("1月29日").
+    static func dateFormatter(_ style: DateStyle, locale: Locale, calendar: Calendar) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = locale
+        let usesLocaleOrder = locale.language.languageCode?.identifier == "zh"
+        switch (style, usesLocaleOrder) {
+        case (.dayAndDate, false): formatter.dateFormat = "EEE d MMM"
+        case (.shortDay, false): formatter.dateFormat = "d MMM"
+        case (.dayAndDateWithYear, false): formatter.dateFormat = "EEE d MMM yyyy"
+        case (.dayAndDate, true): formatter.setLocalizedDateFormatFromTemplate("EEEdMMM")
+        case (.shortDay, true): formatter.setLocalizedDateFormatFromTemplate("dMMM")
+        case (.dayAndDateWithYear, true): formatter.setLocalizedDateFormatFromTemplate("EEEdMMMyyyy")
+        }
+        return formatter
+    }
+
+    /// How one surface writes numbers, units and dates. Every date comes from `dateFormatter`.
     struct Wording {
         let unitSystem: UnitSystem
         let locale: Locale
@@ -937,17 +977,14 @@ enum CutScorecardPresenter {
             var utc = Calendar(identifier: .gregorian)
             utc.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
             calendar = utc
-            func formatter(_ pattern: String, _ locale: Locale) -> DateFormatter {
-                let formatter = DateFormatter()
-                formatter.calendar = utc
-                formatter.timeZone = utc.timeZone
-                formatter.locale = locale
-                formatter.dateFormat = pattern
-                return formatter
-            }
-            dayAndDate = formatter("EEE d MMM", locale)
-            shortDay = formatter("d MMM", locale)
-            keys = formatter("yyyy-MM-dd", Locale(identifier: "en_US_POSIX"))
+            dayAndDate = CutScorecardPresenter.dateFormatter(.dayAndDate, locale: locale, calendar: utc)
+            shortDay = CutScorecardPresenter.dateFormatter(.shortDay, locale: locale, calendar: utc)
+            let dayKeys = DateFormatter()
+            dayKeys.calendar = utc
+            dayKeys.timeZone = utc.timeZone
+            dayKeys.locale = Locale(identifier: "en_US_POSIX")
+            dayKeys.dateFormat = "yyyy-MM-dd"
+            keys = dayKeys
         }
 
         var weightUnit: String { unitSystem == .metric ? "kg" : "lb" }
@@ -1061,11 +1098,7 @@ extension CutScorecardPresenter {
     static func weighInDateText(takenAt: Date, now: Date, timeZone: TimeZone, locale: Locale) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let day = DateFormatter()
-        day.calendar = calendar
-        day.timeZone = timeZone
-        day.locale = locale
-        day.dateFormat = "EEE d MMM"
+        let day = dateFormatter(.dayAndDate, locale: locale, calendar: calendar)
         let time = DateFormatter()
         time.calendar = calendar
         time.timeZone = timeZone
@@ -1104,6 +1137,9 @@ struct ScorecardPhaseRow: Equatable, Identifiable {
     var placeholder: String?
     /// What follows the number: "% of bodyweight per week", "weeks running", "kg".
     var suffix: String?
+    /// The suffix begins with the percent sign and is drawn against the number: "0.25%", never
+    /// "0.25 %". False for a suffix that is a word or a unit, which keeps its gap.
+    var suffixAttaches: Bool = false
     var input: Input
     var isInvalid: Bool
 
@@ -1134,14 +1170,23 @@ struct ScorecardPhaseSheetPresentation: Equatable {
     /// "Start a new phase" and its note. Nil while the draft is itself a new phase.
     var newPhaseTitle: String?
     var newPhaseNote: String?
+    /// Set exactly while the stored phases cannot be read: why Save is off. Nil otherwise.
+    var storedPhasesNote: String? = nil
+    /// The explicit way out of that state, and the one question asked before it is taken. Nil
+    /// unless `storedPhasesNote` is set.
+    var discardStoredPhasesTitle: String? = nil
+    var discardStoredPhasesQuestion: String? = nil
 }
 
 extension CutScorecardPresenter {
 
     /// The sheet for `draft`. `today` marks a start date of today; `previousPhaseName` is the stored
-    /// phase a new phase would follow.
+    /// phase a new phase would follow. `phasesNeedAttention` is
+    /// `CutScorecardSettings.phasesNeedAttention`: while it is true a save would be refused, so Save
+    /// is off and the sheet says why.
     static func phaseSheet(_ draft: ScorecardPhaseDraft, today: String, previousPhaseName: String?,
-                           unitSystem: UnitSystem, locale: Locale) -> ScorecardPhaseSheetPresentation {
+                           unitSystem: UnitSystem, locale: Locale,
+                           phasesNeedAttention: Bool = false) -> ScorecardPhaseSheetPresentation {
         let words = Wording(unitSystem: unitSystem, locale: locale)
         let invalid = Set(draft.invalidFields)
         let message = draft.validationMessage
@@ -1171,11 +1216,19 @@ extension CutScorecardPresenter {
         shown = shown.filter { seen.insert($0.title).inserted }
 
         return ScorecardPhaseSheetPresentation(
-            title: draft.title, cancelTitle: cancelTitle, saveTitle: saveTitle, canSave: draft.canSave,
+            title: draft.title, cancelTitle: cancelTitle, saveTitle: saveTitle,
+            canSave: draft.canSave && !phasesNeedAttention,
             cutTitle: String(localized: "Cut"), otherTitle: String(localized: "Other"), groups: shown,
             newPhaseTitle: draft.isNewPhase ? nil : String(localized: "Start a new phase"),
             newPhaseNote: draft.isNewPhase ? nil
-                : String(localized: "The current phase stays in your list of past phases."))
+                : String(localized: "The current phase stays in your list of past phases."),
+            storedPhasesNote: phasesNeedAttention
+                ? String(localized: "Your stored phases cannot be read, so nothing is saved over them. Your weigh-ins are unaffected.")
+                : nil,
+            discardStoredPhasesTitle: phasesNeedAttention ? String(localized: "Discard stored phases") : nil,
+            discardStoredPhasesQuestion: phasesNeedAttention
+                ? String(localized: "The stored phases are removed and cannot be brought back. Your weigh-ins and rules are kept.")
+                : nil)
     }
 
     private static func phaseFootnote(_ group: ScorecardPhaseDraft.Group, draft: ScorecardPhaseDraft,
@@ -1212,7 +1265,8 @@ extension CutScorecardPresenter {
         func row(_ text: String, _ suffix: String?, _ input: ScorecardPhaseRow.Input,
                  placeholder: String? = nil) -> ScorecardPhaseRow {
             ScorecardPhaseRow(field: field, label: field.label, text: text, placeholder: placeholder,
-                              suffix: suffix, input: input, isInvalid: isInvalid)
+                              suffix: suffix, suffixAttaches: suffix?.hasPrefix("%") == true, input: input,
+                              isInvalid: isInvalid)
         }
         func decimal(_ value: Double, _ decimals: Int) -> String {
             value.isFinite ? words.trimmed(value, decimals) : ""
@@ -1319,6 +1373,17 @@ extension CutScorecardPresenter {
         return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))
     }
 
+    /// The first day the date control offers: the start of `draft.earliestStartDay` in `timeZone`.
+    /// Nil when the start date is free.
+    static func phaseEarliestStartDate(_ draft: ScorecardPhaseDraft, timeZone: TimeZone) -> Date? {
+        guard let day = draft.earliestStartDay else { return nil }
+        let parts = day.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3, CutScorecard.weekStart(containing: day) != nil else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+
     /// `draft` starting on the day `date` falls on in `timeZone`.
     static func phaseDraft(_ draft: ScorecardPhaseDraft, startingOn date: Date,
                            timeZone: TimeZone) -> ScorecardPhaseDraft {
@@ -1339,11 +1404,7 @@ extension CutScorecardPresenter.Wording {
         keys.locale = Locale(identifier: "en_US_POSIX")
         keys.dateFormat = "yyyy-MM-dd"
         guard let instant = keys.date(from: day) else { return day }
-        let shown = DateFormatter()
-        shown.calendar = calendar
-        shown.timeZone = calendar.timeZone
-        shown.locale = locale
-        shown.dateFormat = "EEE d MMM yyyy"
-        return shown.string(from: instant)
+        return CutScorecardPresenter.dateFormatter(.dayAndDateWithYear, locale: locale, calendar: calendar)
+            .string(from: instant)
     }
 }

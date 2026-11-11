@@ -152,6 +152,9 @@ final class CutScorecardModel: ObservableObject {
         let attention = settings.rulesNeedAttention
         let storedPhaseName = settings.activePhase(on: today)?.name
         if state == .idle { state = .loading }
+        // Before the snapshot is read: a change published while this load is still evaluating then
+        // starts another load, instead of being missed.
+        followProvider()
 
         let evaluation: CutScorecardEvaluation
         if let evaluate {
@@ -173,13 +176,13 @@ final class CutScorecardModel: ObservableObject {
             storedPhaseName: storedPhaseName)
         let presentation = CutScorecardPresenter.present(evaluation.result, input: evaluation.input, context: context)
         if state != .loaded(presentation) { state = .loaded(presentation) }
-        followProvider()
         // A weigh-in saved or deleted reaches the reminder here: every such write reloads this model.
         await reminder?.reconcile(latestWeighInDay: evaluation.result.currentWeightDay)
     }
 
-    /// After the first result, a changed provider snapshot reloads the model (ruling R32): that is
-    /// how a saved, edited or deleted weigh-in reaches the card and the screen.
+    /// From the first load with the flag on, a changed provider snapshot reloads the model (ruling
+    /// R32): that is how a saved, edited or deleted weigh-in reaches the card and the screen. The
+    /// generation guard stops the load it overtakes from publishing.
     private func followProvider() {
         guard revisionObserver == nil else { return }
         revisionObserver = provider.$revision.dropFirst().sink { [weak self] _ in
@@ -676,6 +679,10 @@ struct ScorecardPhaseDraft: Equatable {
     var parameters: CutScorecardParameters
     /// The start day of the stored phase this draft edits; nil for a new phase.
     private var storedStartDay: String?
+    /// The start day of the stored phase before the one this draft writes: the phase before the
+    /// edited one, or the edited one itself for "Start a new phase". Nil when there is none. A
+    /// phase that started before it would sort ahead of that phase and stop being the active one.
+    private(set) var earliestStartDay: String? = nil
 
     /// First use: a cut starting today, no target, the generic band and the generic rules.
     static func firstUse(today: String) -> ScorecardPhaseDraft {
@@ -692,11 +699,15 @@ struct ScorecardPhaseDraft: Equatable {
         guard let stored = settings.activePhase(on: today) ?? phases.first(where: { $0.startDay > today }) else {
             return firstUse(today: today)
         }
+        // `save(to:)` replaces the last stored phase with this start day; the one before it is the floor.
+        let index = phases.lastIndex { $0.startDay == stored.startDay }
+        let before = index.flatMap { $0 > 0 ? phases[$0 - 1].startDay : nil }
         return ScorecardPhaseDraft(isNewPhase: false, kind: stored.kind, name: stored.name,
                                    startDay: stored.startDay, targetWeightKg: stored.targetWeightKg,
                                    rateLowPercentPerWeek: stored.rateLowPercentPerWeek,
                                    rateHighPercentPerWeek: stored.rateHighPercentPerWeek,
-                                   parameters: settings.parameters, storedStartDay: stored.startDay)
+                                   parameters: settings.parameters, storedStartDay: stored.startDay,
+                                   earliestStartDay: before)
     }
 
     /// "Start a new phase": a draft that will be appended, starting today. The band and the rules
@@ -708,6 +719,8 @@ struct ScorecardPhaseDraft: Equatable {
         next.name = String(localized: "Cut")
         next.startDay = today
         next.targetWeightKg = nil
+        // The new phase follows the one this draft was opened from.
+        next.earliestStartDay = storedStartDay ?? earliestStartDay
         next.storedStartDay = nil
         return next
     }
@@ -745,6 +758,9 @@ struct ScorecardPhaseDraft: Equatable {
         }
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { invalid.insert(.name) }
         if CutScorecard.weekStart(containing: startDay) == nil { invalid.insert(.startDay) }
+        // Day keys compare as text. The same day as the earlier phase is allowed: the stored order
+        // is stable, so the phase written here stays the later of the two.
+        if let earliestStartDay, startDay < earliestStartDay { invalid.insert(.startDay) }
         if kind == .cut {
             let p = parameters
             if let target = targetWeightKg, !(amount(target) && target > 0) { invalid.insert(.targetWeight) }
@@ -791,10 +807,11 @@ struct ScorecardPhaseDraft: Equatable {
     var canSave: Bool { invalidFields.isEmpty && isAcceptedByTheScorecard }
 
     /// Stores the phase, and for a cut the rules. A new phase is appended; an edit replaces the
-    /// stored phase it was opened from. Writes nothing and returns false when `!canSave`.
+    /// stored phase it was opened from. Writes nothing and returns false when `!canSave`, and when
+    /// the stored phases cannot be read: saving would replace every one of them with this one.
     @discardableResult
     func save(to settings: CutScorecardSettings) -> Bool {
-        guard canSave else { return false }
+        guard canSave, !settings.phasesNeedAttention else { return false }
         let isCut = kind == .cut
         let stored = CutScorecardStoredPhase(
             kind: kind, name: name, startDay: startDay, targetWeightKg: isCut ? targetWeightKg : nil,

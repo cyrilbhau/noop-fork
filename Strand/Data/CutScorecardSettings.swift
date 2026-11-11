@@ -117,6 +117,26 @@ final class CutScorecardSettings {
         }
     }
 
+    /// True when something is stored under the phases key and it does not decode as a whole: it is
+    /// not a string, it does not parse, or one element cannot be read. False when nothing is
+    /// stored. `phases` is then empty, and a save built on that would replace every stored phase,
+    /// so `ScorecardPhaseDraft.save(to:)` refuses while this is true.
+    var phasesNeedAttention: Bool {
+        guard defaults.object(forKey: Self.phasesKey) != nil else { return false }
+        guard let raw = defaults.string(forKey: Self.phasesKey) else { return true }
+        return (try? JSONDecoder().decode([CutScorecardStoredPhase].self, from: Data(raw.utf8))) == nil
+    }
+
+    /// The owner's explicit choice to give up stored phases that cannot be read, so that a phase
+    /// can be set up again. Removes the stored value only while it is unreadable; readable phases
+    /// are never removed here. Returns whether anything was removed.
+    @discardableResult
+    func discardUnreadablePhases() -> Bool {
+        guard phasesNeedAttention else { return false }
+        defaults.removeObject(forKey: Self.phasesKey)
+        return true
+    }
+
     /// The phase with the greatest `startDay` on or before `today`.
     func activePhase(on today: String) -> CutScorecardStoredPhase? {
         phases.last { $0.startDay <= today }
