@@ -47,6 +47,11 @@ struct MarkerEditorView: View {
 
     @State private var saving = false
 
+    // Stage 4 (4B, laboratory units): the switch, the chosen option's label and the "Saved …" line.
+    @ObservedObject private var reportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
+    @State private var reportUnitLabel = ""
+    @State private var savedLine: String?
+
     private enum Field: Hashable { case value, diastolic, note, reference, customName, customUnit }
     @FocusState private var focused: Field?
 
@@ -81,6 +86,11 @@ struct MarkerEditorView: View {
             SectionHeader("Marker", overline: "what are you logging?")
             NoopCard {
                 VStack(alignment: .leading, spacing: 12) {
+                    if let savedLine, selection == nil, !addingCustom {
+                        Text(verbatim: savedLine)
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textSecondary)
+                    }
                     if addingCustom {
                         customMarkerFields
                     } else if let selection {
@@ -257,7 +267,48 @@ struct MarkerEditorView: View {
         }
     }
 
+    @ViewBuilder
     private var valueField: some View {
+        if let entryDraft {
+            reportUnitsValueField(entryDraft)
+        } else {
+            legacyValueField
+        }
+    }
+
+    /// 4B, flag on (§10.6 L1 to L4): every option of the unit table, and what a save stores.
+    private func reportUnitsValueField(_ draft: LabMarkerEntryDraft) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Value").strandOverline()
+                Spacer()
+                if draft.unitOptions.count > 1 {
+                    SegmentedPillControl(draft.unitOptions, selection: $reportUnitLabel) { $0 }
+                        .accessibilityLabel("Unit")
+                }
+            }
+            HStack(spacing: 8) {
+                TextField("e.g. 3.1", text: $valueText)
+                    .textFieldStyle(.plain)
+                    .font(StrandFont.bodyNumber)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                    .numericKeyboard()
+                    .focused($focused, equals: .value)
+                Text(verbatim: draft.unitLabel).font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(StrandPalette.surfaceInset, in: inputShape)
+            .overlay(inputShape.strokeBorder(StrandPalette.hairline, lineWidth: 1))
+            ForEach([draft.errorLine, draft.conversionLine, draft.formulaLine].compactMap { $0 }, id: \.self) { line in
+                Text(verbatim: line)
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var legacyValueField: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Value").strandOverline()
@@ -338,6 +389,11 @@ struct MarkerEditorView: View {
                 .font(StrandFont.body)
                 .foregroundStyle(StrandPalette.textSecondary)
             Spacer()
+            if entryDraft?.offersSaveAndAddAnother == true {
+                Button("Save and add another") { saveAndAddAnother() }
+                    .buttonStyle(.noopGhost)
+                    .disabled(drafts.isEmpty || saving)
+            }
             Button("Save") { save() }
                 .buttonStyle(.noopPrimary)
                 .frame(maxWidth: 160)
@@ -352,6 +408,8 @@ struct MarkerEditorView: View {
         selection = def
         unit = def.canonicalUnit
         unitChoice = 0
+        reportUnitLabel = def.canonicalUnit
+        savedLine = nil
         focused = .value
     }
 
@@ -415,6 +473,11 @@ struct MarkerEditorView: View {
                 row(key: LabBookProjection.bpDiastolicKey, category: .bloodPressure, value: dia, unit: "mmHg"),
             ]
         }
+        if let entryDraft {
+            guard entryDraft.canSave, let stored = entryDraft.storedValue else { return [] }
+            return [row(key: markerKey, category: category, value: stored, unit: entryDraft.storedUnit,
+                        valueText: entryDraft.annotation)]
+        }
         guard let raw = parsed(valueText) else { return [] }
         // Convert the entered value to the canonical stored unit if a switcher is in use.
         let canonical = MarkerUnits.canonicalUnit(for: markerKey, fallback: unit)
@@ -422,7 +485,8 @@ struct MarkerEditorView: View {
         return [row(key: markerKey, category: category, value: stored, unit: canonical)]
     }
 
-    private func row(key: String, category: LabMarkerCategory, value: Double, unit: String) -> LabMarkerRow {
+    private func row(key: String, category: LabMarkerCategory, value: Double, unit: String,
+                     valueText: String? = nil) -> LabMarkerRow {
         let trimmedNote = note.trimmingCharacters(in: .whitespaces)
         let trimmedRef = referenceText.trimmingCharacters(in: .whitespaces)
         let epoch = Int(takenAt.timeIntervalSince1970)
@@ -434,7 +498,7 @@ struct MarkerEditorView: View {
             day: LabBookFormat.dayKey(takenAt),
             takenAt: epoch,
             value: value,
-            valueText: nil,
+            valueText: valueText,
             unit: unit,
             source: "manual",
             note: trimmedNote.isEmpty ? nil : trimmedNote,
@@ -444,6 +508,33 @@ struct MarkerEditorView: View {
 
     private func parsed(_ s: String) -> Double? {
         Double(s.trimmingCharacters(in: .whitespaces))
+    }
+
+    /// 4B, flag on: the draft of a catalogue marker with one value field. Nil while the flag is off,
+    /// for blood pressure and for a custom marker, which keep the editor as it was.
+    private var entryDraft: LabMarkerEntryDraft? {
+        guard reportUnitsFlag.isEnabled, let selection, !addingCustom, !isBloodPressure else { return nil }
+        var draft = LabMarkerEntryDraft(markerKey: selection.key, reportUnitsEnabled: true,
+                                        decimalSeparator: Character(Locale.current.decimalSeparator ?? "."),
+                                        takenAt: takenAt)
+        if draft.unitOptions.contains(reportUnitLabel) { draft.unitLabel = reportUnitLabel }
+        draft.text = valueText
+        return draft
+    }
+
+    /// L5: saves, then returns to the marker list with the date kept and says what was saved.
+    private func saveAndAddAnother() {
+        let rows = drafts
+        guard !rows.isEmpty, let entryDraft, let selection else { return }
+        saving = true
+        Task {
+            await onSave(rows)
+            let next = entryDraft.afterSaveAndAddAnother(markerName: selection.displayName)
+            reset()
+            takenAt = next.takenAt
+            savedLine = next.savedLine
+            saving = false
+        }
     }
 
     private func save() {

@@ -616,6 +616,8 @@ private struct MarkerDetailView: View {
 
     @EnvironmentObject var repo: Repository
     @Environment(\.dismiss) private var dismiss
+    /// Stage 4 (4B): the "Entered as" line is shown while laboratory units are on.
+    @ObservedObject private var reportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
 
     /// The wearable metric chosen to correlate against (nil until the user picks one).
     @State private var signal: MetricDescriptor?
@@ -874,6 +876,13 @@ private struct MarkerDetailView: View {
                 Text(valueLabel(row))
                     .font(StrandFont.number(16))
                     .foregroundStyle(StrandPalette.textPrimary)
+                // Stage 4 (4B, L6): the value and unit the report printed, under the stored ones.
+                if reportUnitsFlag.isEnabled, let enteredAs = LabMarkerEntryDraft.enteredAsLine(for: row) {
+                    Text(verbatim: enteredAs)
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(LabBookFormat.dayFromKey(row.day))
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
