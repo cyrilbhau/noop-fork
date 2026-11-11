@@ -10,7 +10,8 @@ Verified against the source at commit `0b89b814` (branch `personal/superapp-5-ev
 the repository root. Nothing was built or run for this document; it is a reading of the code.
 
 Reconciled on 11 November 2026 with the cross-stage check of all seven specifications; §18 lists
-what changed and the shared scaffolding this stage expects. Where a line number below falls in a
+what changed, including a second pass under the orchestrator's rulings, and the shared scaffolding
+this stage expects. Where a line number below falls in a
 file an earlier stage edits first (§14.2), the edit is located by the named function or comment, not
 by the number.
 
@@ -32,8 +33,10 @@ chart, on the scorecard and in the coach packet, from events the owner enters on
 - Quiet dots on the time axis of the redesign's day-axis and week-axis charts, and a text caption.
 - A scorecard annotation for the judged week and its evidence window. The verdict is untouched.
 - The body rows of the coach packet's events section, as one pure function written in stage 2's
-  packet grammar (§7.5); sensitive events excluded unless switched on. The section itself joins the
-  packet in the separate "packet v2" change (§14.3), not in this stage.
+  packet grammar (§7.5); sensitive events excluded unless the caller asks for them. The section
+  itself joins the packet in the separate "packet v2" change (§14.3), not in this stage.
+- The specification of the private-events packet setting (§9.6). It is specified here and **built by
+  the packet v2 change**, with its one reader. This stage's own milestone ships no such switch.
 - Backup round trip.
 
 **One rule, stated the same way in stages 1, 5 and 6.** A diet break or a deload is an **event**.
@@ -51,6 +54,8 @@ event is noted under the verdict (§10.6). Nothing in this stage creates, ends o
   specification.
 - The packet's section case, heading, version number, size budget, whole-packet goldens and the
   Claude-side text. They belong to stage 2's grammar and to the packet v2 change (§7.5, §14.3).
+- The stored key, the store property, the Settings switch and the strings of the private-events
+  packet setting. §9.6 specifies them; the packet v2 change builds them (§14.1).
 - Events in the in-app Coach context (`AICoach.buildContext`, `buildFullContext`). See §3, C7.
 - Events in any widget, Live Activity, notification or the watch. Not sensitive ones, not any.
 - Reminders, streaks, prompts to log an event.
@@ -143,7 +148,7 @@ No reader or writer exists today. After this stage, the complete list is:
 | `PersonalEventSheetModel`, `PersonalEventsModel` | The only callers of the store's write functions |
 | `PersonalEventChartSource` | The only reader for charts |
 | `CutScorecardModel.load()` | Passes the store's events to the presenter through the context |
-| The coach packet assembler, in the packet v2 change | Calls `PersonalEvents.packetLines` with the store's events and the store's `packetIncludesSensitive` |
+| The coach packet assembler, in the packet v2 change | Calls `PersonalEvents.packetLines` with the store's events and the store's `packetIncludesSensitive`, a property the same change adds (§9.6) |
 | `TimelineEventSource` (stage 6, `Strand/Data/TimelineSources.swift`) | Reads the store's `events` property, passes it through `PersonalEvents.visible(_, includeSensitive: false)`, then keeps diet breaks and deloads. A private event is absent from the timeline |
 | `BackupSettings` | Carries the stored string, unparsed |
 
@@ -172,11 +177,12 @@ No reader or writer exists today. After this stage, the complete list is:
 | Chart caption view (shared with macOS) | `PersonalEventChartCaption` | `Strand/Screens/PersonalEventChartCaption.swift` |
 | Mark type, layout and row | `NoopChartAxisMarks`, `ChartAxisMarkLayout`, `NoopChartAxisMarkRow` | `Packages/StrandDesign/Sources/StrandDesign/ChartAxisMarks.swift` |
 | Screens | `PersonalEventsView`, `PersonalEventSheet` | `StrandiOS/Events/` |
+| Scorecard note view | `ScorecardEventNoteView`, which draws `CutScorecardPresentation.eventNote` and reads no store | `StrandiOS/Events/ScorecardEventNoteView.swift` |
 | Design round | `design/round-s5-events/`, frames `s5-frames.json`, plugin command `importS5` | §10 |
 | Demo harness | `PersonalEventsDemo`; demo names all begin `events-` | `StrandiOS/Events/PersonalEventsDemo.swift` |
 | Feature flag | `noop.personalEventsEnabled`, Bool, default `false` | `PersonalEventStore.enabledKey` |
 | Stored list | `personalEvents.items`, String (JSON array) | `PersonalEventStore.itemsKey` |
-| Packet switch | `personalEvents.packetIncludesSensitive`, Bool, default `false`. It stays under this prefix, not under `coachPacket.sections`: it is a fact about events | `PersonalEventStore.packetSensitiveKey` |
+| Packet setting (specified in §9.6; added by the packet v2 change, not by this stage's packages) | `personalEvents.packetIncludesSensitive`, Bool, default `false`. It stays under this prefix, not under `coachPacket.sections`: it is a fact about events | `PersonalEventStore.packetSensitiveKey`, `PersonalEventStore.packetIncludesSensitive` |
 | Navigation | `RedesignRoute.personalEvents` | `StrandiOS/Redesign/RedesignRoute.swift` |
 | Scorecard additions | `CutScorecardPresentation.EventNote`, `CutScorecardPresentation.eventNote`, `CutScorecardPresentation.Curve.marked`, `CutScorecardPresentationContext.events` | `Strand/Data/CutScorecardPresenter.swift` |
 
@@ -357,14 +363,17 @@ blank line between sections, the `CoachPacketSection` case, the removal of `even
 header's `not-recorded-by-app` line, the version number and the whole-packet goldens are written by
 the packet v2 change (§14.3) under stage 2's rules. `packetLines` never returns a heading.
 
-**The rows.** English whatever the interface language, ISO day keys, no tabs, no trailing spaces:
+**The rows.** English whatever the interface language, ISO day keys, no tabs, no trailing spaces.
+Stage 2 §7.12 is the authority for the grammar (rules G-2 to G-8); where that section and this one
+differ, that section is right and this one is corrected. The example below is golden G-E1 with
+private events included: the fixture events of §13.1 over the range 2031-03-13 to 2031-03-26. Stage
+2 §7.12 shows the same rows for the same fixture events, taken from goldens G-E1, G-E3 and G-E6;
+§13.3 holds all six goldens and is the one text both documents copy from:
 
 ```
 entered by the owner, whole local days, oldest first:
-  2031-02-03..2031-02-09: deload
   2031-03-10..2031-03-16: travel; note "Fixture trip"
   2031-03-26: custom "Fixture change"; note "Fixture note"
-  2031-05-19..ongoing: illness
 ```
 
 - Let `listed` be the events of `visible(events, includeSensitive:)` that overlap
@@ -403,10 +412,14 @@ fails closed (stage 2 §7.11). A label or note that looks like an email address,
 device identifier blocks the whole packet, and stage 2's blocked state says so. `packetLines` does
 not scan, does not drop a row and does not rewrite a note to get past the scan.
 
-**The switch.** `personalEvents.packetIncludesSensitive` (§9.1) is the `includeSensitive` argument.
-It is set in Settings (§10.7). The packet sheet shows its state as a read-only caption with no
-control: "Private events: left out" or "Private events: included". That caption is added by the
-packet v2 change.
+**A row the scan would block (stage 2 G-8).** This stage's tests include a note that looks like an
+email address and one that looks like a path, and assert that `packetLines` returns each row with
+that text intact (§12.1). The whole-packet test that the scan then blocks belongs to packet v2.
+
+**The setting.** The `includeSensitive` argument is a plain parameter in this stage: the tests pass
+`false` and `true`, and no stored setting exists yet. The stored setting
+`personalEvents.packetIncludesSensitive`, its switch and the packet sheet's read-only caption are
+specified in §9.6 and built by the packet v2 change, together with the one caller of `packetLines`.
 
 ## 8. Storage decision
 
@@ -461,7 +474,9 @@ All in `UserDefaults.standard`, declared in `PersonalEventStore`. Never in the A
 |---|---|---|---|
 | `noop.personalEventsEnabled` | Bool | `false` | The feature flag. Off: no row, no screen, no marks, no caption, no scorecard note, no packet section, and the store is never read |
 | `personalEvents.items` | String | absent | JSON array of events |
-| `personalEvents.packetIncludesSensitive` | Bool | `false` | Whether the coach packet lists sensitive events |
+
+A third key, `personalEvents.packetIncludesSensitive`, is specified in §9.6. It does not exist until
+the packet v2 change.
 
 ### 9.2 The stored string
 
@@ -502,7 +517,6 @@ enum PersonalEventStoreError: Error, Equatable {
 final class PersonalEventStore: ObservableObject {
     static let enabledKey = "noop.personalEventsEnabled"
     static let itemsKey = "personalEvents.items"
-    static let packetSensitiveKey = "personalEvents.packetIncludesSensitive"
     static let shared: PersonalEventStore
 
     init(defaults: UserDefaults = .standard,
@@ -511,7 +525,6 @@ final class PersonalEventStore: ObservableObject {
 
     @Published private(set) var revision: Int      // moves on every change to itemsKey, whoever writes it
     var isEnabled: Bool { get }                    // reads enabledKey
-    var packetIncludesSensitive: Bool { get set }
     var events: [PersonalEvent] { get }            // [] while the flag is off or the store is unreadable
     var unreadableEntryCount: Int { get }
     var needsAttention: Bool { get }
@@ -560,18 +573,18 @@ store's own defaults object, so a store built over an injected suite in a test f
 |---|---|---|---|
 | `personalEvents.items` | String | `personalEvents.items` | **Yes, Swift only** |
 | `noop.personalEventsEnabled` | — | — | No. A `noop.*` toggle is per install (`BackupSettings.swift:40-42`); after a restore the feature is off until switched on, and the events are there when it is |
-| `personalEvents.packetIncludesSensitive` | — | — | No. A Bool cannot cross, and off is the safe direction |
+| `personalEvents.packetIncludesSensitive` (§9.6, packet v2) | — | — | No. A Bool cannot cross, and off is the safe direction |
 
 Edits: one entry in `BackupSettings.whitelist` and one in `BackupSettings.appleDefaultsKey`
 (`BackupSettings.swift:49-74`, `:79-95` at the base commit), and one line naming the key in the
 comment block of fork-only keys that the scaffolding places above the Swift whitelist (§18). The
 string is carried and never parsed there.
 
-Seven fork-only keys join this file across stages 3, 5 and 6. There is one writer at a time, in
-stage order: stage 3 (two keys), then this stage (one key), then stage 6 (four keys). The same order
-holds for `BackupSettingsTests.swift`, where each stage adds new methods only, in the order of the
-source file. This stage's entry therefore sits after stage 3's two and is found by that position,
-not by a line number.
+The file has one writer at a time, in the one order of §14.2. This stage's turn is the fifth: its
+entry is written after stage 4's serialised step and before stage 6's, in the orchestrator's commit
+5-7h, and sits after whatever entries the earlier stages have added. It is found by that position,
+not by a line number. The same holds for `BackupSettingsTests.swift`, where this stage adds new
+methods only, after the methods already there.
 
 Restore semantics, unchanged from every other key: a backup that carries the key **replaces** this
 device's list; a backup without it leaves the list alone (`BackupSettings.swift:120-127`).
@@ -595,6 +608,27 @@ The store has no device id. Disconnecting, forgetting or deleting a strap, re-po
 id, and adopting a serial identity do not read or write it. Erasing all of the app's data on purpose
 removes it with everything else.
 
+### 9.6 The private-events packet setting — specified here, built by packet v2
+
+Orchestrator ruling: this setting ships with packet v2, not with this stage's first milestone,
+because nothing reads it until the packet has an events section. This section is its complete
+specification. The packet v2 change (§14.1) builds every item below in the same change that adds
+the caller of `packetLines`; stage 2 §7.12 reads the setting and specifies nothing about it.
+
+| Item | Specification |
+|---|---|
+| Key | `personalEvents.packetIncludesSensitive`, Bool, default `false`, in `UserDefaults.standard`. Never in the App Group suite and not on the backup whitelist (§9.4) |
+| Store | Two additions to `PersonalEventStore`: `static let packetSensitiveKey = "personalEvents.packetIncludesSensitive"` and `var packetIncludesSensitive: Bool { get set }`. The property reads and writes the store's own defaults object at each access and caches nothing. It does not depend on `isEnabled` |
+| The one reader | Stage 2's packet assembler. It reads the property **once per assembly**, passes the value as `includeSensitive:` to `packetLines`, and hands the same value to the packet sheet for its caption. The rows and the caption therefore come from one read and cannot disagree |
+| The one writer | A switch in this stage's Events card in Settings (§10.7), beneath the "Personal events" switch: "Include private events in the coach packet", off by default, footnote "Private events and their notes stay out of the packet unless this is on." It is mounted only while **both** `noop.personalEventsEnabled` and stage 2's `noop.coachPacketEnabled` are on, so it is never shown when nothing would read it |
+| Packet sheet | A read-only caption with no control: "Private events: left out" or "Private events: included", then "Change this in Settings." No count of private events appears there or anywhere else outside the Events screen (S11) |
+| Event sheet | One added sentence under the Private switch, shown beneath this stage's sentence while `noop.coachPacketEnabled` is on: "Private events stay out of the coach packet unless you include them in Settings." |
+| Strings | The switch label, its footnote, the three caption strings and the event-sheet sentence join the catalogue in the packet v2 change (§11) |
+| Tests, added by the packet v2 change | In `PersonalEventStoreTests.swift`: `testPacketSwitchDefaultsToOffAndRoundTripsThroughTheStore`, `testPacketSwitchIsIndependentOfTheEventsFlag`. In `BackupSettingsTests.swift`: `testPersonalEventsPacketSwitchIsNotExported`. In `Tools/test_personal_events_boundaries.py`: `test_packet_switch_has_one_writer_and_one_reader` (the literal key occurs only in `PersonalEventStore.swift` and tests; `packetIncludesSensitive` occurs outside tests only there, in `SettingsView.swift` and in stage 2's assembler). The whole-packet goldens with the switch off and on are packet v2's, on stage 2's fixture |
+
+Until packet v2 lands the key is never written, the property does not exist, and a private event
+cannot reach the packet by any path: version 1 of the packet has no events section.
+
 ## 10. Screens and states
 
 Frames are designed at G1 in the round `design/round-s5-events/` (frames file `s5-frames.json`,
@@ -605,18 +639,22 @@ commands; the designer of this stage edits only files inside `design/round-s5-ev
 below needs a frame at the default text size and at the largest accessibility size.
 
 Three surfaces are shared with other stages and are designed **once for all stages**, in one
-combined frame set approved once: the Health tab's "More health" card, the Settings section and the
-scorecard screen. This stage's frames show its own part inside that approved layout and do not
-re-open the order.
+combined frame set drawn by the orchestrator's designer and approved once: the Health tab's "More
+health" card, the Settings cards and the scorecard screen. That frame set is the authority for the
+order. This stage's frames show its own part inside that approved layout and do not re-open it.
+
+**This stage's position.** The Settings cards and the Health tab rows share one order, top to
+bottom, each entry present only while its own flag is on. **Events is the fifth entry of that list:
+directly after Body record and directly before Niggle log.** When neither neighbour is mounted, it
+takes the place the remaining entries leave it. This document states no other entry's position.
 
 ### 10.1 Entry points
 
 - A row "Events" in the Health tab's "More health" card
   (`StrandiOS/Redesign/RedesignHealthView.swift:476-482`, `:523-532`), mounted only while this
   stage's flag is on, whatever the scorecard flag says. Its value is the count of events overlapping
-  today ("1 now"), or nothing. The card's rows have one fixed order across all stages: Scorecard,
-  Body record, Events, Timeline, Niggle log, Coach packet. "Events" is third: after "Body record"
-  when that row is mounted, otherwise after "Scorecard", otherwise first of these.
+  today ("1 now"), or nothing. Its place among the card's rows is the fifth entry of the one order
+  (§10): after "Body record", before "Niggle log".
 - The scorecard's event note (§10.6) links to the Events screen.
 - No Today card, no tab, no widget.
 
@@ -747,13 +785,15 @@ the curves. That is the whole effect.
 `PersonalEventStore.events`, captured before its first suspension with its other inputs
 (`CutScorecardModel.swift:148-153` at the base commit).
 
-This edit is written **after** stage 2 has moved `evaluateStored` and `CutScorecardEvaluation` out of
-`CutScorecardModel` into `CutScorecardInputBuilder.evaluation(today:)`, and after stage 3 has changed
-the builder's protein read; stage 6 adds its stored `evaluation` property after this stage. The
+This edit is made in this stage's turn of the one order (§14.2), the fifth. By then `load()` calls
+`CutScorecardInputBuilder.evaluation(today:)` (stage 2 §8.2) and the model's initialiser carries the
+parameters earlier turns gave it; this stage changes neither. The edit is located by the function
+name `load()`, not by a line number. The
 events go from `load()` into the presenter's context only. They are never passed to
-`evaluation(today:)`, to the builder or to `CutScorecardInput` (§12.5 asserts it). On the screen the
-order inside `ScorecardView` is fixed by the combined frame: stage 2's toolbar item, stage 3's
-protein caption, this stage's note directly under the verdict, then stage 6's two link rows.
+`evaluation(today:)`, to the builder or to `CutScorecardInput` (§12.5 asserts it). On the screen
+the note sits directly under the verdict, as the combined scorecard frame shows; it is one view,
+`ScorecardEventNoteView`, in this stage's own file, so the shared `ScorecardView.swift` gains one
+call and one argument (5-7h).
 
 ```swift
 struct EventNote: Equatable {
@@ -784,18 +824,16 @@ events, and no string of theirs changes.
 
 ### 10.7 Settings
 
-In the iPhone-only block beside the scorecard card (`Strand/Screens/SettingsView.swift:462-468`,
-`:1860-1871` at the base commit): a switch "Personal events"; beneath it, visible only while on, a
-switch "Include private events in the coach packet" (off), with the footnote "Private events and
-their notes stay out of the packet unless this is on."
+In the iPhone-only block that holds the scorecard card (`Strand/Screens/SettingsView.swift:462-468`,
+`:1860-1871` at the base commit): one card, "Events", holding one switch, "Personal events", which
+calls `PersonalEventStore.flag.set(_:)`. The card carries the switch that turns the feature on, so
+it is drawn on the iPhone whether the flag is on or off, as the scorecard card is; the Health row,
+by contrast, is present only while the flag is on. If the combined frame set draws the off state
+differently, the frame set is right. Its place among the Settings cards is the fifth entry of
+the one order (§10): after the Body record card, before the Niggle log card.
 
-The order of what the stages add to Settings is fixed by the combined frame: the Coach packet card
-(stage 2), the Intake card (stage 3), the Body record card (stage 4), these two switches, then the
-"Log and timeline" section (stage 6). The edits land in that order, one stage at a time.
-
-The second switch is the only control for `personalEvents.packetIncludesSensitive`. The packet sheet
-shows the same value as a read-only caption (§7.5) and never edits it, so the two readouts are one
-stored Bool and cannot disagree.
+This stage adds nothing else to Settings. The second switch, "Include private events in the coach
+packet", is specified in §9.6 and added to this card by the packet v2 change.
 
 ### 10.8 Widgets and notifications
 
@@ -911,8 +949,8 @@ A day key for "today", for a draft's start and for a draft's end is
 English source strings, all through `Strand/Resources/Localizable.xcstrings` in the ten locales
 (`de`, `en`, `es`, `fr`, `it`, `pl`, `pt-PT`, `ru`, `zh-Hans`, `zh-Hant`). The packet rows of §7.5
 are fixed English and are **not** localised. The catalogue has one writer at a time across all
-stages, in integration order (Lab Book ownership, 2, 3, 4, 5, 6); this stage's Localiser runs as the
-last step of this stage.
+stages, in the one order of §14.2; this stage's Localiser runs as the last step of this stage, the
+fifth turn.
 
 | Use | String |
 |---|---|
@@ -925,13 +963,13 @@ last step of this stage.
 | Empty | "No events yet"; "Add travel, illness, a diet break or a deload, and charts will show when it happened." |
 | Unreadable entries | "%lld entries could not be read. They are kept." |
 | Unreadable store | "Your events could not be read"; "Nothing has been changed. You can copy the stored text before starting again."; "Copy stored text"; "Start again"; "Start again and discard the stored events?" |
-| Sheet | "New event", "Edit event"; "Kind"; "Name"; "A name is needed"; "Starts"; "Length"; "One day", "Until", "Ongoing"; "Ends"; "Must be on or after the start"; "Planned: this starts in the future"; "Note"; "Private"; "Private events show as \"Private event\" outside this screen and stay out of the coach packet unless you include them."; "Save"; "Could not save. Try again." |
+| Sheet | "New event", "Edit event"; "Kind"; "Name"; "A name is needed"; "Starts"; "Length"; "One day", "Until", "Ongoing"; "Ends"; "Must be on or after the start"; "Planned: this starts in the future"; "Note"; "Private"; "Private events show as \"Private event\" outside this screen."; "Save"; "Could not save. Try again." |
 | Delete | "Delete this event?"; "This cannot be undone."; "Delete"; "Cancel" |
 | Caption | "%@ · %@"; "and %lld more" |
 | Scorecard note | "Events this week"; "Earlier in the weeks behind this verdict"; "Shown for context. Events do not change the verdict." |
-| Settings | "Personal events"; "Include private events in the coach packet"; "Private events and their notes stay out of the packet unless this is on." |
+| Settings | Card title "Events"; "Personal events" |
 | Spoken | "Events:" |
-| Packet sheet caption (added to the catalogue by the packet v2 change, not by this stage's Localiser) | "Private events: left out"; "Private events: included"; "Change this in Settings." |
+| The packet setting of §9.6 (all added to the catalogue by the packet v2 change, not by this stage's Localiser) | Settings: "Include private events in the coach packet"; "Private events and their notes stay out of the packet unless this is on." Event sheet: "Private events stay out of the coach packet unless you include them in Settings." Packet sheet caption: "Private events: left out"; "Private events: included"; "Change this in Settings." |
 
 No string states or implies a cause ("because you travelled"), a diagnosis, or advice.
 
@@ -1011,6 +1049,8 @@ Packet rows — a separate file, `PersonalEventsPacketTests.swift`, because it n
 - `testPacketLinesNeverReturnAHeading` (no row begins `==`)
 - `testPacketLinesContainNoIdAndNoCreatedAt`
 - `testPacketLinesForAnInvalidRange`
+- `testARowWhoseNoteLooksLikeAnEmailAddressOrAPathIsReturnedIntact` (stage 2 G-8: the row is neither
+  dropped nor rewritten here; blocking is the packet scan's work, tested in packet v2)
 - `testWidestPacketRowsStayUnderTheByteAllowance` (twenty events in range, each `custom` with a
   40-character label of four-byte characters, a 280-character note and an end day; the rows joined
   with one `\n` each, plus 14 bytes for stage 2's heading and blank line, are at most
@@ -1103,7 +1143,8 @@ named for the state; plus
 
 Backup — `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (extended)
 - `testPersonalEventsRoundTripAsOneString`
-- `testPersonalEventsFlagAndPacketSwitchAreNotExported`
+- `testPersonalEventsFlagIsNotExported` (the packet setting's twin,
+  `testPersonalEventsPacketSwitchIsNotExported`, is added by packet v2, §9.6)
 - `testRestoreWithoutTheKeyLeavesExistingEvents`
 - `testRestoreWithTheKeyReplacesTheList`
 
@@ -1155,6 +1196,10 @@ In the Python suite that already asserts on product source (stage 1 §8.6).
   `noop.personalEventsEnabled` is observed only through `ObservableDefaultsFlag`.
 - `test_packet_lines_has_at_most_one_production_caller`: `packetLines(` occurs outside tests only in
   `PersonalEventsPacket.swift` and, once the packet v2 change has merged, in stage 2's assembler.
+- `test_no_packet_setting_without_its_reader`: while no production file calls `packetLines(`, no
+  file under `Strand/` or `StrandiOS/` contains `packetIncludesSensitive` or the literal
+  `personalEvents.packetIncludesSensitive`. Once the caller exists the check passes without
+  condition, and packet v2's own scan (§9.6) takes over.
 - `test_timeline_reads_events_only_through_visible`: when `Strand/Data/TimelineSources.swift` exists
   and names `PersonalEventStore`, it also contains `PersonalEvents.visible(` with
   `includeSensitive: false`. The check is skipped, and reported as skipped, while the file does not
@@ -1172,7 +1217,8 @@ needles:
   static notification texts)
 - `testInAppCoachContextContainsNoEventText` (`buildContext` and `buildFullContext` with the store
   populated)
-- `testDefaultPacketSectionContainsNoSensitiveLabelOrNote`
+- `testPacketRowsWithSensitiveExcludedContainNoSensitiveLabelOrNote` (`packetLines` with
+  `includeSensitive: false` over the fixture; added with WP 5-9)
 - `testChartCaptionAndScorecardNoteContainNoSensitiveLabelOrNote`
 - `testAccessibilityTextOfMarksContainsNoSensitiveLabelOrNote`
 - `testAppGroupDefaultsContainNoEventKey`
@@ -1202,7 +1248,7 @@ request.
 | F16 | An event field added to `WidgetSnapshot` | `test_widgets_watch_and_shared_payloads_never_name_personal_events` |
 | F17 | Events appended to the Coach context | `test_coach_context_never_reads_personal_events`, `testInAppCoachContextContainsNoEventText` |
 | F18 | The key removed from the whitelist | `testPersonalEventsRoundTripAsOneString` |
-| F19 | The flag added to the whitelist | `testPersonalEventsFlagAndPacketSwitchAreNotExported` |
+| F19 | The flag added to the whitelist | `testPersonalEventsFlagIsNotExported` |
 | F20 | Thinning drops the last mark of a run | `testThinningKeepsTheFirstAndLastMarkOfEveryRun` |
 | F21 | Bar marks placed at index over count minus one | `testBarsPlacesIndexPlusHalfOverCount` |
 | F22 | Caption and marks read the store separately, one filtered | `testMarksAndCaptionAreResolvedFromTheSameEvents` |
@@ -1212,6 +1258,7 @@ request.
 | F26 | `visible` keeps a sensitive event whose kind is not sensitive by default | `testVisibleRemovesAPrivateDeloadAndAPrivateDietBreak` |
 | F27 | A private day-validity function written inside `PersonalEvents.swift` | `test_personal_events_declare_no_day_rule_of_their_own` |
 | F28 | The presenter suppresses the verdict while a diet break overlaps the judged week | `testDietBreakAndDeloadLeaveTheVerdictAndTheActivePhaseUnchanged` |
+| F29 | The packet switch added to Settings and the store in this stage, before `packetLines` has a caller | `test_no_packet_setting_without_its_reader` |
 
 ### 12.7 Parity
 
@@ -1399,30 +1446,36 @@ and are written there, on stage 2's fixture.
 | WP | Role | Files |
 |---|---|---|
 | 5-2 | Designer | Files inside `design/round-s5-events/` only, including `s5-frames.json`. The folder and the `importS5` plugin command already exist (orchestrator's scaffolding, §18); `design/figma-plugin/code.js` and `manifest.json` are **not** edited by this stage. The combined frames for the Health card, Settings and the scorecard screen are a separate, shared design task |
-| 5-3 | Test author | New: `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/PersonalEventsTests.swift`, `PersonalEventsFixture.swift`; `Packages/StrandDesign/Tests/StrandDesignTests/ChartAxisMarksTests.swift`; `StrandTests/PersonalEventStoreTests.swift`, `PersonalEventOwnershipTests.swift`, `PersonalEventPresenterTests.swift`, `PersonalEventSheetModelTests.swift`, `PersonalEventChartSourceTests.swift`, `CutScorecardEventNoteTests.swift`, `PersonalEventBackupTests.swift`, `PersonalEventPrivacyTests.swift`; `Tools/test_personal_events_boundaries.py`. Extended, after stage 3's methods are in: `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (new methods only, after stage 3's) |
+| 5-3 | Test author | New: `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/PersonalEventsTests.swift`, `PersonalEventsFixture.swift`; `Packages/StrandDesign/Tests/StrandDesignTests/ChartAxisMarksTests.swift`; `StrandTests/PersonalEventStoreTests.swift`, `PersonalEventOwnershipTests.swift`, `PersonalEventPresenterTests.swift`, `PersonalEventSheetModelTests.swift`, `PersonalEventChartSourceTests.swift`, `CutScorecardEventNoteTests.swift`, `PersonalEventBackupTests.swift`, `PersonalEventPrivacyTests.swift`; `Tools/test_personal_events_boundaries.py`. Also writes the new methods for `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` and hands them to the orchestrator, who commits them in 5-7h; the Test author does not edit that shared file |
 | 5-4 | Implementer A (pure) | `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEvents.swift`. Needs the scaffolding's `CanonicalDay.swift`; does not need stage 2 |
-| 5-5 | Implementer B (storage) | New: `Strand/Data/PersonalEventStore.swift` (needs the scaffolding's `ObservableDefaultsFlag.swift`). Edited, after stage 3's two keys are in: `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (two entries and one line in the fork-only comment block) |
+| 5-5 | Implementer B (storage) | New: `Strand/Data/PersonalEventStore.swift` (needs the scaffolding's `ObservableDefaultsFlag.swift`). No shared file: the `BackupSettings.swift` edit is in 5-7h |
 | 5-6 | Implementer C (chart marks) | New: `Packages/StrandDesign/Sources/StrandDesign/ChartAxisMarks.swift`. Edited, one parameter and one row each: `NoopLineChart.swift`, `NoopBarChart.swift`, `StrandiOS/Scorecard/ScorecardWeekChart.swift` |
-| 5-7 | Implementer D, after G1 and after 5-4, 5-5, 5-6 merge | New: `Strand/Data/PersonalEventPresenter.swift`, `PersonalEventsModel.swift`, `PersonalEventChartSource.swift`; `Strand/Screens/PersonalEventChartCaption.swift`; `StrandiOS/Events/PersonalEventsView.swift`, `PersonalEventSheet.swift`, `PersonalEventsDemo.swift`. Edited: `Strand/Data/CutScorecardPresenter.swift` and `CutScorecardModel.swift` (the context field and the two outputs); `StrandiOS/Scorecard/ScorecardView.swift` (the note and `axisMarks:`); `RecoveryDetailView.swift`, `StrainDetailView.swift`, `StrandiOS/App/TrainingHubView.swift`, `Strand/Screens/MetricExplorerView.swift`, `Strand/Screens/TrendsView.swift` (two lines per chart site) |
-| 5-7h | Orchestrator, one small commit inside this stage's serialised step | The hotspot edits, in the approved order: `StrandiOS/Redesign/RedesignRoute.swift` (the case and the route switch), `RedesignHealthView.swift` (the row, third in the fixed order), `Strand/Screens/SettingsView.swift` (the two switches), and one array element for `PersonalEventsDemo.screen(named:)` in the demo registry of `StrandiOS/App/StrandiOSApp.swift` |
+| 5-7 | Implementer D, after G1 and after 5-4, 5-5, 5-6 merge | New: `Strand/Data/PersonalEventPresenter.swift`, `PersonalEventsModel.swift`, `PersonalEventChartSource.swift`; `Strand/Screens/PersonalEventChartCaption.swift`; `StrandiOS/Events/PersonalEventsView.swift`, `PersonalEventSheet.swift`, `ScorecardEventNoteView.swift`, `PersonalEventsDemo.swift`. Edited: `Strand/Data/CutScorecardPresenter.swift` and `CutScorecardModel.swift` (the context field and the two outputs), each as one small commit in this stage's turn (§14.2). The note's view is a new file, `StrandiOS/Events/ScorecardEventNoteView.swift`; its one call site in `ScorecardView.swift` is in 5-7h. Edited, this stage only: `RecoveryDetailView.swift`, `StrainDetailView.swift`, `StrandiOS/App/TrainingHubView.swift`, `Strand/Screens/MetricExplorerView.swift`, `Strand/Screens/TrendsView.swift` (two lines per chart site) |
+| 5-7h | Orchestrator, one small commit inside this stage's serialised step, after 5-7's new files exist | Every hotspot edit to a file other stages also edit, in this stage's turn of the one order (§14.2): `StrandiOS/Redesign/RedesignRoute.swift` (the case and the route switch); `RedesignHealthView.swift` (the row, at the fifth place of the one order, §10); `Strand/Screens/SettingsView.swift` (the Events card with its one switch, at the same place); `StrandiOS/Scorecard/ScorecardView.swift` (the call of `ScorecardEventNoteView` under the verdict and the `axisMarks:` argument); `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (two entries and one line in the fork-only comment block) with the new methods of `BackupSettingsTests.swift` written by the Test author; and one array element for `PersonalEventsDemo.screen(named:)` in the demo registry of `StrandiOS/App/StrandiOSApp.swift` |
 | 5-8 | Localiser, last step of this stage | `Strand/Resources/Localizable.xcstrings` |
 | 5-9 | Implementer A, after stage 2 has merged | New: `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEventsPacket.swift` and `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/PersonalEventsPacketTests.swift` (written by the Test author first). `packetLines` then has tests and no production caller until the packet v2 change |
 | 5-10 | Reviewers (correctness, contract, data-safety) and Verifier | None; read-only |
 
 `PersonalEventsDemo.screen(named:)` has the signature of `ScorecardDemo.screen(named:)`
 (`static func screen(named name: String) -> AnyView?`) and returns nil for every name that does not
-begin `events-`. The registry holds the providers in one order (scorecard, packet, intake, body
-record, events, stage 6); this stage adds its own file and its one element and changes no other
-element.
+begin `events-`, the prefix reserved for this stage. The orchestrator's step 0 adds the registry.
+This stage's demo file is `StrandiOS/Events/PersonalEventsDemo.swift`; it adds that file and its one
+registry element and changes no other element.
 
 **Not this stage's work: packet v2.** After stages 3 and 5 have merged, one follow-up change adds
 the `intake` and `events` sections to the packet together: both `CoachPacketSection` cases, the
 input fields, the removal of both names from the header's `not-recorded-by-app` line, one version
 bump, the events allowance in the byte budget (`PersonalEvents.packetByteAllowance`), one new set of
-whole-packet goldens, the read-only caption in the packet sheet (§7.5), the three caption strings
-(§11) and one revision of the Claude-side text. From this stage it takes `packetLines`, the two
-constants and `PersonalEventStore.packetIncludesSensitive`, unchanged. Stage 2 ships version 1
-unchanged, with `events` still listed under `not-recorded-by-app`.
+whole-packet goldens and one revision of the Claude-side text. From this stage it takes
+`packetLines` and the two constants, unchanged. Stage 2 ships version 1 unchanged, with `events`
+still listed under `not-recorded-by-app`.
+
+The same change builds the private-events packet setting exactly as §9.6 specifies it, so the
+setting and its reader arrive together: the key constant and the property in
+`Strand/Data/PersonalEventStore.swift`; the second switch in this stage's Events card in
+`Strand/Screens/SettingsView.swift`; the added sentence in `StrandiOS/Events/PersonalEventSheet.swift`;
+the read-only caption in the packet sheet; the strings of §11's last row; and the tests §9.6 names.
+Packet v2 is the last turn of the one order (§14.2), so no other writer holds those files then.
 
 `project.yml` needs no change; the directories are included by path (stage 1 §14). Run
 `xcodegen generate` after adding files. `StrandiOS/Events/` is a new directory under an included
@@ -1430,20 +1483,32 @@ root.
 
 ### 14.2 Shared hotspots this stage edits
 
-| Hotspot | Edit | Order |
-|---|---|---|
-| `Strand/Resources/Localizable.xcstrings` | New strings | One Localiser at a time, last step of each stage, in integration order: Lab Book ownership, 2, 3, 4, **5**, 6. Never two branches at once |
-| `StrandiOS/App/StrandiOSApp.swift` debug block | One array element in the demo registry | The scaffolding lands the registry first; then each stage adds one element in integration order |
-| `Strand/Screens/SettingsView.swift` | Two switches in the iPhone-only block | After the combined Settings frame is approved: 2 (card), 3 (card), 4 (card), **5** (two switches), 6 (section). Shared with macOS: build `Strand` after the edit |
-| `StrandiOS/Redesign/RedesignHealthView.swift` | One row | 2, 4, **5**, 6; rows in the approved order (§10.1) |
-| `StrandiOS/Redesign/RedesignRoute.swift` | One case, and the route switch | 3, 4, **5**, 6. Additive cases |
-| `StrandiOS/Scorecard/ScorecardView.swift` | The event note and `axisMarks:` | 2 (toolbar item), 3 (protein row caption and tap), **5**, 6 (two link rows) |
-| `Strand/Data/CutScorecardModel.swift` | `events` into the context in `load()` | 2 (moves `evaluateStored` out), **5**, 6 (its `evaluation` property). One small commit each |
-| `Strand/Data/CutScorecardPresenter.swift` | `eventNote` and `marked` | 4 (history caption and read-only rule), then **5**. Different functions; still serial |
-| `Packages/WhoopStore/.../BackupSettings.swift` and `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` | One key in two maps and one comment line; new test methods only | 3 (two keys), **5** (one key), 6 (four keys). One writer at a time |
-| `StrandiOS/Scorecard/ScorecardWeekChart.swift` | The `axisMarks` parameter | **5** first; stage 6 only reuses the view afterwards |
-| `Tools/test_personal_events_boundaries.py` notification list | Lists stage 3's `Strand/System/IntakeCutoffReminder.swift` | Whichever of stages 3 and 5 merges second adds the file in the same commit (§12.5). Stage 3's specification carries the same note |
-| `NoopLineChart.swift`, `NoopBarChart.swift`, `Strand/Screens/MetricExplorerView.swift`, `TrendsView.swift`, `RecoveryDetailView.swift`, `StrainDetailView.swift`, `StrandiOS/App/TrainingHubView.swift` | One defaulted parameter per chart type; two lines per chart site | This stage only. `MetricExplorerView` and `TrendsView` are shared with macOS: build `Strand` too |
+**The one order.** Every shared file has one writer at a time, and the order is the same for every
+file: Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage 6, then packet v2. **This stage
+is the fifth turn**: each edit below is made after stage 4's serialised step has merged (that step
+contains every earlier edit to the file, whichever specification owns it) and before stage 6's
+begins. This table states this stage's edit and its place; what the other turns do to a file is in
+their own specifications.
+
+| Hotspot | This stage's edit | Package | Turn |
+|---|---|---|---|
+| `Strand/Resources/Localizable.xcstrings` | New strings (§11, all rows but the last) | 5-8 | Fifth; the last step of this stage |
+| `StrandiOS/App/StrandiOSApp.swift` debug block | One array element in the demo registry | 5-7h | Fifth; the registry itself is step 0's |
+| `Strand/Screens/SettingsView.swift` | The Events card with one switch | 5-7h | Fifth. Shared with macOS: build `Strand` after the edit |
+| `StrandiOS/Redesign/RedesignHealthView.swift` | One row | 5-7h | Fifth |
+| `StrandiOS/Redesign/RedesignRoute.swift` | One additive case, and its arm in the route switch | 5-7h | Fifth |
+| `StrandiOS/Scorecard/ScorecardView.swift` | One call of `ScorecardEventNoteView` and the `axisMarks:` argument | 5-7h | Fifth |
+| `Strand/Data/CutScorecardModel.swift` | `events` into the context in `load()` | 5-7, one small commit | Fifth |
+| `Strand/Data/CutScorecardPresenter.swift` | `eventNote` and `marked` | 5-7, one small commit | Fifth |
+| `Packages/WhoopStore/.../BackupSettings.swift` and `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` | One key in two maps and one comment line; new test methods only | 5-7h | Fifth |
+| `StrandiOS/Scorecard/ScorecardWeekChart.swift` | The `axisMarks` parameter | 5-6 | Fifth |
+| `NoopLineChart.swift`, `NoopBarChart.swift`, `Strand/Screens/MetricExplorerView.swift`, `TrendsView.swift`, `RecoveryDetailView.swift`, `StrainDetailView.swift`, `StrandiOS/App/TrainingHubView.swift` | One defaulted parameter per chart type; two lines per chart site | 5-6, 5-7 | Fifth. `MetricExplorerView` and `TrendsView` are shared with macOS: build `Strand` too |
+
+`Tools/test_personal_events_boundaries.py` is this stage's own new file. Its notification list is
+written with all eight producers (§12.5), because stage 3's turn comes before this one.
+
+Packet v2, the last turn, edits three of this stage's files to build §9.6 (§14.1):
+`PersonalEventStore.swift`, `PersonalEventSheet.swift` and this stage's card in `SettingsView.swift`.
 
 **Not edited:** `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, the
 three Today views, `Packages/StrandImport` `MarkerCatalog`, `Packages/WhoopStore/.../Database.swift`,
@@ -1462,7 +1527,8 @@ widget file, any notification file, `Strand/AI/`, anything under `android/`.
 - **Serialised on the one app build tree**, as step 6 of the build order: Lab Book ownership, the
   stage 1 follow-up, stage 2, stage 3, stage 4, then **this stage** (store, chart marks, scorecard
   note, Events screen), then stage 6, then packet v2. Inside this stage: 5-4, 5-5, 5-6; then 5-7
-  after G1; then 5-7h; then 5-9; then 5-8 last.
+  after G1; then 5-7h; then 5-9; then 5-8 last. The backup tests of §12.3 pass from 5-7h on, when
+  the whitelist entry exists.
 - **5-9 and the packet.** Stage 2 merges before this stage, so `CoachPacket.sanitize` exists when
   5-9 is written. `packetLines` ships tested with no production caller; the packet v2 change adds
   the caller. The parity ledger's "production caller in the same change" expectation (CONTEXT §7
@@ -1478,7 +1544,8 @@ widget file, any notification file, `Strand/AI/`, anything under `android/`.
   later stage needs SQL, §8.3 is the designed path.
 - **Phone.** No install for this stage alone. Events are installed together with stage 6 and packet
   v2 at one accepted milestone, after a fresh backup, with the flag off until the owner switches it
-  on.
+  on. Should a build without packet v2 ever be installed, it carries no packet switch (§9.6): there
+  is no control without an effect.
 
 ## 15. Open questions for the owner
 
@@ -1490,7 +1557,7 @@ design in force in this document. The last column says what changes if the owner
 | S1 | Where are events stored: a settings list carried in the backup (no migration), or a new database table (a migration)? | The settings list (§8.2) | §8.3 is built instead: a migration, a data move from the settings key, a rehearsal on a copy of the database before any install. `PersonalEventStore` is the only file whose body changes; its API stays |
 | S2 | Are whole days enough, or does an event need a time of day? | Whole days. Every chart and the scorecard that would show an event is per day or per week | A new stored field and version `v` 2 of the element; overlap stays per day |
 | S3 | Private events and their notes will be inside backup files, in clear text, with the Android side knowingly behind (one of seven such fork-only keys across stages 3, 5 and 6). Keep them in the backup? | Yes: a record that vanishes on restore is worse, and the backup already holds the health database. Encrypted backups rise in priority | The key leaves the whitelist and §9.4's tests invert: events do not survive a restore, and the Events screen says so |
-| S4 | Outside the Events screen, should a private event show its name, or the words "Private event"? | "Private event" in chart captions, the scorecard note and spoken text; absent from stage 6's timeline; out of the packet unless switched on | The caption and the note print the kind name (never the note) for private events, and the privacy tests of §12.5 change their needles |
+| S4 | Outside the Events screen, should a private event show its name, or the words "Private event"? | "Private event" in chart captions, the scorecard note and spoken text; absent from stage 6's timeline; out of the packet unless switched on (the switch arrives with packet v2, §9.6) | The caption and the note print the kind name (never the note) for private events, and the privacy tests of §12.5 change their needles |
 | S5 | Which kinds start as private? | Illness and "Something else". You can flip the switch on any single event | `defaultSensitive` changes for the kinds named; stored events keep the flag they have |
 | S6 | Should the classic charts (`TrendChart`, used when classic mode is on) also get marks? | No. The redesign is the interface in use. Adoption later is one parameter | One more adopting family in §10.5 and its sites |
 | S7 | Should the scorecard note also list events from the earlier weeks its rules look back over, or the judged week only? | Both, in two short sections, three lines each at most | `earlierTitle` and `earlierLines` are dropped |
@@ -1502,8 +1569,9 @@ design in force in this document. The last column says what changes if the owner
 | S13 | Should "Mark a Moment" offer to create an event? | No. It stays as it is; it is a strap gesture with no kind or range | A separate change to the Automations screen |
 | S14 | During a diet break or a deload, should the scorecard keep giving its verdict with the event noted beneath it? And is a diet break an event, not a phase? | Yes to both. A diet break or deload is an event; phases are only the long blocks (§1, §10.6). Stages 1 and 6 state the same rule | If the verdict should pause instead, that is a change to stage 1's evaluation with a new ruling; this stage's presenter still only adds the note |
 | S15 | A supplement or medication name can reach the in-app Coach through the Journal, where stage 3 keeps its supplement ticks. Events themselves never reach it (S8). Should stage 3 keep those Journal questions out of the Coach context? | Yes; stage 3 builds the exclusion and its test. Nothing in this stage changes either way: no event, of kind "Supplement change" or any other, enters the Coach context | Stage 3 leaves the Journal as it is; this stage is unaffected |
-| S16 | The Health card, the Settings section and the scorecard screen each gain entries from several stages. Approve one combined layout, with the Health rows in the order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet? | Yes; approved once, before any view code, then this stage's own frames | The order in §10.1, §10.6 and §10.7 follows the layout you choose; no logic changes |
+| S16 | The Health card, the Settings cards and the scorecard screen each gain entries from several stages. Approve the one combined layout drawn by the orchestrator's designer, in which Events is the fifth entry of the shared order, after Body record and before Niggle log? | Yes; approved once, before any view code, then this stage's own frames | The place stated in §10, §10.1 and §10.7 follows the layout you choose; no logic changes |
 | S17 | Install events on the phone together with stage 6 and packet v2 at one milestone, after a fresh backup, with the flag off until you switch it on? | Yes | The install plan changes; the code does not |
+| S18 | The switch that lets private events into the coach packet arrives with packet v2, when the packet first has an events section, and is shown only while both Events and the Coach packet are switched on. Acceptable? | Yes (orchestrator ruling). Until then no private event can reach the packet at all | The switch, key and strings of §9.6 move into this stage's packages and the scan `test_no_packet_setting_without_its_reader` is dropped |
 
 ## 16. Not determined
 
@@ -1545,15 +1613,16 @@ design in force in this document. The last column says what changes if the owner
 
 Not yet submitted. Two approvals are needed, in this order.
 
-1. **The combined layout, shared by all stages, approved once:** the Health tab's "More health" card
-   with every stage's row in the fixed order, the Settings section, and the scorecard screen. It is
-   not this stage's round and is not re-opened here.
+1. **The combined layout, shared by all stages, approved once:** the Health tab's "More health" card,
+   the Settings cards and the scorecard screen, drawn by the orchestrator's designer. It is the
+   authority for the order (§10), is not this stage's round and is not re-opened here.
 2. **This stage's frames,** `design/round-s5-events/s5-frames.json`: Health row (2, inside the
    approved card); Events screen (every row of §10.2); event sheet (every row of §10.3); delete
    confirmation; chart marks on a weekly curve, a thirty-day bar chart and a line chart, each with
    no event, one event, a dense run, and a missed week; the caption in each state of its table; the
-   scorecard note in each state of §10.6 (inside the approved scorecard layout); the two Settings
-   switches (inside the approved Settings layout). Two options to choose between, as their own
+   scorecard note in each state of §10.6 (inside the approved scorecard layout); the Events card
+   in Settings with its one switch (inside the approved Settings layout), and, as a frame for the
+   packet v2 change, the same card with the second switch of §9.6. Two options to choose between, as their own
    frames: a dot per covered position (the recommendation) against a dot at the start and an open
    dot at the end.
 
@@ -1561,7 +1630,9 @@ Each frame id is also a demo name: `--demo-screen events-<frame id>`.
 
 ## 18. Reconciliation (11 November 2026)
 
-What changed in this file for each conflict of the cross-stage check that names stage 5.
+What changed in this file for each conflict of the cross-stage check that names stage 5. This table
+is the record of the first pass; where the "Second pass" below changes an item (X3's switch, X6,
+X18, X21, X22), the second pass is the text in force.
 
 | Conflict | Change in this file |
 |---|---|
@@ -1596,9 +1667,29 @@ integration branch before any stage:
 
 | Scaffolding | What this stage relies on |
 |---|---|
-| The demo registry line in `StrandiOS/App/StrandiOSApp.swift` | An ordered list of demo providers consulted for an unknown `--demo-screen` name, in the order scorecard, packet, intake, body record, events, stage 6. This stage adds one element for `PersonalEventsDemo.screen(named:)` |
+| The demo registry line in `StrandiOS/App/StrandiOSApp.swift` | An ordered list of demo providers consulted for an unknown `--demo-screen` name, each provider returning nil for a name outside its own reserved prefix. This stage adds one element for `PersonalEventsDemo.screen(named:)`, prefix `events-` |
 | The plugin import commands and stage-named design folders | `importS5` in `design/figma-plugin/code.js` and `manifest.json`, reading `design/round-s5-events/s5-frames.json`; the folder `design/round-s5-events/` |
 | `ObservableDefaultsFlag` | `Strand/Data/ObservableDefaultsFlag.swift`: a main-actor `ObservableObject` with `init(key: String, defaults: UserDefaults = .standard)`, a published read-only `isEnabled` that follows every write to the key, and `set(_:)` |
 | `CanonicalDay` | `Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift` with `number(_:)`, `key(_:)`, `daysBetween(_:_:)` and `weekStart(_:)` as in stage 6 §6.0, and the one test that pins it to `CutScorecard.weekStart` |
 | `ChargeTypicalBand` | Nothing. This stage neither reads nor shows the typical range; listed so the absence is deliberate |
 | The fork-only backup keys comment | A comment block above the Swift whitelist in `BackupSettings.swift` listing every fork-only key; this stage adds the line for `personalEvents.items`. Also the note in the fork's personal documents that the Kotlin whitelist is knowingly behind |
+
+### Second pass
+
+Applied after the independent re-check of the first pass, under the orchestrator's rulings (a) to
+(k). Each line says what the ruling or re-check item changed here.
+
+| Item | Change in this file |
+|---|---|
+| Ruling (a), weigh-in outranks a scan | Nothing is specified here. This file never stated the rule and still does not; it is stage 1's ruling on `BodyMeasurementResolver` (stage 1 §18, R44), implemented as work package 1-11 inside stage 4's serialised step. The only consequence here is the order: this stage's `CutScorecardPresenter.swift` edit is made after the whole of stage 4's step, which contains every earlier edit to that file (§14.2) |
+| Ruling (b), whole-gram floor | Not this stage's. The fixture line "protein floor 100 g" (§12.8, §13) is already a whole number; unchanged |
+| Ruling (c), shared-file order, and the re-check's "stage 3 became an editor" | §14.2 rewritten: the one order is stated once (Lab Book ownership, 2, 3, 4, 5, 6, packet v2) and every row states this stage's turn, the fifth, and nothing about other stages' edits. The per-file lists of other stages ("2, 5, 6" for the model, "4, then 5" for the presenter, "3, 5, 6" for the backup file) are removed from §9.4, §10.6, §11 and §14.2. The model edit is located by `load()` and no longer assumes which earlier stages touched the file |
+| Ruling (d), Settings and Health order (re-check X22, "Settings card order was read two ways") | §10, §10.1, §10.7, 5-7h, S16 and §17 now say one thing: Events is the fifth entry of the one order, after Body record and before Niggle log, and the orchestrator's combined frame set is the authority. The six-row list ending in "Coach packet", the "third in the fixed order" wording and the list of other stages' Settings cards are removed. This stage's Settings entry is now a card, "Events", holding one switch (§10.7, §11) |
+| Re-check X22, hotspot edits as one orchestrator commit | The `ScorecardView.swift` and `BackupSettings.swift` edits, and the new `BackupSettingsTests.swift` methods, moved from 5-7, 5-5 and 5-3 into the orchestrator's commit 5-7h. The scorecard note's view became this stage's own file, `StrandiOS/Events/ScorecardEventNoteView.swift`, so the shared view gains one call and one argument (§10.6, §14.1, §14.2, §14.3) |
+| Ruling (e), the private-events packet switch | The switch, its key, the store property, its footnote and the event-sheet sentence about the packet left this stage's milestone. New §9.6 specifies the setting completely, and the packet v2 change builds it with its one reader. Removed from §9.1's key table and §9.3's store listing; §1, §4.3, §5, §7.5, §9.4, §10.7, §11, §14.1 and §17 follow. The event sheet's sentence is now "Private events show as "Private event" outside this screen."; the packet sentence is a separate string added by packet v2. Tests: the backup test is split (`testPersonalEventsFlagIsNotExported` here; the switch's twin in packet v2), a scan `test_no_packet_setting_without_its_reader` and fault line F29 are added, and §9.6 names the tests packet v2 adds. Recorded for the owner as S18 |
+| Ruling (f), packet rows (re-check X3) | §7.5 names stage 2 §7.12 as the authority for the grammar and replaces its mixed example with golden G-E1 (private events included), the rows stage 2 §7.12 also prints, with §13.3 as the one text both documents copy from. No golden or constant changed: the caption has no count, the allowance is this stage's `PersonalEvents.packetByteAllowance` (2,000), and the widest row is 140 bytes, 141 with its line break. One test added for stage 2's rule G-8 (a row whose note looks like an email address or a path is returned intact) |
+| Ruling (g), `LabMarkerStore` building blocks | Not this stage's. No Lab Book file is read or edited here (§8.1 option E, §14.2 "Not edited") |
+| Ruling (h), demo registry (re-check X6) | §14.1 and the scaffolding table state this stage's file (`StrandiOS/Events/PersonalEventsDemo.swift`), its reserved prefix (`events-`) and its one registry element. The list of other stages' providers is removed |
+| Ruling (i), `AICoach.swift` order | This stage has no position in it: `Strand/AI/` is not edited (§14.2) and a source scan asserts it (§12.5) |
+| Ruling (j), `ChargeTypicalBand` | Not this stage's; the scaffolding table already says this stage uses neither it nor `Baselines.sigma` |
+| Ruling (k), privacy | No change needed. This file names no product, no private file and no private value; every example is the Fixture Person's |
