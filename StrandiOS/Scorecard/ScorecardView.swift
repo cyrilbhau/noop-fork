@@ -42,6 +42,9 @@ struct ScorecardScreen: View {
     @ObservedObject private var model: CutScorecardModel
     @State private var sheet: ScorecardSheet?
     @State private var showHistory = false
+    /// The coach packet flag (stage 2 specification §10.1): its toolbar item shows only while on.
+    @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
+    @State private var showsCoachPacket = false
     /// Set only by the debug demo, whose screens run on a synthetic context and not on the flag.
     @Environment(\.scorecardContextOverride) private var demoContext
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
@@ -75,6 +78,13 @@ struct ScorecardScreen: View {
         .noopAmbientBackground(ambient)
         .navigationTitle(Text(verbatim: CutScorecardPresenter.cardTitle))
         .toolbar {
+            // Beside the weigh-in button, and absent with the coach packet flag off.
+            if coachPacketFlag.isEnabled {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showsCoachPacket = true } label: { Image(systemName: "doc.plaintext") }
+                        .accessibilityLabel(Text(verbatim: CoachPacketPresenter.toolbarAccessibilityLabel))
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { sheet = .weighIn } label: { Image(systemName: "plus") }
                     .accessibilityLabel(Text(verbatim: CutScorecardPresenter.logWeighInTitle))
@@ -98,6 +108,7 @@ struct ScorecardScreen: View {
                 }
             }
         }
+        .sheet(isPresented: $showsCoachPacket) { CoachPacketSheet() }
         .task { await model.load() }
     }
 
