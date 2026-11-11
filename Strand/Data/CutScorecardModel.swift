@@ -239,6 +239,10 @@ final class WeighInSheetModel: ObservableObject {
     /// partial failure acts on the rows as they now are.
     private var editedWeightRow: LabMarkerRow?
     private var editedWaistRow: LabMarkerRow?
+    /// What each field showed when an edit opened: the stored value rounded for display. A field
+    /// still showing it was not changed, and is never written back from that rounded text.
+    private let seededWeightText: String?
+    private let seededWaistText: String?
     /// The newest earlier reading of each kind, offered in the field. Nil while editing.
     private var lastWeight: (text: String, day: String)?
     private var lastWaist: (text: String, day: String)?
@@ -259,6 +263,8 @@ final class WeighInSheetModel: ObservableObject {
         isEditing = editing != nil
         editedWeightRow = editing?.weightRow
         editedWaistRow = editing?.waistRow
+        seededWeightText = editing?.weightText
+        seededWaistText = editing?.waistText
         weightText = editing?.weightText ?? ""
         waistText = editing?.waistText ?? ""
         takenAt = editing?.takenAt.map { Date(timeIntervalSince1970: Double($0)) } ?? now()
@@ -347,11 +353,18 @@ final class WeighInSheetModel: ObservableObject {
     }
 
     /// "Save" on step 2: a valid waist with a valid weight. An empty waist is skipped, not saved.
+    /// Editing a reading that has no waist, Save is the weight-only save.
     var canSave: Bool {
-        guard step == .waist, phase != .saving, !dateIsInTheFuture, canEditWaist else { return false }
-        guard weightIsValid || editsWaistOnly else { return false }
+        guard step == .waist, phase != .saving, !dateIsInTheFuture else { return false }
+        if editsWeightOnly { return weightIsValid }
+        guard canEditWaist, weightIsValid || editsWaistOnly else { return false }
+        if waistIsUnchanged { return true }
         return !waistText.trimmingCharacters(in: .whitespaces).isEmpty && waistIssue == nil
     }
+
+    /// False exactly when the sheet edits a reading that has a weight and no waist: Save is then
+    /// the weight-only save, so Skip would be a second button for the same thing.
+    var offersSkip: Bool { !editsWeightOnly }
 
     var primaryTitle: String {
         guard step == .waist else { return String(localized: "Next") }
@@ -367,8 +380,11 @@ final class WeighInSheetModel: ObservableObject {
         phase == .failed ? String(localized: "Could not save. Your entries are still here.") : nil
     }
 
-    var skipNote: String {
-        String(localized: "Saves the weight only. Waist for this week will read \"Not measured this week\".")
+    /// What Skip does to a new weigh-in. Nil while editing: Skip then leaves a stored waist as it
+    /// is, so the week does not become unmeasured.
+    var skipNote: String? {
+        isEditing ? nil
+            : String(localized: "Saves the weight only. Waist for this week will read \"Not measured this week\".")
     }
 
     // MARK: Steps
@@ -384,10 +400,11 @@ final class WeighInSheetModel: ObservableObject {
         step = .weight
     }
 
-    /// Step 2: the weight and the waist, at one instant.
+    /// Step 2: the weight and the waist, at one instant. A waist that was not changed in an edit
+    /// is not written from its text: it keeps its stored value, as it does through Skip.
     func save() async {
         guard canSave else { return }
-        await write(waist: Self.parse(waistText, locale: locale))
+        await write(waist: editsWeightOnly || waistIsUnchanged ? nil : Self.parse(waistText, locale: locale))
     }
 
     /// Step 2: the weight only. A skipped waist was not measured and writes no row.
@@ -400,8 +417,25 @@ final class WeighInSheetModel: ObservableObject {
 
     private var editsWaistOnly: Bool { isEditing && editedWeightRow == nil }
 
+    /// Stage 1 adds a waist only with a new weigh-in, so this edit can change the weight alone.
+    private var editsWeightOnly: Bool { isEditing && editedWaistRow == nil && editedWeightRow != nil }
+
+    /// An edit whose field still shows what it opened with. The comparison is of the text, so
+    /// retyping the same figure also counts as unchanged.
+    private var weightIsUnchanged: Bool { Self.isUnchanged(weightText, seed: seededWeightText) }
+    private var waistIsUnchanged: Bool {
+        editedWaistRow != nil && Self.isUnchanged(waistText, seed: seededWaistText)
+    }
+
+    private static func isUnchanged(_ text: String, seed: String?) -> Bool {
+        guard let seed else { return false }
+        return text.trimmingCharacters(in: .whitespaces) == seed.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// A stored weight that was not changed is valid as it stands: the edit does not rewrite it.
     private var weightIsValid: Bool {
-        !weightText.trimmingCharacters(in: .whitespaces).isEmpty && weightIssue == nil
+        if isEditing, editedWeightRow != nil, weightIsUnchanged { return true }
+        return !weightText.trimmingCharacters(in: .whitespaces).isEmpty && weightIssue == nil
     }
 
     private func write(waist: Double?) async {
@@ -412,13 +446,24 @@ final class WeighInSheetModel: ObservableObject {
         phase = .saving
         do {
             if isEditing {
-                if let row = editedWeightRow, let weight {
-                    editedWeightRow = try await weighIns.edit(row, value: weight, unitSystem: system, takenAt: instant)
+                let epoch = Int(instant.timeIntervalSince1970)
+                if let row = editedWeightRow {
+                    // An unchanged weight is never written from its rounded display text: it keeps
+                    // its stored value, and is written at all only to follow a changed instant.
+                    if weightIsUnchanged, let stored = BodyMeasurementResolver.normalizedValue(of: row, as: .weight) {
+                        if row.takenAt != epoch {
+                            editedWeightRow = try await weighIns.edit(row, value: stored, unitSystem: .metric,
+                                                                      takenAt: instant)
+                        }
+                    } else if let weight {
+                        editedWeightRow = try await weighIns.edit(row, value: weight, unitSystem: system,
+                                                                  takenAt: instant)
+                    }
                 }
                 if let row = editedWaistRow {
                     if let waist {
                         editedWaistRow = try await weighIns.edit(row, value: waist, unitSystem: system, takenAt: instant)
-                    } else if row.takenAt != Int(instant.timeIntervalSince1970),
+                    } else if row.takenAt != epoch,
                               let stored = BodyMeasurementResolver.normalizedValue(of: row, as: .waist) {
                         // The waist keeps its value and follows its weigh-in to the new instant.
                         editedWaistRow = try await weighIns.edit(row, value: stored, unitSystem: .metric, takenAt: instant)

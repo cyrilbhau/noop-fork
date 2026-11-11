@@ -348,7 +348,7 @@ struct WeighInSheetScreen: View {
             .buttonStyle(NoopPrimaryButton())
             .disabled(onWeight ? !model.canAdvance : !model.canSave)
 
-            if !onWeight, !model.weightText.isEmpty {
+            if !onWeight, !model.weightText.isEmpty, model.offersSkip {
                 Button { Task { await model.skipWaist() } } label: {
                     Text(verbatim: CutScorecardPresenter.skipTitle)
                         .noopFont(.rowTitle)
@@ -358,8 +358,8 @@ struct WeighInSheetScreen: View {
                 .buttonStyle(.noopPress)
                 .disabled(isSaving)
                 .opacity(isSaving ? ScorecardLayout.busyOpacity : 1)
-                if model.failureMessage == nil {
-                    Text(verbatim: model.skipNote)
+                if model.failureMessage == nil, let note = model.skipNote {
+                    Text(verbatim: note)
                         .noopFont(.caption)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
