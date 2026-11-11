@@ -482,15 +482,17 @@ struct LabBookView: View {
         loaded = true
     }
 
-    private func save(_ drafts: [LabMarkerRow]) async {
-        guard !drafts.isEmpty, let store = await repo.storeHandle() else { return }
+    /// False when nothing was saved (Stage 4: the editor's "Save and add another" reports it).
+    private func save(_ drafts: [LabMarkerRow]) async -> Bool {
+        guard !drafts.isEmpty, let store = await repo.storeHandle() else { return false }
         // Owner-scope upsert: saving a reading that is already stored (same marker, instant and
         // source, under any strap id) updates it where it is. Drafts still carry the active id,
         // which is where a new reading is written, and which names the row a save lands on when
         // the instant holds two different readings (ruling A10: the other one is never changed).
-        try? await store.upsertOwnerLabMarkers(drafts)
+        let saved = (try? await store.upsertOwnerLabMarkers(drafts)) != nil
         await repo.refresh()   // re-resolves the lab-book projection into Compare/Explore/Coach
         await load()
+        return saved
     }
 
     private func delete(_ id: String) async {

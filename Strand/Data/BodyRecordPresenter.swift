@@ -103,6 +103,44 @@ struct LabMarkerEntryDraft: Equatable {
         (takenAt, String(localized: "Saved \(markerName)."))
     }
 
+    /// What the editor holds after "Save and add another" succeeded. Only the date carries over: the
+    /// note and the reference range belong to the reading just saved.
+    struct AddAnotherOutcome: Equatable {
+        var takenAt: Date
+        var note: String
+        var referenceText: String
+        /// "Saved <marker name>." or, when this save replaced a reading of this sitting, "Replaced …".
+        var savedLine: String
+        /// The readings saved in this sitting, this one included (`savedReadingKey`).
+        var savedReadings: Set<String>
+    }
+
+    /// Under the reading while a save fails: the reading stays as typed.
+    static var saveFailedLine: String { String(localized: "Couldn't save this reading. It is still here to try again.") }
+
+    /// A reading saved in this sitting: its marker and its instant to the second, as the row stores it.
+    static func savedReadingKey(markerKey: String, takenAt: Date) -> String {
+        "\(markerKey)\u{1F}\(Int(takenAt.timeIntervalSince1970))"
+    }
+
+    /// Set while this marker was already saved at this instant in this sitting. The owner-scope
+    /// upsert treats one marker at one instant as one reading (ruling A10), so a save replaces it.
+    func replaceNotice(markerName: String, savedReadings: Set<String>) -> String? {
+        guard savedReadings.contains(Self.savedReadingKey(markerKey: markerKey, takenAt: takenAt)) else { return nil }
+        return String(localized: "\(markerName) is already saved at this time. Saving replaces it.")
+    }
+
+    /// L5 after the save: nil when it failed, so the editor keeps the reading and shows
+    /// `saveFailedLine` instead of saying it was saved.
+    func afterSaveAndAddAnother(markerName: String, saved: Bool, savedReadings: Set<String>) -> AddAnotherOutcome? {
+        guard saved else { return nil }
+        let key = Self.savedReadingKey(markerKey: markerKey, takenAt: takenAt)
+        let line = savedReadings.contains(key)
+            ? String(localized: "Replaced \(markerName).") : afterSaveAndAddAnother(markerName: markerName).savedLine
+        return AddAnotherOutcome(takenAt: takenAt, note: "", referenceText: "", savedLine: line,
+                                 savedReadings: savedReadings.union([key]))
+    }
+
     /// L6: the line under a history row whose numeric reading carries the typed value and unit.
     static func enteredAsLine(for row: LabMarkerRow) -> String? {
         guard row.value != nil, let typed = row.valueText, !typed.isEmpty else { return nil }

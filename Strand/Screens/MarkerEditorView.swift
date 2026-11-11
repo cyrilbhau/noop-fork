@@ -23,8 +23,9 @@ import WhoopStore
 // shown back verbatim — NOOP defines no ranges and asserts no normality.
 
 struct MarkerEditorView: View {
-    /// Persist the validated draft row(s). Async so the caller can write + refresh.
-    let onSave: (_ drafts: [LabMarkerRow]) async -> Void
+    /// Persist the validated draft row(s). Async so the caller can write + refresh. False when
+    /// nothing was saved.
+    let onSave: (_ drafts: [LabMarkerRow]) async -> Bool
 
     @EnvironmentObject var repo: Repository
     @Environment(\.dismiss) private var dismiss
@@ -51,6 +52,9 @@ struct MarkerEditorView: View {
     @ObservedObject private var reportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
     @State private var reportUnitLabel = ""
     @State private var savedLine: String?
+    // Stage 4: the readings saved in this sitting, and the line while a save failed.
+    @State private var savedReadings: Set<String> = []
+    @State private var saveFailedLine: String?
 
     private enum Field: Hashable { case value, diastolic, note, reference, customName, customUnit }
     @FocusState private var focused: Field?
@@ -299,7 +303,9 @@ struct MarkerEditorView: View {
             .padding(.horizontal, 12).padding(.vertical, 9)
             .background(StrandPalette.surfaceInset, in: inputShape)
             .overlay(inputShape.strokeBorder(StrandPalette.hairline, lineWidth: 1))
-            ForEach([draft.errorLine, draft.conversionLine, draft.formulaLine].compactMap { $0 }, id: \.self) { line in
+            ForEach([saveFailedLine,
+                     draft.replaceNotice(markerName: selection?.displayName ?? "", savedReadings: savedReadings),
+                     draft.errorLine, draft.conversionLine, draft.formulaLine].compactMap { $0 }, id: \.self) { line in
                 Text(verbatim: line)
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
@@ -410,6 +416,7 @@ struct MarkerEditorView: View {
         unitChoice = 0
         reportUnitLabel = def.canonicalUnit
         savedLine = nil
+        saveFailedLine = nil
         focused = .value
     }
 
@@ -528,12 +535,20 @@ struct MarkerEditorView: View {
         guard !rows.isEmpty, let entryDraft, let selection else { return }
         saving = true
         Task {
-            await onSave(rows)
-            let next = entryDraft.afterSaveAndAddAnother(markerName: selection.displayName)
-            reset()
-            takenAt = next.takenAt
-            savedLine = next.savedLine
+            let saved = await onSave(rows)
             saving = false
+            guard let next = entryDraft.afterSaveAndAddAnother(markerName: selection.displayName, saved: saved,
+                                                               savedReadings: savedReadings) else {
+                saveFailedLine = LabMarkerEntryDraft.saveFailedLine
+                return
+            }
+            reset()
+            saveFailedLine = nil
+            takenAt = next.takenAt
+            note = next.note
+            referenceText = next.referenceText
+            savedReadings = next.savedReadings
+            savedLine = next.savedLine
         }
     }
 
@@ -542,7 +557,7 @@ struct MarkerEditorView: View {
         guard !rows.isEmpty else { return }
         saving = true
         Task {
-            await onSave(rows)
+            _ = await onSave(rows)
             dismiss()
         }
     }
