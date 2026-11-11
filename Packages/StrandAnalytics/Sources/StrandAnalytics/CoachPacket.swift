@@ -355,18 +355,17 @@ public enum CoachPacket {
     /// The number of hexadecimal pairs in a MAC address.
     private static let macPairs = 6
 
-    /// True when `bytes` holds six hexadecimal pairs separated all by colons or all by dashes.
+    /// True when `bytes` holds six hexadecimal pairs separated by colons or dashes in any mixture
+    /// (ruling A17).
     private static func containsMACAddress(_ bytes: [UInt8]) -> Bool {
         let length = macPairs * 3 - 1
         guard bytes.count >= length else { return false }
         for start in 0...(bytes.count - length) {
-            let separator = bytes[start + 2]
-            guard separator == 0x3A || separator == 0x2D else { continue }
             var matched = true
             for pair in 0..<macPairs where matched {
                 let at = start + pair * 3
                 matched = isHex(bytes[at]) && isHex(bytes[at + 1])
-                    && (pair == macPairs - 1 || bytes[at + 2] == separator)
+                    && (pair == macPairs - 1 || bytes[at + 2] == 0x3A || bytes[at + 2] == 0x2D)
             }
             if matched { return true }
         }
