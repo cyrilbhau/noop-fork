@@ -1,0 +1,73 @@
+/* Round combined · local styles for the surfaces every stage shares. It adds to round 6's sheet
+   (../round6-scorecard/scorecard.css, loaded before this one); design/system/noop.css is not edited.
+   Everything here is built from existing tokens and round 6's local proposals (--t3a, --sig-*). No new colour. */
+
+/* An annotation for the reviewer inside a frame (a state's name above a tile). Not app copy. */
+.anno{color:var(--t3a)}
+.navbar .ttl.anno{font-weight:500}
+
+/* Navigation bar with a button cluster on each side, so the title stays centred when the packet button is present. */
+.nbl,.nbr{display:flex;gap:8px;min-width:88px}
+.nbr{justify-content:flex-end}
+
+/* Health tab: rows of the "More health" card. Mirrors NoopListRow: icon, title, trailing detail, chevron. */
+.lrow.hr{padding:13px 0}
+.lrow.hr .lic{display:grid;place-items:center;width:24px;flex:none}
+.lrow.hr .t{line-height:21px}
+.lrow.hr .val{max-width:56%;text-align:right;line-height:20px}
+.lrow.hr .chev{font-size:17px;margin-left:0}
+.lrow.hr .skb{flex:none}
+
+/* Settings: one card per stage. Mirrors the shipped scorecard card: title, one sentence, the switch, then rows. */
+.scard{padding:16px 18px 4px}
+.scard .shd{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:600;line-height:22px;margin-bottom:12px}
+.scard .shd b{font-weight:600}
+.scard .sbl{font-size:13px;color:var(--t2);line-height:18px;margin:-6px 0 12px}
+.scard .scap{font-size:13px;color:var(--t2);line-height:18px;margin:-4px 0 12px}
+.scard .scap.bad{color:var(--rec-low)}
+.scard .scap.lead{margin:12px 0 8px}
+.scard .notif{margin-bottom:14px}
+.scard .sban{margin:12px 0 14px}
+.scard .nrow .val{max-width:58%}
+.scard .nrow .toggle{margin-left:auto}
+.scard.c{padding:4px 18px}
+.scard.c .lic{display:grid;place-items:center;width:22px;flex:none;color:var(--t1)}
+
+/* Scorecard: the event note (stage 5). The dot is the mark the curves carry on their time axis. */
+.evnote{padding:14px 18px}
+.evnote .evgo{position:absolute;right:16px;top:12px}
+.evnote .evgo .chev{font-size:17px}
+.evnote .lab.evgap{margin-top:10px}
+.evl{display:flex;align-items:center;gap:8px;font-size:15px;line-height:21px;margin-top:4px}
+.evl i{width:4px;height:4px;border-radius:50%;background:var(--t3a);flex:none}
+.evmore{font-size:13px;color:var(--t2);line-height:18px;margin-top:4px;padding-left:12px}
+.evfoot{font-size:12px;color:var(--t3a);line-height:17px;margin-top:10px}
+.evnote.in{padding:0}
+.evcap{font-size:12px;color:var(--t2);line-height:17px;margin-top:6px}
+
+/* Scorecard: the protein row's source caption and the chevron that opens Intake (stage 3). */
+.sig .sgsrc{margin-top:5px}
+.sig .w .chev{font-size:15px;margin-left:6px}
+
+/* Your cards: the Protein tile's ring sits beside the value. */
+.pv{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto}
+.pv .v{margin-top:0}
+.pring{flex:none;display:block}
+
+/* Largest accessibility size (AX5), for the pieces this round adds. Same switch as round 6: one column, nothing truncates. */
+.ax .lt{font-size:44px;line-height:50px}
+.ax .hdr .sub{font-size:28px;line-height:34px}
+.ax .nbl,.ax .nbr{min-width:0}
+.ax .lrow.hr{flex-wrap:wrap;gap:6px 14px;padding:18px 0}
+.ax .lrow.hr .lic{width:36px}.ax .lrow.hr .lic svg{width:34px;height:34px}
+.ax .lrow.hr .t{font-size:32px;line-height:38px}
+.ax .lrow.hr .val{order:3;flex-basis:100%;max-width:none;text-align:left;font-size:28px;line-height:34px;padding-left:50px}
+.ax .lrow.hr .chev{font-size:30px}
+.ax .scard .shd{font-size:34px;line-height:40px;gap:12px}.ax .scard .shd svg{width:32px;height:32px}
+.ax .scard .sbl,.ax .scard .scap{font-size:26px;line-height:32px}
+.ax .scard .nrow .toggle{margin-left:0}
+.ax .evnote .evgo .chev{font-size:30px}
+.ax .evl{font-size:30px;line-height:37px;gap:14px}.ax .evl i{width:8px;height:8px}
+.ax .evmore,.ax .evfoot,.ax .evcap{font-size:26px;line-height:32px}
+.ax .sig .w .chev{font-size:28px}
+.ax .pv{display:block}.ax .pring{width:56px;height:56px;margin-top:10px}
