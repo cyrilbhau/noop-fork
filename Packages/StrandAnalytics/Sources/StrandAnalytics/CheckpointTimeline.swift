@@ -345,6 +345,9 @@ public enum CheckpointTimeline {
 
         // Step 3: recorded scan days, read only while their source is on. The first occurrence of a
         // day stands for it.
+        // SPEC-NOTE: §7.3 step 3 counts "a repeat of a day already taken" as `duplicate`. Read as: a day
+        // is taken only by a kept scan, and the three causes are judged in the order the step lists
+        // them, so a future day given twice counts `futureScan` twice and `duplicate` not at all.
         var scanNumbers = Set<Int>()
         if input.scans == .on {
             for (index, day) in input.scanDays.enumerated() {
