@@ -661,8 +661,11 @@ final class LabBookOwnershipFlowTests: XCTestCase {
     /// value, no unit, no note, no day and no device id.
     func testRepairLogLineCarriesCountsOnly() async throws {
         let store = try await Fx.seededStore()
-        // inserted 1 (the ldl cell), updated 1 (the cell left on F3's value), unchanged 4,
-        // unbackedKept 1 (§13 V4: a cell with no reading that day).
+        // Superseded by rulings A10 and A11: this expected `updated 1` and the cell left on F3's
+        // value rewritten to 98.4. A cell holding a stored reading's value is kept, so: inserted 1
+        // (the ldl cell), updated 0, and six cells left as stored, split between `unchanged` and
+        // `unbackedKept` as 5 and 1 or as 4 and 2 (the rulings do not say which count the kept F3
+        // cell falls in).
         _ = try await store.deleteMetricSeriesPoint(deviceId: WhoopStore.labBookSourceId, day: Fx.day2, key: "ldl")
         try await Fx.setCell(Fx.Cell(key: "weight", day: Fx.day3, value: 98.0), in: store)
         try await Fx.setCell(Fx.Cell(key: "weight", day: "2031-02-05", value: 97.5), in: store)
@@ -676,8 +679,8 @@ final class LabBookOwnershipFlowTests: XCTestCase {
         let digits = try NSRegularExpression(pattern: "\\d+(?:[.,]\\d+)?")
         let numbers = digits.matches(in: line, range: NSRange(line.startIndex..., in: line))
             .compactMap { Range($0.range, in: line).map { String(line[$0]) } }
-        XCTAssertEqual(numbers.sorted(), ["1", "1", "1", "4"],
-                       "the four counts (inserted 1, updated 1, unchanged 4, kept 1) and no other number, in: \(line)")
+        XCTAssertTrue([["0", "1", "1", "5"], ["0", "1", "2", "4"]].contains(numbers.sorted()),
+                      "the four counts (inserted 1, updated 0, six cells left) and no other number, in: \(line)")
         let lowered = line.lowercased()
         for secret in Fx.everyId + Fx.markerKeys + ["fixture panel", "clear", "bodymeasurement", "bloodpanel", "manual", "lab-csv"] {
             XCTAssertFalse(lowered.contains(secret.lowercased()), "the line names \(secret): \(line)")
@@ -686,7 +689,9 @@ final class LabBookOwnershipFlowTests: XCTestCase {
         XCTAssertEqual(units.numberOfMatches(in: line, range: NSRange(line.startIndex..., in: line)), 0,
                        "the line carries a unit: \(line)")
         let cells = try await Fx.labBookCells(store)
-        XCTAssertEqual(cells, Fx.cells + [Fx.Cell(key: "weight", day: "2031-02-05", value: 97.5)])
+        XCTAssertEqual(cells, Fx.cells.map {
+            $0.key == "weight" && $0.day == Fx.day3 ? Fx.Cell(key: "weight", day: Fx.day3, value: 98.0) : $0
+        } + [Fx.Cell(key: "weight", day: "2031-02-05", value: 97.5)])
     }
 
     // MARK: - §12.8 F26: the two confirmation dialogs (case 76)

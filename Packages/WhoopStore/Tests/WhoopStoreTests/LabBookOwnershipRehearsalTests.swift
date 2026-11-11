@@ -156,7 +156,8 @@ final class LabBookOwnershipRehearsalTests: XCTestCase {
     }
 
     /// Protects the rehearsal procedure itself: on a file holding the §13 fixture, with one cell
-    /// missing, one wrong and one unbacked, it reports the counts §13 gives and all four properties
+    /// missing, one holding another of the day's readings and one unbacked, it reports the counts
+    /// ruling A11 gives and all four properties
     /// hold.
     func testRehearsalProcedureHoldsOnTheSyntheticFixtureFile() async throws {
         let directory = FileManager.default.temporaryDirectory
@@ -193,9 +194,14 @@ final class LabBookOwnershipRehearsalTests: XCTestCase {
         expected.identitiesWithConflicts = 1    // weight at t3: F3 and F8
         expected.qualitativeRows = 1            // F10
         expected.inserted = 1                   // the ldl cell
-        expected.updated = 1                    // the 2031-01-22 weight cell
-        expected.unchanged = 4
-        expected.unbackedKept = 1               // the 2031-02-05 cell
+        // Superseded by rulings A10 and A11: this expected `updated = 1`, `unchanged = 4` and
+        // `unbackedKept = 1`. The 2031-01-22 weight cell holds F3's value, a stored reading, and is
+        // kept; which of the two "left as stored" counts it falls in is not ruled, so their sum is
+        // asserted: that cell, the four correct cells and the 2031-02-05 cell.
+        expected.updated = 0
+        XCTAssertEqual(counts.unchanged + counts.unbackedKept, 6)
+        expected.unchanged = counts.unchanged
+        expected.unbackedKept = counts.unbackedKept
         expected.registeredIdsDeleted = 4       // A, B, D, N
         XCTAssertEqual(counts, expected)
 

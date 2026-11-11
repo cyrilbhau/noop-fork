@@ -511,7 +511,7 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
     // MARK: - Upgrade (§8.3)
 
     /// Protects §8.3: the first launch of the new build on a database an older build left. Rows sit
-    /// under five ids, one of them unregistered; one projected cell holds the wrong one of the day's
+    /// under five ids, one of them unregistered; one projected cell holds another of the day's
     /// readings, one is missing and one is the trace of a reading that is gone. Reading and repairing
     /// deletes, overwrites and hides no row.
     func testUpgradeFromRowsUnderSeveralIdsDeletesOverwritesAndHidesNothing() async throws {
@@ -530,10 +530,13 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
         try Fx.assertCounts(store, Fx.countsById, "after the repair")
         XCTAssertEqual(try Fx.storageDump(store), before, "no row deleted, moved or overwritten")
         XCTAssertEqual(repair.inserted, 1, "the ldl cell")
-        XCTAssertEqual(repair.updated, 1, "the 2031-01-22 weight cell")
-        XCTAssertEqual(repair.unchanged, 4)
-        XCTAssertEqual(repair.unbackedKept, 1, "the 2031-02-05 cell")
-        XCTAssertEqual(try Fx.labBookCells(store), Fx.cells + [Fx.cell("weight", "2031-02-05", 97.5)])
+        // Superseded by rulings A10 and A11: this asserted `updated == 1` and a 2031-01-22 cell
+        // rewritten to 98.4. A cell holding the value of a stored reading of the day is left alone.
+        XCTAssertEqual(repair.updated, 0, "the 2031-01-22 weight cell holds a stored reading's value and is kept")
+        XCTAssertEqual(repair.unchanged + repair.unbackedKept, 6, "the six stored cells, the 2031-02-05 one included")
+        XCTAssertEqual(try Fx.labBookCells(store), Fx.cells.map {
+            $0.key == "weight" && $0.day == Fx.day3 ? Fx.cell("weight", Fx.day3, 98.0) : $0
+        } + [Fx.cell("weight", "2031-02-05", 97.5)])
 
         let stored = try await store.allLabMarkers()
         XCTAssertEqual(stored, Fx.storedOrder, "every row under every id is read")
@@ -736,30 +739,38 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
         XCTAssertEqual(try Fx.labBookCells(store), [Fx.cell("ldl", Fx.day2, 90.0)] + Fx.cells.dropFirst())
     }
 
-    /// Protects §7.4 as written for an identity that holds a conflict: "update each of those stored
-    /// rows in place".
-    // SPEC-AMBIGUITY: §7.4 has an owner-scope upsert update EVERY stored row at the identity. Applied
-    // to F3 and F8, which are two different readings (98.0 and 98.4), one saved value replaces both,
-    // which sits badly with §8.3's "no row is overwritten" and with R42. §7.4 is explicit and it is an
-    // action the owner takes on that identity, so the algorithm is what is asserted here. If the
-    // ruling is that a conflict must survive an upsert, this test changes and §7.4 needs a rule for
-    // which row an incoming reading lands on.
-    func testUpsertOwnerOntoAnIdentityHoldingAConflictUpdatesBothRowsInPlace() async throws {
+    /// Protects ruling A10 (RULINGS-ADDENDUM.md), which overrides §7.4's "update each of those stored
+    /// rows in place" for an identity that holds a conflict: F3 (98.0, under C) and F8 (98.4, under N)
+    /// are two different readings, so a save landing on their instant updates the row under the
+    /// saving device id, F8, and leaves F3 as it was. Superseded by rulings A10 and A11: this test
+    /// was `testUpsertOwnerOntoAnIdentityHoldingAConflictUpdatesBothRowsInPlace` and asserted that
+    /// both rows took the incoming value.
+    func testUpsertOwnerOntoAnIdentityHoldingAConflictUpdatesOnlyTheRowItLandsOn() async throws {
         let store = try await Fx.seededStore()
         try Fx.assertCounts(store, Fx.countsById, "before")
         let edit = draft(Fx.f8, id: "weight-1926831600-D0000001") { $0.value = 98.2 }
 
         let written = try await store.upsertOwnerLabMarkers([edit])
 
-        XCTAssertEqual(written, 2)
+        XCTAssertEqual(written, 1)
         try Fx.assertCounts(store, Fx.countsById, "after: both rows are still stored, each under its own id")
-        var f3 = Fx.f3, f8 = Fx.f8
-        f3.value = 98.2
+        var f8 = Fx.f8
         f8.value = 98.2
-        XCTAssertEqual(try Fx.rows(store), [Fx.f5, Fx.f1, Fx.f10, Fx.f6, Fx.f7, Fx.f2, Fx.f9, f3, f8, Fx.f4])
-        XCTAssertEqual(try Fx.labBookCells(store), Fx.cells.map {
-            $0.key == "weight" && $0.day == Fx.day3 ? Fx.cell("weight", Fx.day3, 98.2) : $0
-        })
+        XCTAssertEqual(try Fx.rows(store), [Fx.f5, Fx.f1, Fx.f10, Fx.f6, Fx.f7, Fx.f2, Fx.f9, Fx.f3, f8, Fx.f4],
+                       "F3 keeps 98.0; F8 takes 98.2 under its own id")
+        XCTAssertEqual(LabMarkerUnion.merged(try Fx.rows(store), activeDeviceId: Fx.n).filter { $0.takenAt == Fx.t3 },
+                       [Fx.f3, f8], "both readings are still listed")
+        // Which of two conflicting same-instant readings the cell holds is ruling A11's; it holds one
+        // of the two stored values.
+        let cell = try Fx.labBookCells(store).first { $0.key == "weight" && $0.day == Fx.day3 }?.value
+        XCTAssertTrue(cell == 98.0 || cell == 98.2, "the 2031-01-22 cell holds \(String(describing: cell))")
+        XCTAssertEqual(try Fx.labBookCells(store).filter { !($0.key == "weight" && $0.day == Fx.day3) },
+                       Fx.cells.filter { !($0.key == "weight" && $0.day == Fx.day3) })
+
+        // The delete of the edited reading removes it alone.
+        let deleted = try await store.deleteLabMarkerAndCopies(id: Fx.f8.id)
+        XCTAssertEqual(deleted, [Fx.f8.id])
+        XCTAssertEqual(try Fx.rows(store), Fx.storedOrder.filter { $0.id != Fx.f8.id }, "F3 is still stored")
     }
 
     /// Protects decision D6 (fault F21): importing the same file again after the active id changed
@@ -1261,14 +1272,15 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
 
     /// Protects, over 60 generated histories from a fixed seed: whatever mix of owner-scope upserts,
     /// owner-scope deletes and strap deletes runs, (1) a strap delete never changes a row, (2) an
-    /// upsert never changes the stored row count by more than its new identities and never changes a
-    /// stored `id` or `deviceId`, (3) a delete removes exactly the named row and its copies, and
+    /// upsert never changes the stored row count by more than its new identities, never changes a
+    /// stored `id` or `deviceId`, and changes only the row it lands on and that row's true copies,
+    /// never a conflicting row (ruling A10), (3) a delete removes exactly the named row and its copies, and
     /// (4) the projected cells always equal the latest reading (greatest `takenAt`, then greatest
     /// `id`) of each marker and day over every id.
     func testGeneratedHistoriesKeepRowsAndProjectionConsistent() async throws {
         var generator = Fx.Generator(seed: 0x1AB0_0C0F_F1CE_0003)
         let devices = [Fx.a, Fx.b, Fx.c, Fx.d, Fx.n]
-        var strapDeletes = 0, copyDeletes = 0, updates = 0
+        var strapDeletes = 0, copyDeletes = 0, updates = 0, conflictsKept = 0
 
         func expectedCells(_ rows: [LabMarkerRow]) -> [Fx.Cell] {
             var best: [String: LabMarkerRow] = [:]
@@ -1341,13 +1353,36 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
                         XCTAssertEqual(after.count, before.count + 1, "\(context): insert")
                         XCTAssertTrue(after.contains(incoming), "\(context): stored as given")
                     } else {
-                        XCTAssertEqual(after.count, before.count, "\(context): update")
-                        XCTAssertEqual(after.map(\.id), before.map(\.id), "\(context): ids kept")
-                        XCTAssertEqual(after.map(\.deviceId), before.map(\.deviceId), "\(context): device ids kept")
-                        for holder in holders {
-                            let stored = after.first { $0.id == holder.id }
-                            XCTAssertEqual(stored?.value, incoming.value, "\(context): value taken")
-                            XCTAssertEqual(stored?.valueText, incoming.valueText, "\(context): text taken")
+                        // Superseded by rulings A10 and A11: this branch asserted that EVERY holder
+                        // of the identity took the incoming value. The write lands on the holder
+                        // under the incoming device id and that row's true copies; when the holders
+                        // are all copies of one another they are one reading and all follow.
+                        let allCopies = holders.allSatisfy { LabMarkerUnion.isCopy($0, holders[0]) }
+                        let landed = holders.first { $0.deviceId == incoming.deviceId }
+                        let targets = allCopies ? holders
+                            : landed.map { row in holders.filter { LabMarkerUnion.isCopy($0, row) } }
+                        if let targets {
+                            XCTAssertEqual(after.count, before.count, "\(context): update")
+                            XCTAssertEqual(after.map(\.id), before.map(\.id), "\(context): ids kept")
+                            XCTAssertEqual(after.map(\.deviceId), before.map(\.deviceId), "\(context): device ids kept")
+                            for holder in holders {
+                                let stored = after.first { $0.id == holder.id }
+                                if targets.contains(where: { $0.id == holder.id }) {
+                                    XCTAssertEqual(stored?.value, incoming.value, "\(context): value taken")
+                                    XCTAssertEqual(stored?.valueText, incoming.valueText, "\(context): text taken")
+                                } else {
+                                    XCTAssertEqual(stored, holder, "\(context): a conflicting row changed")
+                                }
+                            }
+                            conflictsKept += targets.count < holders.count ? 1 : 0
+                        } else {
+                            // A conflict with no row under the incoming device id: the rulings fix
+                            // only that no stored row changes.
+                            for row in before {
+                                XCTAssertTrue(after.contains(row), "\(context): a stored row changed")
+                            }
+                            XCTAssertLessThanOrEqual(after.count, before.count + 1, "\(context)")
+                            conflictsKept += 1
                         }
                         updates += 1
                     }
@@ -1358,5 +1393,6 @@ final class LabMarkerOwnershipStoreTests: XCTestCase {
         XCTAssertGreaterThan(strapDeletes, 50, "too few strap deletes were generated")
         XCTAssertGreaterThan(copyDeletes, 5, "too few deletes hit a set of copies")
         XCTAssertGreaterThan(updates, 30, "too few upserts hit a stored identity")
+        XCTAssertGreaterThan(conflictsKept, 3, "too few upserts hit an identity holding a conflict")
     }
 }

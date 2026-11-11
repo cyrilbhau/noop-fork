@@ -62,20 +62,25 @@ final class LabBookProjectionRepairTests: XCTestCase {
         try Fx.assertCounts(store, Fx.countsById, "after")
     }
 
-    /// Protects V2: a cell holding another of the day's readings is corrected, because the value it
-    /// held is still held by a row and so nothing is lost.
-    func testRepairCorrectsACellHoldingAnotherOfTheDaysReadings() async throws {
+    /// Protects V2 as ruling A11 (RULINGS-ADDENDUM.md) re-decides it: a cell holding another of the
+    /// day's readings is left exactly as stored. Its value is a reading the owner entered, and with
+    /// two ids holding different readings the repair cannot know which was meant. Superseded by
+    /// rulings A10 and A11: this test was `testRepairCorrectsACellHoldingAnotherOfTheDaysReadings` and
+    /// asserted `updated == 1` and a cell rewritten to 98.4.
+    func testRepairKeepsACellHoldingAnotherOfTheDaysReadings() async throws {
         // 98.0 is F3's value (the same instant, the smaller id); 98.2 is F9's (an hour earlier).
-        for wrong in [98.0, 98.2] {
+        for held in [98.0, 98.2] {
             let store = try await Fx.seededStore()
-            try Fx.setCell(Fx.cell("weight", Fx.day3, wrong), in: store)
-            try Fx.assertCounts(store, Fx.countsById, "before, cell \(wrong)")
+            try Fx.setCell(Fx.cell("weight", Fx.day3, held), in: store)
+            try Fx.assertCounts(store, Fx.countsById, "before, cell \(held)")
 
             let repair = try await store.repairLabBookProjection()
 
-            assertRepair(repair, inserted: 0, updated: 1, unchanged: 5, unbackedKept: 0, "cell \(wrong)")
-            XCTAssertEqual(try Fx.labBookCells(store), Fx.cells, "cell \(wrong)")
-            try Fx.assertCounts(store, Fx.countsById, "after, cell \(wrong)")
+            XCTAssertEqual(repair.inserted, 0, "cell \(held)")
+            XCTAssertEqual(repair.updated, 0, "cell \(held)")
+            XCTAssertEqual(repair.unchanged + repair.unbackedKept, 6, "cell \(held)")
+            XCTAssertEqual(try Fx.labBookCells(store), cells(day3Weight: held), "cell \(held) stays")
+            try Fx.assertCounts(store, Fx.countsById, "after, cell \(held)")
         }
     }
 
@@ -161,16 +166,23 @@ final class LabBookProjectionRepairTests: XCTestCase {
         try Fx.assertCounts(store, Fx.countsById, "before")
 
         let first = try await store.repairLabBookProjection()
-        assertRepair(first, inserted: 1, updated: 1, unchanged: 3, unbackedKept: 2, "first run")
+        // Superseded by rulings A10 and A11: this asserted `updated: 1` and a V2 cell rewritten to
+        // 98.4. The V2 cell holds a stored reading's value and is kept; which count it falls in is
+        // not ruled, so the two "left as stored" counts are asserted as a sum.
+        XCTAssertEqual(first.inserted, 1, "first run")
+        XCTAssertEqual(first.updated, 0, "first run")
+        XCTAssertEqual(first.unchanged + first.unbackedKept, 6, "first run")
         let expected = [
             Fx.cell("ldl", Fx.day2, 3.0), Fx.cell("waist", Fx.day1, 100.0), Fx.cell("weight", Fx.day1, 90.0),
-            Fx.cell("weight", Fx.day2, 99.2), Fx.cell("weight", Fx.day3, 98.4), Fx.cell("weight", Fx.day4, 97.6),
+            Fx.cell("weight", Fx.day2, 99.2), Fx.cell("weight", Fx.day3, 98.0), Fx.cell("weight", Fx.day4, 97.6),
             Fx.cell("weight", "2031-02-05", 97.5),
         ]
         XCTAssertEqual(try Fx.labBookCells(store), expected)
 
         let second = try await store.repairLabBookProjection()
-        assertRepair(second, inserted: 0, updated: 0, unchanged: 5, unbackedKept: 2, "second run")
+        XCTAssertEqual(second.inserted, 0, "second run")
+        XCTAssertEqual(second.updated, 0, "second run")
+        XCTAssertEqual(second.unchanged + second.unbackedKept, 7, "second run")
         XCTAssertEqual(try Fx.labBookCells(store), expected)
 
         let third = try await store.repairLabBookProjection()
@@ -227,8 +239,12 @@ final class LabBookProjectionRepairTests: XCTestCase {
 
         let repair = try await store.repairLabBookProjection()
 
-        assertRepair(repair, inserted: 1, updated: 1, unchanged: 4, unbackedKept: 0)
-        XCTAssertEqual(try Fx.labBookCells(store), Fx.cells)
+        // Superseded by rulings A10 and A11: this asserted `updated: 1` and the 2031-01-22 cell
+        // rewritten to 98.4. That cell holds F3's value, a stored reading, and is kept.
+        XCTAssertEqual(repair.inserted, 1)
+        XCTAssertEqual(repair.updated, 0)
+        XCTAssertEqual(repair.unchanged + repair.unbackedKept, 5)
+        XCTAssertEqual(try Fx.labBookCells(store), cells(day3Weight: 98.0))
         XCTAssertEqual(try Fx.allSeries(store).filter { $0.deviceId != WhoopStore.labBookSourceId }, othersBefore)
         try Fx.assertCounts(store, Fx.countsById, "after")
     }
