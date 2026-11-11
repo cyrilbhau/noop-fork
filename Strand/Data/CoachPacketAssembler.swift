@@ -38,19 +38,17 @@ struct CoachPacketAssembler {
     private let now: () -> Date
     private let timeZone: () -> TimeZone
     private let effortScale: () -> EffortScale
-    private let identifiers: () -> [String]
-    private let storeReadable: () -> Bool
+    private let identifiers: () -> [String]?
 
-    /// `storeReadable` false: the assembly is `.unavailable` and nothing is read. The app passes
-    /// whether its device registry could be opened, because without it the privacy scan would not
-    /// know which identifiers to look for, and the scan fails closed.
+    /// `identifiers` is read once per `assemble()`, at scan time. Nil means the list of known
+    /// identifiers could not be read, and the packet is blocked: the scan fails closed and is never
+    /// run with an empty list (ruling A20).
     init(repository: Repository, provider: BodyMeasurementProvider,
          scorecardSettings: CutScorecardSettings, settings: CoachPacketSettings,
          now: @escaping () -> Date = { Date() },
          timeZone: @escaping () -> TimeZone = { TimeZone.current },
          effortScale: @escaping () -> EffortScale,
-         identifiers: @escaping () -> [String],
-         storeReadable: @escaping () -> Bool = { true }) {
+         identifiers: @escaping () -> [String]?) {
         self.repository = repository
         self.provider = provider
         self.scorecardSettings = scorecardSettings
@@ -59,7 +57,6 @@ struct CoachPacketAssembler {
         self.timeZone = timeZone
         self.effortScale = effortScale
         self.identifiers = identifiers
-        self.storeReadable = storeReadable
     }
 
     /// What one assembly gathered: the renderer's input and the moment and choices it belongs to.
@@ -75,12 +72,13 @@ struct CoachPacketAssembler {
         await gather()?.input
     }
 
-    /// The packet: gathered, rendered, then scanned. A finding means no text exists to copy, share
-    /// or return.
+    /// The packet: gathered, rendered, then scanned. The scan reads the rendered text and every
+    /// free text the owner typed or imported before it was sanitised and cut, against one reading
+    /// of the identifier list (ruling A20). A finding means no text exists to copy, share or return.
     func assemble() async -> CoachPacketOutcome {
         guard let gathered = await gather() else { return .unavailable }
         let text = CoachPacket.render(gathered.input)
-        let findings = CoachPacket.privacyViolations(in: text, identifiers: identifiers())
+        let findings = CoachPacket.scan(gathered.input, rendered: text, identifiers: identifiers())
         guard findings.isEmpty else { return .blocked(findings: findings.count) }
         return .ready(CoachPacketDocument(text: text, byteCount: text.utf8.count, generatedAt: gathered.generatedAt,
                                           rangeDays: gathered.rangeDays, sections: gathered.input.sections,
@@ -96,7 +94,6 @@ struct CoachPacketAssembler {
         let sections = settings.sections
         let strainFactor = effortScale() == .whoop ? UnitFormatter.effortScaleFactor : 1.0
         let scorecardEnabled = scorecardSettings.isEnabled
-        guard storeReadable() else { return nil }
 
         let days = LocalDayWindows(timeZone: zone)
         let today = days.dayKey(for: instant)
@@ -232,14 +229,13 @@ extension CoachPacketAssembler {
             effortScale: {
                 UnitPrefs.resolveEffortScale(UserDefaults.standard.string(forKey: UnitPrefs.effortScaleKey) ?? "")
             },
-            // Both are called by the assembler, which lives on the main actor.
-            identifiers: { [weak app] in MainActor.assumeIsolated { app.flatMap(knownIdentifiers) ?? [] } },
-            storeReadable: { [weak app] in MainActor.assumeIsolated { app.flatMap(knownIdentifiers) != nil } })
+            // Called by the assembler, which lives on the main actor. Nil blocks the packet.
+            identifiers: { [weak app] in MainActor.assumeIsolated { app.flatMap(knownIdentifiers) } })
     }
 
     /// Everything on this phone that names a device or an account (specification §7.11), for the
     /// privacy scan. Nil when the device registry has not been opened or the account list cannot
-    /// be read: the scan then cannot be trusted, so no packet is made. Reads only.
+    /// be read: the scan then cannot be trusted, so the packet is blocked. Reads only.
     private static func knownIdentifiers(_ app: AppModel) -> [String]? {
         guard let registry = app.deviceRegistry,
               let accounts = try? ChatGPTCredentialStore().load().map({ $0.registrations.map(\.profile) }) ?? []
