@@ -209,12 +209,19 @@ struct WeighInSheetScreen: View {
 
     // MARK: Step 1, carried into step 2
 
+    /// Beside each other at ordinary sizes. At accessibility sizes the label, the value and the
+    /// Edit button each take a full-width line, so no word is broken mid-word.
     private var weightDoneRow: some View {
-        HStack(spacing: NoopTheme.Layout.s) {
-            ScorecardSignalGlyph(state: .met)
-            Text(verbatim: CutScorecardPresenter.weightTitle)
-                .noopFont(.bodySmall)
-                .fixedSize(horizontal: false, vertical: true)
+        let layout = stacks
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(spacing: NoopTheme.Layout.s))
+        return layout {
+            HStack(spacing: NoopTheme.Layout.s) {
+                ScorecardSignalGlyph(state: .met)
+                Text(verbatim: CutScorecardPresenter.weightTitle)
+                    .noopFont(.bodySmall)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(verbatim: CutScorecardPresenter.weighInValueText(model.weightText, unit: model.weightUnit))
                 .noopFont(.rowTitle)
                 .monospacedDigit()
@@ -230,6 +237,7 @@ struct WeighInSheetScreen: View {
             .buttonStyle(.noopPress)
             .disabled(isSaving)
         }
+        .padding(.top, stacks ? FormKitLayout.fieldVertical : 0)
         .padding(.horizontal, FormKitLayout.fieldHorizontal)
         .background {
             RoundedRectangle(cornerRadius: FormKitLayout.fieldRadius, style: .continuous)

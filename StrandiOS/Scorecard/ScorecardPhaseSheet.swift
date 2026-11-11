@@ -196,26 +196,34 @@ struct ScorecardPhaseSheet: View {
     private func field(_ row: ScorecardPhaseRow) -> some View {
         let color = row.isInvalid ? NoopTheme.recoveryLow : NoopTheme.textPrimary
         // A percent sign sits against its number ("0.25%"); a word or a unit keeps its gap.
-        return HStack(alignment: .firstTextBaseline, spacing: row.suffixAttaches ? 0 : NoopTheme.Layout.xs) {
+        // At accessibility sizes the unit goes on a full-width line under the value: beside it, a
+        // long unit ("% of bodyweight per week") was left a column too thin for its longest word.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline,
+                                     spacing: row.suffixAttaches ? 0 : NoopTheme.Layout.xs))
+        return layout {
             TextField(text: text(for: row),
                       prompt: row.placeholder.map { Text(verbatim: $0).foregroundColor(NoopTheme.textTertiary) }) {
                 Text(verbatim: row.label)
             }
             .keyboardType(row.input == .text ? .default : row.input == .whole ? .numberPad : .decimalPad)
             .autocorrectionDisabled()
-            .multilineTextAlignment(.trailing)
+            // A stacked row reads from the leading edge: label, value, then unit.
+            .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
             .noopFont(.bodySmall, color: false)
             .foregroundStyle(color)
             .tint(NoopTheme.textPrimary)
             .focused($focused, equals: row.field)
             .fixedSize(horizontal: row.input != .text, vertical: false)
-            .frame(minWidth: NoopTheme.Layout.xl, minHeight: NoopTheme.Layout.minTouchTarget, alignment: .trailing)
+            .frame(minWidth: NoopTheme.Layout.xl, minHeight: NoopTheme.Layout.minTouchTarget,
+                   alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
             // An empty field that may stay empty reads "Not set", with no unit after it.
             if let suffix = row.suffix, !(typed[row.field] ?? row.text).isEmpty {
                 Text(verbatim: suffix)
                     .noopFont(.bodySmall, color: false)
                     .foregroundStyle(row.isInvalid ? NoopTheme.recoveryLow : NoopTheme.textSecondary)
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
                     // One line beside the label, which wraps instead; stacked rows let it wrap.
                     .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
             }

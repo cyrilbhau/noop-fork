@@ -583,21 +583,24 @@ struct RedesignTodayView: View {
         var route: TabRoute?
         /// The row pushes the scorecard screen instead of `route` (stage 1 specification §10.8).
         var opensScorecard = false
+        /// The row stacks its title and caption above its value at accessibility text sizes. Set
+        /// only by the Weight row with the scorecard flag on: its value carries its unit
+        /// ("97.5 kg") and its caption names a source, which left the title column a letter wide.
+        var stacksAtAccessibilitySizes = false
+    }
+
+    /// The sparkline slot of a stacked row: `NoopMetricRow`'s own (72 × 30, `.mrow` in
+    /// `design/system/noop.css`), which has no `NoopTheme` token.
+    private enum StackedRowMetrics {
+        static let accessoryWidth: CGFloat = 72
+        static let accessoryHeight: CGFloat = 30
     }
 
     @ViewBuilder
     private func keyMetricRow(_ metric: KeyMetric, first: Bool) -> some View {
         let c = rowContent(metric)
         let spark = c.sparkKey.map { dayModel.windowedSpark($0, windowDays: keyMetricsWindowDays) } ?? []
-        let row = NoopMetricRow(c.title, color: c.color, subtitle: c.subtitle, value: c.value, unit: c.unit,
-                                showsDivider: !first) {
-            if spark.count >= 2 {
-                NoopLineChart(points: spark.enumerated().map { NoopChartPoint(x: Double($0.offset), y: $0.element) },
-                              color: c.color, compact: true, animates: ringsAnimate)
-            } else {
-                Color.clear
-            }
-        }
+        let row = keyMetricRowBody(c, spark: spark, first: first)
         if metric == .steps {
             Button { showStepSources = true } label: { row.contentShape(Rectangle()) }
                 .buttonStyle(.noopPress)
@@ -610,6 +613,63 @@ struct RedesignTodayView: View {
                 .buttonStyle(.noopPress)
         } else {
             row
+        }
+    }
+
+    @ViewBuilder
+    private func keyMetricRowBody(_ c: MetricRowContent, spark: [Double], first: Bool) -> some View {
+        if c.stacksAtAccessibilitySizes, dynamicTypeSize.isAccessibilitySize {
+            // Title and caption on full-width lines, then the value beside the sparkline, so no
+            // word is broken mid-word. Every other row, and this row at every other size, is the
+            // shared `NoopMetricRow` below, unchanged.
+            VStack(spacing: 0) {
+                if !first { FormKitDivider() }
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text(c.title)
+                        .noopFont(.rowTitle, color: false)
+                        .foregroundStyle(c.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let subtitle = c.subtitle {
+                        Text(verbatim: subtitle)
+                            .noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(spacing: NoopTheme.Layout.m) {
+                        Group {
+                            if let value = c.value {
+                                Text(verbatim: value).noopFont(.rowNumber)
+                            } else {
+                                Text(verbatim: "—")
+                                    .noopFont(.rowNumber, color: false)
+                                    .foregroundStyle(NoopTheme.textSecondary)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        keyMetricSparkline(spark, color: c.color)
+                            .frame(width: StackedRowMetrics.accessoryWidth, height: StackedRowMetrics.accessoryHeight)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, NoopTheme.Layout.rowVerticalPadding)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            NoopMetricRow(c.title, color: c.color, subtitle: c.subtitle, value: c.value, unit: c.unit,
+                          showsDivider: !first) {
+                keyMetricSparkline(spark, color: c.color)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func keyMetricSparkline(_ spark: [Double], color: Color) -> some View {
+        if spark.count >= 2 {
+            NoopLineChart(points: spark.enumerated().map { NoopChartPoint(x: Double($0.offset), y: $0.element) },
+                          color: color, compact: true, animates: ringsAnimate)
+        } else {
+            Color.clear
         }
     }
 
@@ -638,7 +698,8 @@ struct RedesignTodayView: View {
                 title: "Weight", color: NoopTheme.temp,
                 subtitle: BodyMeasurementCorrection.todayCaption(dated: dated, policy: policy),
                 value: UnitFormatter.massFromKilograms(shown.value, system: unitSystem), unit: nil,
-                sparkKey: "weight", route: correction.metricRoute, opensScorecard: correction == .scorecard)
+                sparkKey: "weight", route: correction.metricRoute, opensScorecard: correction == .scorecard,
+                stacksAtAccessibilitySizes: policy == .unified)
         default:
             // Score rows retain their existing hero-only presentation; A4 is a separate follow-up.
             return MetricRowContent(title: "", color: NoopTheme.textTertiary, value: nil)
