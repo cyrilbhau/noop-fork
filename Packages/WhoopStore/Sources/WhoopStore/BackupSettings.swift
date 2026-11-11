@@ -30,6 +30,18 @@ public enum BackupSettings {
         case int, double, string
     }
 
+    // FORK-ONLY KEYS (personal iPhone fork). Keys that exist only for the fork's own features go in
+    // ONE place: the last section of the literal below, under the "Fork-only keys" marker, each with
+    // its storage mapping in `appleDefaultsKey` (or its bridge in the app layer) and a line in the
+    // list here. One writer at a time, in stage order.
+    //
+    // The Android side is knowingly NOT updated for them: the owner has skipped Android for the fork,
+    // so `BackupSettingsCodec.WHITELIST` stays behind and the "mirrored exactly" statement below
+    // holds for the upstream keys only. A fork-only key is dropped by an Android restore and is
+    // absent from an Android export. It still obeys the rest of the contract: Int, Double or String
+    // only, personal and not device-specific, and never a `noop.*` per-install toggle.
+    //
+    // Fork-only keys today: none.
     /// THE whitelist — the only keys `settings.json` may carry, keyed by their CANONICAL
     /// (platform-neutral) names. Mirrored exactly by Android's `BackupSettingsCodec.WHITELIST`.
     ///
@@ -73,6 +85,7 @@ public enum BackupSettings {
         // permission. Mirrored by Android's `BackupSettingsCodec.WHITELIST`.
         "cutScorecard.phases": .string,
         "cutScorecard.rules": .string,
+        // Fork-only keys (see the block above the whitelist; not mirrored on Android). None yet.
     ]
 
     /// Canonical JSON key → this platform's UserDefaults key. Identity everywhere except
