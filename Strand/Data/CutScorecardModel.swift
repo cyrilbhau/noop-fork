@@ -13,52 +13,20 @@ typealias CutScorecardEvaluation = (input: CutScorecardInput, result: CutScoreca
 // MARK: - The feature flag
 
 /// The one observable copy of `noop.cutScorecardEnabled` (ruling R40). Today, Settings and the card
-/// editor observe this object; reading it never writes the key.
+/// editor observe this object; reading it never writes the key. The observation itself is
+/// `ObservableDefaultsFlag`'s: `isEnabled`, `$isEnabled` and `set(_:)` are inherited from it.
 @MainActor
-final class CutScorecardFlag: ObservableObject {
+final class CutScorecardFlag: ObservableDefaultsFlag {
     /// The app's copy, over the standard defaults.
     static let shared = CutScorecardFlag()
 
-    /// The stored value, false when the key is absent. Follows every write to the key, whoever
-    /// makes it, and publishes only when the value changes.
-    @Published private(set) var isEnabled: Bool
-
-    private let defaults: UserDefaults
-    private var observer: NSObjectProtocol?
-
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        isEnabled = defaults.bool(forKey: CutScorecardSettings.enabledKey)
-        observer = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification, object: defaults, queue: nil
-        ) { [weak self] _ in
-            // Posted on the thread that wrote. A write on the main thread is followed at once.
-            if Thread.isMainThread {
-                MainActor.assumeIsolated { self?.followStoredValue() }
-            } else {
-                Task { @MainActor in self?.followStoredValue() }
-            }
-        }
-    }
-
-    deinit {
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-    }
-
-    /// The switch in Settings. Writes the one key; the new value is published before this returns.
-    func set(_ enabled: Bool) {
-        if isEnabled != enabled { isEnabled = enabled }
-        defaults.set(enabled, forKey: CutScorecardSettings.enabledKey)
+        super.init(key: CutScorecardSettings.enabledKey, defaults: defaults)
     }
 
     /// The policy a Today weight resolves under while the flag has this value.
     var displayPolicy: BodyMeasurementPolicy {
         BodyMeasurementResolver.policy(flagEnabled: isEnabled, consumer: .display)
-    }
-
-    private func followStoredValue() {
-        let stored = defaults.bool(forKey: CutScorecardSettings.enabledKey)
-        if stored != isEnabled { isEnabled = stored }
     }
 }
 
