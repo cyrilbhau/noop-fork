@@ -26,6 +26,30 @@
       "command": "import6"
     },
     {
+      "name": "Import stage 2 frames (coach packet)",
+      "command": "importS2"
+    },
+    {
+      "name": "Import stage 3 frames (intake)",
+      "command": "importS3"
+    },
+    {
+      "name": "Import stage 4 frames (body record)",
+      "command": "importS4"
+    },
+    {
+      "name": "Import stage 5 frames (events)",
+      "command": "importS5"
+    },
+    {
+      "name": "Import stage 6 frames (niggle, recovery, timeline)",
+      "command": "importS6"
+    },
+    {
+      "name": "Import combined frames",
+      "command": "importCombined"
+    },
+    {
       "name": "Repair imported rings",
       "command": "repair"
     }
