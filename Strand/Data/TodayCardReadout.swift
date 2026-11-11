@@ -121,6 +121,32 @@ enum TodayCardResolver {
         }
     }
 
+    /// Why nothing renders, when a switched-off feature is the reason; nil when a card renders and
+    /// when no gate explains the empty list. Each gate that withholds a selected card is named, so
+    /// a selection emptied by a gate never reads as missing data.
+    static func gatedCaption(raw: String, hydrationEnabled: Bool, coachEnabled: Bool,
+                             scorecardEnabled: Bool, visibleKeyMetrics: [KeyMetric]?) -> String? {
+        guard renderList(raw: raw, hydrationEnabled: hydrationEnabled, coachEnabled: coachEnabled,
+                         visibleKeyMetrics: visibleKeyMetrics, scorecardEnabled: scorecardEnabled).isEmpty
+        else { return nil }
+        let selected = selection(raw: raw, visibleKeyMetrics: visibleKeyMetrics)
+        let hydrationOff = selected.contains(.hydration) && !hydrationEnabled
+        let coachOff = selected.contains(.coach) && !coachEnabled
+        let scorecardOff = selected.contains(.scorecard) && !scorecardEnabled
+        // One whole sentence per combination, so each can be translated as a sentence.
+        switch (hydrationOff, coachOff, scorecardOff) {
+        case (true, true, true):
+            return String(localized: "Nothing to show while Hydration, Coach and Scorecard are off.")
+        case (true, true, false): return String(localized: "Nothing to show while Hydration and Coach are off.")
+        case (true, false, true): return String(localized: "Nothing to show while Hydration and Scorecard are off.")
+        case (false, true, true): return String(localized: "Nothing to show while Coach and Scorecard are off.")
+        case (true, false, false): return String(localized: "Nothing to show while Hydration is off.")
+        case (false, true, false): return String(localized: "Nothing to show while Coach is off.")
+        case (false, false, true): return String(localized: "Nothing to show while Scorecard is off.")
+        case (false, false, false): return nil
+        }
+    }
+
     static func cardTitle(_ card: DashboardCard) -> String {
         switch card {
         case .hrv: return String(localized: "HRV")

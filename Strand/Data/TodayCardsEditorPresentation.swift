@@ -19,11 +19,21 @@ enum TodayCardsEditorPresentation {
         DashboardCard.canonicalOrder.filter { !$0.isRedesignOnly || (redesign && scorecardEnabled) }
     }
 
-    /// The saved cards the editor does not list. They are written back after the edited list on
-    /// save, so a choice made while its gate was on survives an edit made while it is off.
-    static func withheldCards(raw: String, available: [DashboardCard]) -> [DashboardCard] {
-        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
-        return DashboardCardPrefs.decodeEnabled(raw).filter { !available.contains($0) }
+    /// What a save writes: `edited` as it is, with every withheld card (a saved card the editor does
+    /// not list) put back where it was saved, directly after the nearest saved card before it that
+    /// is still present, or first when none is. A choice made while its gate was on therefore
+    /// survives an edit made while it is off, and keeps its place.
+    static func mergedSelection(edited: [DashboardCard], raw: String,
+                                available: [DashboardCard]) -> [DashboardCard] {
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return edited }
+        let saved = DashboardCardPrefs.decodeEnabled(raw)
+        var result = edited
+        for (index, card) in saved.enumerated() where !available.contains(card) && !result.contains(card) {
+            let anchor = saved[..<index].last { result.contains($0) }
+            let position = anchor.flatMap { result.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
+            result.insert(card, at: position)
+        }
+        return result
     }
 
     static func visibleKeyMetrics(sections: EditableLayoutDraft<TodaySection>,

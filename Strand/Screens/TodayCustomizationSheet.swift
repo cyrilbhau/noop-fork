@@ -32,8 +32,9 @@ struct TodayCustomizationSheet: View {
     /// The cards this editor lists (stage 1 specification §10.1): every card, without the scorecard
     /// card unless this is the redesign's editor and its flag is on.
     private let availableDashboardCards: [DashboardCard]
-    /// Saved cards this editor does not list. Written back on save, so they are not lost.
-    private let withheldDashboardCards: [DashboardCard]
+    /// The saved selection as the editor opened on it. A saved card this editor does not list is
+    /// written back on save at the place it holds here, so neither it nor its position is lost.
+    private let savedDashboardCardsRaw: String
 
     @Binding private var sectionOrderRaw: String
     @Binding private var hiddenSectionsRaw: String
@@ -148,8 +149,7 @@ struct TodayCustomizationSheet: View {
         let available = TodayCardsEditorPresentation.availableCards(
             redesign: usesRedesign, scorecardEnabled: CutScorecardFlag.shared.isEnabled)
         availableDashboardCards = available
-        withheldDashboardCards = TodayCardsEditorPresentation.withheldCards(
-            raw: dashboardCardsRaw.wrappedValue, available: available)
+        savedDashboardCardsRaw = dashboardCardsRaw.wrappedValue
         let cards = EditableLayoutDraft(
             visible: TodayCardsEditorPresentation.selection(
                 raw: dashboardCardsRaw.wrappedValue, redesign: usesRedesign,
@@ -300,7 +300,9 @@ struct TodayCustomizationSheet: View {
     private func save() {
         let values = TodayCustomizationSaveValues(
             sections: sectionDraft, metrics: keyMetricDraft.visible, detailed: detailed,
-            windowDays: windowDays, dashboardCards: dashboardDraft.visible + withheldDashboardCards,
+            windowDays: windowDays,
+            dashboardCards: TodayCardsEditorPresentation.mergedSelection(
+                edited: dashboardDraft.visible, raw: savedDashboardCardsRaw, available: availableDashboardCards),
             hostedCards: hostedDraft.visible)
         sectionOrderRaw = values.sectionOrderRaw
         hiddenSectionsRaw = values.hiddenSectionsRaw

@@ -657,16 +657,9 @@ struct RedesignTodayView: View {
     }
 
     private var gatedDashboardCaption: String? {
-        guard renderedDashboardCards.isEmpty else { return nil }
-        let selected = TodayCardResolver.selection(raw: dashboardCardsRaw, visibleKeyMetrics: visibleKeyMetricRows)
-        let hydrationOff = selected.contains(.hydration) && !hydrationEnabled
-        let coachOff = selected.contains(.coach) && !coachEnabled
-        if hydrationOff && coachOff {
-            return String(localized: "Nothing to show while Hydration and Coach are off.")
-        }
-        if hydrationOff { return String(localized: "Nothing to show while Hydration is off.") }
-        if coachOff { return String(localized: "Nothing to show while Coach is off.") }
-        return nil
+        TodayCardResolver.gatedCaption(raw: dashboardCardsRaw, hydrationEnabled: hydrationEnabled,
+                                       coachEnabled: coachEnabled, scorecardEnabled: scorecardFlag.isEnabled,
+                                       visibleKeyMetrics: visibleKeyMetricRows)
     }
 
     /// The scorecard card reads the one shared scorecard model, which exists only while the card is
