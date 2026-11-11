@@ -232,6 +232,9 @@ final class WeighInSheetModel: ObservableObject {
     @Published private(set) var phase: Phase = .editing
 
     private let weighIns: WeighInStore
+    /// The one source of the current weight and waist (ruling R41). Nil: the sheet offers the
+    /// newest Lab Book row, as it did before the provider was handed to it.
+    private let provider: BodyMeasurementProvider?
     private let unitSystem: UnitSystem
     private let now: () -> Date
     private let timeZone: () -> TimeZone
@@ -246,18 +249,26 @@ final class WeighInSheetModel: ObservableObject {
     /// still showing it was not changed, and is never written back from that rounded text.
     private let seededWeightText: String?
     private let seededWaistText: String?
-    /// The newest earlier reading of each kind, offered in the field. Nil while editing.
-    private var lastWeight: (text: String, day: String)?
-    private var lastWaist: (text: String, day: String)?
+    /// The reading of each kind offered in the field: with a provider the value every other
+    /// surface shows as current, with its source; else the newest Lab Book row. Nil while editing.
+    private var lastWeight: OfferedReading?
+    private var lastWaist: OfferedReading?
+    /// Why the last save was refused before anything was written, when the general message would
+    /// not say what to change. Nil otherwise.
+    private var refusal: String?
     /// Every usable weight reading, for the note about the week the instant falls in.
     private var weightReadings: [(day: String, takenAt: Int, kg: Double, id: String)] = []
 
-    init(weighIns: WeighInStore, unitSystem: UnitSystem,
+    /// A reading offered in a field: its number, its day and, when known, the name of its source.
+    private typealias OfferedReading = (text: String, day: String, source: String?)
+
+    init(weighIns: WeighInStore, provider: BodyMeasurementProvider? = nil, unitSystem: UnitSystem,
          now: @escaping () -> Date = { Date() },
          timeZone: @escaping () -> TimeZone = { TimeZone.current },
          locale: Locale = AppLanguage.activeLocale,
          editing: WeighInHistoryRow? = nil) {
         self.weighIns = weighIns
+        self.provider = provider
         self.unitSystem = unitSystem
         self.now = now
         self.timeZone = timeZone
@@ -287,17 +298,33 @@ final class WeighInSheetModel: ObservableObject {
             return (day: row.day, takenAt: row.takenAt, kg: kg, id: row.id)
         }
         guard !isEditing else { return }
+        // Ruling R41: the value offered is the one every other surface shows as current, so the
+        // sheet holds no second answer to "the last weight". An undated profile value is no reading.
+        if let provider, provider.displayPolicy == .unified {
+            lastWeight = offer(provider.current(.weight, consumer: .display))
+            lastWaist = offer(provider.current(.waist, consumer: .display))
+            if weightText.isEmpty, let lastWeight { weightText = lastWeight.text }
+            if waistText.isEmpty, let lastWaist { waistText = lastWaist.text }
+            return
+        }
         if let newest = weightReadings.max(by: { ($0.takenAt, $0.id) < ($1.takenAt, $1.id) }) {
-            lastWeight = (words.weightNumber(newest.kg), newest.day)
+            lastWeight = (words.weightNumber(newest.kg), newest.day, nil)
             if weightText.isEmpty { weightText = words.weightNumber(newest.kg) }
         }
         let usableWaists = waists.compactMap { row in
             BodyMeasurementResolver.normalizedValue(of: row, as: .waist).map { (row: row, cm: $0) }
         }
         if let newest = usableWaists.max(by: { ($0.row.takenAt, $0.row.id) < ($1.row.takenAt, $1.row.id) }) {
-            lastWaist = (words.lengthNumber(newest.cm), newest.row.day)
+            lastWaist = (words.lengthNumber(newest.cm), newest.row.day, nil)
             if waistText.isEmpty { waistText = words.lengthNumber(newest.cm) }
         }
+    }
+
+    /// The provider's current value as an offer: only a dated reading, named by its source.
+    private func offer(_ current: ResolvedBodyMeasurement?) -> OfferedReading? {
+        guard let current, let day = current.day else { return nil }
+        let text = current.kind == .weight ? words.weightNumber(current.value) : words.lengthNumber(current.value)
+        return (text, day, CutScorecardPresenter.sourceCaption(current.source))
     }
 
     // MARK: Fields
@@ -380,7 +407,7 @@ final class WeighInSheetModel: ObservableObject {
 
     /// Only after a save was refused.
     var failureMessage: String? {
-        phase == .failed ? String(localized: "Could not save. Your entries are still here.") : nil
+        phase == .failed ? refusal ?? String(localized: "Could not save. Your entries are still here.") : nil
     }
 
     /// What Skip does to a new weigh-in. Nil while editing: Skip then leaves a stored waist as it
@@ -446,6 +473,16 @@ final class WeighInSheetModel: ObservableObject {
         let weight = Self.parse(weightText, locale: locale)
         let instant = takenAt
         let system = unitSystem
+        refusal = nil
+        // Before any write: an edit that moves the instant carries each untouched value to the new
+        // instant through the store, which accepts its own range only. A stored value outside it
+        // (the Lab Book editor has no range) would fail after its partner had moved, leaving the
+        // pair at two instants. Nothing is written then, and the message names the field.
+        if let carried = carriedValueOutOfRange(to: Int(instant.timeIntervalSince1970), waist: waist) {
+            refusal = Self.carriedRefusal(carried, limits: bounds(carried))
+            phase = .failed
+            return
+        }
         phase = .saving
         do {
             if isEditing {
@@ -482,6 +519,34 @@ final class WeighInSheetModel: ObservableObject {
         }
     }
 
+    /// The kind whose stored value this edit would carry unchanged to `epoch` although the store
+    /// would refuse it there: a value outside the store's range, or one it cannot read. Nil for a
+    /// new weigh-in, for an edit that keeps the instant, and when every carried value is in range.
+    /// `waist` is the waist about to be written, nil when the stored one is kept.
+    private func carriedValueOutOfRange(to epoch: Int, waist: Double?) -> BodyMeasurementKind? {
+        guard isEditing else { return nil }
+        if let row = editedWeightRow, row.takenAt != epoch, weightIsUnchanged,
+           let stored = BodyMeasurementResolver.normalizedValue(of: row, as: .weight),
+           !WeighInStore.weightRangeKg.contains(stored) {
+            return .weight
+        }
+        if let row = editedWaistRow, row.takenAt != epoch, waist == nil {
+            guard let stored = BodyMeasurementResolver.normalizedValue(of: row, as: .waist),
+                  WeighInStore.waistRangeCm.contains(stored) else { return .waist }
+        }
+        return nil
+    }
+
+    private static func carriedRefusal(_ kind: BodyMeasurementKind,
+                                       limits: (low: String, high: String, unit: String)) -> String {
+        switch kind {
+        case .weight:
+            return String(localized: "Could not move this reading: its stored weight is outside \(limits.low) to \(limits.high) \(limits.unit). Enter a weight in that range, then save.")
+        case .waist:
+            return String(localized: "Could not move this reading: its stored waist is outside \(limits.low) to \(limits.high) \(limits.unit). Enter a waist in that range, then save.")
+        }
+    }
+
     private func issue(_ text: String, kind: BodyMeasurementKind) -> WeighInFieldIssue? {
         guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         guard let typed = Self.parse(text, locale: locale) else { return .notANumber }
@@ -507,7 +572,7 @@ final class WeighInSheetModel: ObservableObject {
                 kind == .weight ? words.weightUnit : words.lengthUnit)
     }
 
-    private func hint(_ text: String, kind: BodyMeasurementKind, last: (text: String, day: String)?,
+    private func hint(_ text: String, kind: BodyMeasurementKind, last: OfferedReading?,
                       namesRange: Bool) -> String {
         let limits = bounds(kind)
         let range = String(localized: "\(limits.low) to \(limits.high) \(limits.unit)")
@@ -518,7 +583,8 @@ final class WeighInSheetModel: ObservableObject {
         case nil: break
         }
         guard let last else { return range }
-        let earlier = "\(last.text) \(limits.unit) · \(words.date(last.day))"
+        let earlier = (["\(last.text) \(limits.unit)", words.date(last.day)] + (last.source.map { [$0] } ?? []))
+            .joined(separator: " · ")
         // Once typed over, the offer is gone and the earlier reading stays as a reference.
         guard text == last.text else { return String(localized: "Last: \(earlier)") }
         let offer = String(localized: "Last: \(earlier). Type to replace.")
@@ -719,8 +785,10 @@ struct ScorecardPhaseDraft: Equatable {
         next.name = String(localized: "Cut")
         next.startDay = today
         next.targetWeightKg = nil
-        // The new phase follows the one this draft was opened from.
-        next.earliestStartDay = storedStartDay ?? earliestStartDay
+        // The new phase follows the one this draft was opened from, once that one has started. A
+        // phase still ahead of today is no floor: the new phase starts today, before it, and the
+        // later one takes over on its own start day.
+        next.earliestStartDay = (storedStartDay ?? earliestStartDay).flatMap { $0 <= today ? $0 : nil }
         next.storedStartDay = nil
         return next
     }

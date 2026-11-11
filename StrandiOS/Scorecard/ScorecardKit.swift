@@ -98,8 +98,8 @@ struct ScorecardContext {
     var today: String { LocalDayWindows(timeZone: timeZone()).dayKey(for: now()) }
 
     func sheetModel(editing: WeighInHistoryRow? = nil) -> WeighInSheetModel {
-        WeighInSheetModel(weighIns: weighIns, unitSystem: unitSystem(), now: now, timeZone: timeZone,
-                          locale: locale(), editing: editing)
+        WeighInSheetModel(weighIns: weighIns, provider: provider, unitSystem: unitSystem(), now: now,
+                          timeZone: timeZone, locale: locale(), editing: editing)
     }
 
     func historyModel() -> WeighInHistoryModel {
