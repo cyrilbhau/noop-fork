@@ -258,6 +258,26 @@ public enum CoachPacket {
     /// collapse, the ends are trimmed, `"` becomes `'`, and the result is cut at a character
     /// boundary to at most `freeTextByteLimit` UTF-8 bytes. Empty input gives "unnamed".
     public static func sanitize(_ text: String) -> String {
+        var cut = ""
+        var bytes = 0
+        for character in normalizedFreeText(text) {
+            let width = character.utf8.count
+            guard bytes + width <= freeTextByteLimit else { break }
+            cut.append(character)
+            bytes += width
+        }
+        // SPEC-NOTE: the cut can land just after a space. That space is dropped, so "the ends are
+        // trimmed" still holds for the text that is printed.
+        while cut.hasSuffix(" ") { cut.removeLast() }
+        // SPEC-NOTE: "Empty input gives unnamed" is read as "text that is empty once cleaned", so no
+        // line ever carries an empty name.
+        return cut.isEmpty ? unnamed : cut
+    }
+
+    /// `sanitize` without the cut and without the "unnamed" fallback: control characters and every
+    /// white space become one space between words, the ends are trimmed and `"` becomes `'`. The
+    /// privacy scan searches for an identifier in this form too, which is how a name is printed.
+    static func normalizedFreeText(_ text: String) -> String {
         var cleaned = String.UnicodeScalarView()
         var spacePending = false
         for scalar in text.unicodeScalars {
@@ -272,21 +292,37 @@ public enum CoachPacket {
             spacePending = false
             cleaned.append(scalar == "\"" ? "'" : scalar)
         }
-        var cut = ""
-        var bytes = 0
-        for character in String(cleaned) {
-            let width = character.utf8.count
-            guard bytes + width <= freeTextByteLimit else { break }
-            cut.append(character)
-            bytes += width
-        }
-        // SPEC-NOTE: the cut can land just after a space. That space is dropped, so "the ends are
-        // trimmed" still holds for the text that is printed.
-        while cut.hasSuffix(" ") { cut.removeLast() }
-        // SPEC-NOTE: "Empty input gives unnamed" is read as "text that is empty once cleaned", so no
-        // line ever carries an empty name.
-        return cut.isEmpty ? unnamed : cut
+        return String(cleaned)
     }
+
+    /// Every owner-typed or imported string the renderer passes through `sanitize`, as given: the
+    /// phase name when the scorecard is evaluated with a phase, then every workout's sport in input
+    /// order. A later section that prints free text adds its fields here (ruling A20).
+    public static func freeText(of input: CoachPacketInput) -> [String] {
+        var texts: [String] = []
+        if case let .evaluated(phase?, _) = input.scorecard { texts.append(phase.name) }
+        texts += input.workouts.map(\.sport)
+        return texts
+    }
+
+    /// What the assembler's scan finds (ruling A20): the rendered text and, each on its own, every
+    /// string of `freeText(of:)` before it is sanitised and cut. A workout the row limit leaves out
+    /// can therefore block the packet, which is the fail-closed direction. `identifiers` nil means
+    /// the list of known identifiers could not be read; that is a finding, never an empty list.
+    /// A description found more than once is listed once.
+    public static func scan(_ input: CoachPacketInput, rendered text: String, identifiers: [String]?) -> [String] {
+        guard let identifiers else { return [unreadableIdentifiersFinding] }
+        var findings: [String] = []
+        for source in [text] + freeText(of: input) {
+            for finding in privacyViolations(in: source, identifiers: identifiers) where !findings.contains(finding) {
+                findings.append(finding)
+            }
+        }
+        return findings
+    }
+
+    /// The finding for an identifier list that could not be read.
+    static let unreadableIdentifiersFinding = "known identifiers could not be read"
 
     /// What must not leave the phone, found in `text` (§7.11). Empty means the text may leave.
     ///
@@ -297,10 +333,14 @@ public enum CoachPacket {
         let lowered = text.lowercased()
         var searched = Set<String>()
         for (index, identifier) in identifiers.enumerated() {
-            guard identifier.count >= identifierMinimumLength else { continue }
-            let needle = identifier.lowercased()
-            guard searched.insert(needle).inserted, lowered.contains(needle) else { continue }
-            findings.append("known identifier (entry \(index + 1) of the list)")
+            // As given, and in the form `sanitize` prints it (ruling A20): a doubled space, a line
+            // break, an end space or a `"` in the identifier is printed differently.
+            var found = false
+            for form in [identifier, normalizedFreeText(identifier)] where form.count >= identifierMinimumLength {
+                let needle = form.lowercased()
+                if searched.insert(needle).inserted, lowered.contains(needle) { found = true }
+            }
+            if found { findings.append("known identifier (entry \(index + 1) of the list)") }
         }
         // Raw storage namespaces and paths, compared as written.
         for literal in rawNamespaceLiterals where text.contains(literal) {
