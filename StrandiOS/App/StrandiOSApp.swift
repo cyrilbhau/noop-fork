@@ -634,6 +634,9 @@ enum DemoScreens {
             // scorecard-b1 … b27, weighin-c1 … c10, history-d1 … d5, phase-e1 … e4, cards-a1 … a3,
             // scorecard-live and the scripted flow-… steps.
             .init(prefixes: DemoScreenPrefixes.scorecard, resolve: ScorecardDemo.screen(named:)),
+            // The stage 2 packet sheet in each state of design/round-s2-coach-packet, on synthetic
+            // data: packet-b1 … b17, and packet-live.
+            .init(prefixes: DemoScreenPrefixes.packet, resolve: CoachPacketDemo.screen(named:)),
         ])
         assert(registry.conflicts.isEmpty, "demo prefixes overlap: \(registry.conflicts)")
         return registry
