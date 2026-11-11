@@ -227,6 +227,11 @@ final class Repository: ObservableObject {
     /// the workout list the query returns.
     var workoutsLog: ((String) -> Void)?
 
+    /// The sink for the one diagnostic line of the Lab Book projection repair that the store open
+    /// runs (ruling R42). Default nil, when the line goes to the system log; AppModel wires it to the
+    /// shareable strap log. The line carries counts only.
+    var labBookRepairLog: ((String) -> Void)?
+
     /// The user's HRmax + sex, injected once by AppModel so the read path can BACKFILL a strap-native
     /// workout's Effort (strain) on display when its stored value is nil (#961). Default nil (inert): tests
     /// and non-prod inits skip the fill and take the byte-identical untraced path. A live/manual session can
@@ -763,6 +768,23 @@ final class Repository: ObservableObject {
         calendar.startOfDay(for: logicalDay(now, rolloverHour: rolloverHour))
     }
 
+    /// What the single-flight open runs on the store it has just opened: the Lab Book projection
+    /// repair (`WhoopStore.repairLabBookProjection`). It rewrites derived `lab-book` cells only,
+    /// never a reading, and never removes a cell; a thrown error is ignored, because a failed repair
+    /// must not stop the store from opening and the next open tries again.
+    ///
+    /// Calls `log` once, only when a cell was inserted or corrected. The line is diagnostic English
+    /// and carries the four counts and nothing of the owner's: no marker, value, unit, day or
+    /// device id. Not a migration: it must also run on a database restored from a backup later.
+    /// A function of the store, so tests run it on an in-memory store and never open the real one.
+    /// Android is knowingly not updated (stage 1 ruling R43).
+    static func repairLabBookProjection(afterOpening store: WhoopStore, log: (String) -> Void) async {
+        guard let repair = try? await store.repairLabBookProjection() else { return }
+        guard repair.inserted + repair.updated > 0 else { return }
+        log("Lab Book projection repair: inserted \(repair.inserted), corrected \(repair.updated), "
+            + "already correct \(repair.unchanged), kept as stored \(repair.unbackedKept)")
+    }
+
     /// In-flight open, so concurrent first-callers share ONE open instead of each opening their own.
     private var storeOpenTask: Task<WhoopStore?, Never>?
 
@@ -775,7 +797,7 @@ final class Repository: ObservableObject {
         // fresh connection and re-run quarantineIncompatibleDatabase (a thundering herd of DB opens on a
         // large library at the worst moment). Cache the in-flight open Task so concurrent callers join it.
         if let storeOpenTask { return await storeOpenTask.value }
-        let task = Task { [deviceId] () -> WhoopStore? in
+        let task = Task { [deviceId, repairLog = labBookRepairLog] () -> WhoopStore? in
             // Don't swallow the open failure with `try?` (#222): an import-time open failure (e.g. the iOS
             // data-protected store while the device is locked) was previously invisible, surfacing only as
             // a generic "Couldn't open the local store." Log the real error so the cause is diagnosable.
@@ -795,6 +817,11 @@ final class Repository: ObservableObject {
                 return nil
             }
             try? await s.upsertDevice(id: deviceId, mac: nil, name: "WHOOP")
+            // Ruling R42: bring the Lab Book's projected cells into line with the all-id rule, once
+            // per open. Derived cells only; no reading is touched and no cell is removed.
+            await Self.repairLabBookProjection(afterOpening: s) { line in
+                if let repairLog { repairLog(line) } else { NSLog("%@", line) }
+            }
             return s
         }
         storeOpenTask = task
