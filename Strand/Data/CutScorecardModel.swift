@@ -597,12 +597,15 @@ final class WeighInHistoryModel: ObservableObject {
         let system = unitSystem()
         let shownLocale = locale()
         let apple = provider.candidates(.weight).appleHealth
+        // Stage 4: the flag is read before the reads suspend, and the scans are read only while it is on.
+        let bodyRecordOn = bodyRecordEnabled()
         let weights = await weighIns.readings(.weight)
         let waists = await weighIns.readings(.waist)
+        let scanIds = bodyRecordOn ? await weighIns.bodyScanIds() : nil
         guard request == generation else { return }
         let history = CutScorecardPresenter.history(weights: weights, waists: waists, appleHealth: apple,
                                                     unitSystem: system, locale: shownLocale, today: today(),
-                                                    bodyRecordEnabled: bodyRecordEnabled())
+                                                    bodyRecordEnabled: bodyRecordOn, scanIds: scanIds)
         if state != .loaded(history) { state = .loaded(history) }
         if revisionObserver == nil {
             // A write made elsewhere reaches the list when the provider's snapshot changes.

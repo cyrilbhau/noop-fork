@@ -227,6 +227,13 @@ final class WeighInStore {
         return await BodyMeasurementProvider.labBookRows(kind, store: store, activeDeviceId: deviceId)
     }
 
+    /// Stage 4: the ids of the body scans stored (stage 4 §7.6), so the history opens only a scan
+    /// that exists. Read only while the body record is on.
+    func bodyScanIds() async -> Set<String> {
+        let scans = await BodyRecordStore(repository: repository, provider: provider, timeZone: timeZone, now: now).scans()
+        return Set(scans.map(\.id))
+    }
+
     // MARK: - Helpers
 
     private func finishWrite() async {

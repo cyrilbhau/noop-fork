@@ -150,4 +150,64 @@ final class Stage4ReviewFixTests: XCTestCase {
         XCTAssertEqual(model.followedScanId(original.id, saved: saved), original.id)
         XCTAssertEqual(model.followedScanId(original.id), original.id)
     }
+
+    // MARK: - Weigh-in history: a body-scan weight row with no scan
+
+    /// §7.6: a `weight` row with no scan-only row at its instant is not a scan. With the body record
+    /// on, the history lists it as an ordinary Lab Book row and opens nothing.
+    func testOrphanedScanWeightRowStaysAnEditableLabBookRow() async throws {
+        let h = try await BodyRecordHarness.make(suites: suites, today: F.dayA)
+        let scan = try await h.save(F.draftA)
+        for (key, rows) in scan.rows where MarkerCatalog.isScanOnlyMarker(key) {
+            for row in rows { _ = try await h.store.deleteLabMarkerAndCopies(id: row.id) }
+        }
+        let remaining = await h.records.scans()
+        XCTAssertTrue(remaining.isEmpty, "the scan no longer exists")
+
+        let model = WeighInHistoryModel(weighIns: h.weighIns, provider: h.provider, unitSystem: { .metric },
+                                        locale: { F.british }, today: { F.dayA }, bodyRecordEnabled: { true })
+        await model.load()
+        guard case .loaded(let history) = model.state else { return XCTFail("not loaded") }
+        let row = try XCTUnwrap(history.rows.first { $0.weightRow?.source == MarkerCatalog.scanSource })
+        XCTAssertNil(row.scanId)
+        XCTAssertTrue(row.canEdit)
+        XCTAssertTrue(row.canDelete)
+        XCTAssertFalse(row.caption.contains("body scan"), row.caption)
+    }
+
+    /// The control: while the scan exists, its row still names and opens it.
+    func testScanWeightRowStillOpensAnExistingScan() async throws {
+        let h = try await BodyRecordHarness.make(suites: suites, today: F.dayA)
+        let scan = try await h.save(F.draftA)
+        let model = WeighInHistoryModel(weighIns: h.weighIns, provider: h.provider, unitSystem: { .metric },
+                                        locale: { F.british }, today: { F.dayA }, bodyRecordEnabled: { true })
+        await model.load()
+        guard case .loaded(let history) = model.state else { return XCTFail("not loaded") }
+        let row = try XCTUnwrap(history.rows.first { $0.weightRow?.source == MarkerCatalog.scanSource })
+        XCTAssertEqual(row.scanId, scan.id)
+        XCTAssertFalse(row.canEdit)
+        XCTAssertTrue(row.caption.hasSuffix(" · Lab Book · body scan"), row.caption)
+    }
+
+    /// The presenter: with the stored scans' ids given, a body-scan row with no scan is an ordinary
+    /// Lab Book row; without them (`nil`) it keeps the previous behaviour.
+    func testHistoryOpensOnlyAScanThatExists() async throws {
+        let h = try await BodyRecordHarness.make(suites: suites, today: F.dayA)
+        let scan = try await h.save(F.draftA)
+        let weights = await h.weighIns.readings(.weight)
+        func scanRow(_ ids: Set<String>?) throws -> WeighInHistoryRow {
+            let history = CutScorecardPresenter.history(weights: weights, waists: [], appleHealth: [],
+                                                        unitSystem: .metric, locale: F.british, today: F.dayA,
+                                                        bodyRecordEnabled: true, scanIds: ids)
+            return try XCTUnwrap(history.rows.first { $0.weightRow?.source == MarkerCatalog.scanSource })
+        }
+        let orphan = try scanRow([])
+        XCTAssertNil(orphan.scanId)
+        XCTAssertTrue(orphan.canEdit)
+        XCTAssertTrue(orphan.canDelete)
+        XCTAssertFalse(orphan.caption.contains("body scan"), orphan.caption)
+        XCTAssertEqual(try scanRow([scan.id]).scanId, scan.id)
+        XCTAssertEqual(try scanRow(nil).scanId, scan.id)
+    }
+
 }

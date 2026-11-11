@@ -825,11 +825,12 @@ enum CutScorecardPresenter {
     /// `today` (stage 1 work package 1-11, ruling R44): a scan's weight row outranked by a manual
     /// weigh-in of its week as of `today` is listed without the week's mark; nil judges every row.
     /// `bodyRecordEnabled` (stage 4 §10.7): a scan's row is captioned as a scan, is read-only here
-    /// and opens its scan.
+    /// and opens its scan. Stage 4: `scanIds` are the stored scans' ids; a body-scan row whose scan
+    /// does not exist (§7.6) is then an ordinary Lab Book row. Nil does not check.
     static func history(weights: [LabMarkerRow], waists: [LabMarkerRow],
                         appleHealth: [(day: String, value: Double)],
                         unitSystem: UnitSystem, locale: Locale, today: String? = nil,
-                        bodyRecordEnabled: Bool = false) -> WeighInHistory {
+                        bodyRecordEnabled: Bool = false, scanIds: Set<String>? = nil) -> WeighInHistory {
         let words = Wording(unitSystem: unitSystem, locale: locale)
         var unlisted = 0
         var entries: [HistoryEntry] = []
@@ -893,7 +894,8 @@ enum CutScorecardPresenter {
             let isLabBook = entry.source == .labBook
             // Stage 4: while the body record is on a scan's row names the scan and opens it.
             let scanId = bodyRecordEnabled && entry.labSource == MarkerCatalog.scanSource
-                ? stored.map { BodyScan.id(source: $0.source, takenAt: $0.takenAt) } : nil
+                ? stored.map { BodyScan.id(source: $0.source, takenAt: $0.takenAt) }
+                    .flatMap { scanIds?.contains($0) == false ? nil : $0 } : nil
             let shownOrigin = scanId == nil ? origin : String(localized: "Lab Book · body scan")
             return WeighInHistoryRow(
                 id: stored.map { "\($0.deviceId)\u{1F}\($0.id)" } ?? "apple-health\u{1F}\(entry.day)",
