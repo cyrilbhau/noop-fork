@@ -9,8 +9,14 @@ Verified against the source at commit `0b89b814` (branch `personal/superapp-5-ev
 `personal/superapp-1-screens`). Every `path:line` below is as of that commit. Paths are relative to
 the repository root. Nothing was built or run for this document; it is a reading of the code.
 
+Reconciled on 11 November 2026 with the cross-stage check of all seven specifications; §18 lists
+what changed and the shared scaffolding this stage expects. Where a line number below falls in a
+file an earlier stage edits first (§14.2), the edit is located by the named function or comment, not
+by the number.
+
 This file contains no personal measurement, date, medication or injury detail. Every example belongs
-to the synthetic "Fixture Person" of §13, whose dates sit on the stage 1 fixture's 2031 calendar.
+to the synthetic "Fixture Person" of §13, who is the stage 1 fixture person on the stage 1 fixture's
+2031 calendar (stage 1 §13). There is one Fixture Person across all stages.
 
 ## 1. Goal and scope
 
@@ -25,13 +31,26 @@ chart, on the scorecard and in the coach packet, from events the owner enters on
 - An Events screen with add, edit and delete; a row in the Health tab; a Settings switch.
 - Quiet dots on the time axis of the redesign's day-axis and week-axis charts, and a text caption.
 - A scorecard annotation for the judged week and its evidence window. The verdict is untouched.
-- A packet section function for stage 2's coach packet; sensitive events excluded unless switched on.
+- The body rows of the coach packet's events section, as one pure function written in stage 2's
+  packet grammar (§7.5); sensitive events excluded unless switched on. The section itself joins the
+  packet in the separate "packet v2" change (§14.3), not in this stage.
 - Backup round trip.
+
+**One rule, stated the same way in stages 1, 5 and 6.** A diet break or a deload is an **event**.
+Phases (stage 1) are only the long blocks. The scorecard keeps reporting during an event, and the
+event is noted under the verdict (§10.6). Nothing in this stage creates, ends or changes a phase.
 
 **Out of scope**
 
 - Any change to `CutScorecard.evaluate`, its input, or any score, estimate or analytic. Events are
   display context only. Nothing is computed from them.
+- A dated override of the intake targets. None is built. Stage 3's `IntakeSettings.targets(on:)`
+  keeps its day parameter and returns the same targets every day; this stage supplies nothing to it.
+  During a diet-break event the intake screen may show the event caption of §10.5 and nothing more;
+  that one call is not in any work package here. A real override is a later change with its own
+  specification.
+- The packet's section case, heading, version number, size budget, whole-packet goldens and the
+  Claude-side text. They belong to stage 2's grammar and to the packet v2 change (§7.5, §14.3).
 - Events in the in-app Coach context (`AICoach.buildContext`, `buildFullContext`). See §3, C7.
 - Events in any widget, Live Activity, notification or the watch. Not sensitive ones, not any.
 - Reminders, streaks, prompts to log an event.
@@ -39,7 +58,7 @@ chart, on the scorecard and in the coach packet, from events the owner enters on
 - The niggle log and the checkpoint timeline (stage 6). §14.3 states what stage 6 can reuse.
 - The existing "Mark a Moment" action, the `event` table and the Journal. None is read or written.
 - A migration, a new target, an entitlement, a network path, a Health read. None is needed.
-- Android. No Kotlin is written (R43). §9.4 states the drift.
+- Android. Skipped by the owner's decision (R43). §9.4 states the drift in the one shared contract.
 - Any medical statement. "Illness" is the owner's own label for their own days.
 
 ## 2. Re-check of "what exists"
@@ -57,9 +76,9 @@ chart, on the scorecard and in the coach packet, from events the owner enters on
 | 9 | The scorecard has a presenter that turns the result into strings and curves | Confirmed | `Strand/Data/CutScorecardPresenter.swift:53-151`, `:246`; curves at `:378-379`, `:412-413` |
 | 10 | There are shared chart components | Confirmed, as four families, not one (§3, C5) | `Packages/StrandDesign/Sources/StrandDesign/NoopLineChart.swift:57`, `NoopBarChart.swift:13`, `TrendChart.swift:125`; `StrandiOS/Scorecard/ScorecardWeekChart.swift:10` |
 | 11 | A week is identified by its Monday day key, with timezone-free helpers | Confirmed | `Packages/StrandAnalytics/Sources/StrandAnalytics/WeeklyDigest.swift:421`, `:430`; `CutScorecard.swift:966` |
-| 12 | A feature flag pattern exists: one observable copy of a `noop.*` Bool | Confirmed | `Strand/Data/CutScorecardModel.swift:18-66` |
-| 13 | The debug demo harness maps `--demo-screen <name>` to a screen | Confirmed; unknown names fall through to `ScorecardDemo.screen(named:)` | `StrandiOS/App/StrandiOSApp.swift:466-469`, `:569-623`; `StrandiOS/Scorecard/ScorecardDemo.swift:33` |
-| 14 | Stage 2's coach packet exists | **Not on this branch.** No `CoachPacket` symbol in the tree. Its specification is being written in parallel | search of the tree |
+| 12 | A feature flag pattern exists: one observable copy of a `noop.*` Bool | Confirmed. The shared scaffolding (§18) lands `ObservableDefaultsFlag`, the same class with the key as a parameter; this stage uses it and writes no copy | `Strand/Data/CutScorecardModel.swift:18-66` |
+| 13 | The debug demo harness maps `--demo-screen <name>` to a screen | Confirmed; at this commit unknown names fall through to `ScorecardDemo.screen(named:)`. The shared scaffolding (§18) replaces that line with one ordered registry of demo providers | `StrandiOS/App/StrandiOSApp.swift:466-469`, `:569-623`; `StrandiOS/Scorecard/ScorecardDemo.swift:33` |
+| 14 | Stage 2's coach packet exists | **Not on this branch.** No `CoachPacket` symbol in the tree. Its grammar is fixed by the stage 2 specification (stage 2 §7), and stage 2 merges before this stage (§14.3) | search of the tree; [stage-2.md](stage-2.md) |
 | 15 | Widgets read a shared snapshot from the App Group suite, not the app's standard defaults | Confirmed | `StrandiOSShared/WidgetSnapshot.swift:6`, `:104` |
 
 ## 3. Corrections to the planning documents
@@ -124,7 +143,8 @@ No reader or writer exists today. After this stage, the complete list is:
 | `PersonalEventSheetModel`, `PersonalEventsModel` | The only callers of the store's write functions |
 | `PersonalEventChartSource` | The only reader for charts |
 | `CutScorecardModel.load()` | Passes the store's events to the presenter through the context |
-| The coach packet builder (stage 2) | Calls `PersonalEvents.packetLines` with the store's events |
+| The coach packet assembler, in the packet v2 change | Calls `PersonalEvents.packetLines` with the store's events and the store's `packetIncludesSensitive` |
+| `TimelineEventSource` (stage 6, `Strand/Data/TimelineSources.swift`) | Reads the store's `events` property, passes it through `PersonalEvents.visible(_, includeSensitive: false)`, then keeps diet breaks and deloads. A private event is absent from the timeline |
 | `BackupSettings` | Carries the stored string, unparsed |
 
 §12.5 asserts this list by source scan.
@@ -142,17 +162,21 @@ No reader or writer exists today. After this stage, the complete list is:
 | Thing | Name | Where |
 |---|---|---|
 | Pure types and functions | `PersonalEventKind`, `PersonalEvent`, `PersonalEventIssue`, `PersonalEventWeekRelation`, `PersonalEventSlot`, `PersonalEvents` | `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEvents.swift` |
+| Packet rows | `PersonalEvents.packetLines`, `PersonalEvents.packetRowLimit`, `PersonalEvents.packetByteAllowance` (an extension) | `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEventsPacket.swift` |
+| Day keys (shared scaffolding, not this stage's file) | `CanonicalDay` | `Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift` |
 | Store | `PersonalEventStore`, `PersonalEventStoreError` | `Strand/Data/PersonalEventStore.swift` |
 | Presenter | `PersonalEventPresenter`, `PersonalEventRow`, `PersonalEventsPresentation`, `PersonalEventCaption`, `PersonalEventDeleteConfirmation` | `Strand/Data/PersonalEventPresenter.swift` |
-| Models | `PersonalEventsFlag`, `PersonalEventsModel`, `PersonalEventSheetModel`, `PersonalEventDraft` | `Strand/Data/PersonalEventsModel.swift` |
+| Models | `PersonalEventsModel`, `PersonalEventSheetModel`, `PersonalEventDraft` | `Strand/Data/PersonalEventsModel.swift` |
+| Observable flag | `PersonalEventStore.flag`, one static `ObservableDefaultsFlag(key: PersonalEventStore.enabledKey)`. There is no `PersonalEventsFlag` type | `Strand/Data/PersonalEventStore.swift`; the class is the scaffolding's `Strand/Data/ObservableDefaultsFlag.swift` |
 | Chart reader | `PersonalEventChartSource` | `Strand/Data/PersonalEventChartSource.swift` |
 | Chart caption view (shared with macOS) | `PersonalEventChartCaption` | `Strand/Screens/PersonalEventChartCaption.swift` |
 | Mark type, layout and row | `NoopChartAxisMarks`, `ChartAxisMarkLayout`, `NoopChartAxisMarkRow` | `Packages/StrandDesign/Sources/StrandDesign/ChartAxisMarks.swift` |
 | Screens | `PersonalEventsView`, `PersonalEventSheet` | `StrandiOS/Events/` |
-| Demo harness | `PersonalEventsDemo` | `StrandiOS/Events/PersonalEventsDemo.swift` |
+| Design round | `design/round-s5-events/`, frames `s5-frames.json`, plugin command `importS5` | §10 |
+| Demo harness | `PersonalEventsDemo`; demo names all begin `events-` | `StrandiOS/Events/PersonalEventsDemo.swift` |
 | Feature flag | `noop.personalEventsEnabled`, Bool, default `false` | `PersonalEventStore.enabledKey` |
 | Stored list | `personalEvents.items`, String (JSON array) | `PersonalEventStore.itemsKey` |
-| Packet switch | `personalEvents.packetIncludesSensitive`, Bool, default `false` | `PersonalEventStore.packetSensitiveKey` |
+| Packet switch | `personalEvents.packetIncludesSensitive`, Bool, default `false`. It stays under this prefix, not under `coachPacket.sections`: it is a fact about events | `PersonalEventStore.packetSensitiveKey` |
 | Navigation | `RedesignRoute.personalEvents` | `StrandiOS/Redesign/RedesignRoute.swift` |
 | Scorecard additions | `CutScorecardPresentation.EventNote`, `CutScorecardPresentation.eventNote`, `CutScorecardPresentation.Curve.marked`, `CutScorecardPresentationContext.events` | `Strand/Data/CutScorecardPresenter.swift` |
 
@@ -162,9 +186,17 @@ only) can test them, as stage 1 did (stage 1 §5).
 ## 6. Pure logic: the API
 
 File `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEvents.swift`. No store, no clock, no
-`Calendar`, no `TimeZone`, no `Date`, no localisation. Uses `WeeklyDigestEngine.parseYMD`,
-`formatYMD`, `addDays` and `mondayOfWeek` from the same module (`WeeklyDigest.swift:421`, `:430`,
-`:463`).
+`Calendar`, no `TimeZone`, no `Date`, no localisation. Every day-key question goes through the
+shared `CanonicalDay` of the same module (stage 6 §6.0; landed by the scaffolding, §18):
+`CanonicalDay.number(_:)` for validity, `CanonicalDay.weekStart(_:)` for the Monday of a week, and
+`CanonicalDay.key(_:)` for the day six days later. This file does not call
+`WeeklyDigestEngine.parseYMD` or `formatYMD` itself and declares no day-validity function of its
+own.
+
+`packetLines` and its two constants are declared in an extension in
+`PersonalEventsPacket.swift`, because they call stage 2's `CoachPacket.sanitize` (stage 2 §6.2).
+Keeping them in their own file lets `PersonalEvents.swift` and its tests compile before stage 2's
+`CoachPacket.swift` exists.
 
 ```swift
 public enum PersonalEventKind: String, CaseIterable, Sendable {
@@ -210,7 +242,6 @@ public enum PersonalEvents {
     public static let maxNoteLength = 280
 
     public static func defaultSensitive(_ kind: PersonalEventKind) -> Bool
-    public static func isValidDay(_ day: String) -> Bool
     public static func issues(_ event: PersonalEvent) -> [PersonalEventIssue]
     public static func normalized(_ events: [PersonalEvent]) -> [PersonalEvent]
 
@@ -224,22 +255,31 @@ public enum PersonalEvents {
     public static func coveredSlots(events: [PersonalEvent], slots: [PersonalEventSlot]) -> [Bool]
 
     public static func visible(_ events: [PersonalEvent], includeSensitive: Bool) -> [PersonalEvent]
+}
+
+// PersonalEventsPacket.swift
+extension PersonalEvents {
+    public static let packetRowLimit = 12          // event rows printed at most
+    public static let packetByteAllowance = 2000   // UTF-8 bytes the events section may add to a packet
+    /// The body rows of the packet's events section (§7.5). No heading, no blank line, no "\n".
     public static func packetLines(events: [PersonalEvent], firstDay: String, lastDay: String,
                                    includeSensitive: Bool) -> [String]
 }
 ```
 
-Every function is total: it never throws and never traps, for any input.
+Every function is total: it never throws and never traps, for any input. "A valid day" below always
+means `CanonicalDay.number(day) != nil`.
 
 ## 7. Algorithm and format
 
 ### 7.1 Days, not instants
 
 An event is a run of **local calendar days**. `startDay` and `endDay` are canonical ten-character
-keys (stage 1 ruling R5): `isValidDay` is true only for `yyyy-MM-dd`, years 0001 to 9999, naming a
-real date, and equal to `formatYMD` of its own parts. Canonical keys of that range order
-lexicographically in date order, so every comparison below is a string comparison and no day
-arithmetic is needed for overlap.
+keys (stage 1 ruling R5): a day is valid only when `CanonicalDay.number(day) != nil`, which holds
+for `yyyy-MM-dd`, years 0001 to 9999, naming a real date, in exactly that ten-character form. The
+rule has one definition, `CanonicalDay`, which the scaffolding pins to `CutScorecard.weekStart` with
+a test; this stage adds no second one. Canonical keys of that range order lexicographically in date
+order, so every comparison below is a string comparison and no day arithmetic is needed for overlap.
 
 The editor turns the picked date into a key with `LocalDayWindows(timeZone:).dayKey(for:)`
 (`Packages/StrandAnalytics/Sources/StrandAnalytics/LocalDayWindows.swift:265`) in the device's zone
@@ -269,7 +309,7 @@ is the only thing any consumer tests. The app offers no suggested labels for the
 `issues` returns every applicable issue, in the order the enum declares them:
 
 - `emptyId`: `id` is empty.
-- `invalidStartDay` / `invalidEndDay`: fails `isValidDay`.
+- `invalidStartDay` / `invalidEndDay`: `CanonicalDay.number` of the day is nil.
 - `endBeforeStart`: both days valid and `endDay < startDay`.
 - `missingLabel`: kind `custom` and the label is nil or empty after trimming whitespace and newlines.
 - `unexpectedLabel`: any other kind with a non-nil label.
@@ -293,40 +333,80 @@ For an event with start `s` and end `e` (nil when ongoing) and a range `[a, b]`:
 - `overlaps` is `relation` not in `{nil, before, after}`: equivalently `s <= b && (e == nil || e >= a)`.
 
 `events(overlappingWeekStarting:)` requires `weekStart` to be a valid day that equals
-`WeeklyDigestEngine.mondayOfWeek(containing: weekStart)`; otherwise it returns `[]`. The range is
-`[weekStart, addDays(weekStart, 6)]`.
+`CanonicalDay.weekStart(weekStart)`; otherwise it returns `[]`. The range is
+`[weekStart, CanonicalDay.key(CanonicalDay.number(weekStart)! + 6)]` (the force-unwrap is notation:
+the value is known non-nil at that point, and the implementation binds it).
 
 `coveredSlots` returns one Bool per slot, in order: whether any event overlaps `[firstDay, lastDay]`.
 An invalid slot is false. Sensitive events count: a dot carries no text (§10.5).
 
-### 7.5 Visibility and the packet section
+### 7.5 Visibility and the packet rows
 
 `visible(events, includeSensitive:)` is `normalized(events)` with `sensitive` events removed unless
-`includeSensitive` is true. It is the one function that applies the flag; the presenter, the chart
-caption and the packet all go through it or through `packetLines`.
+`includeSensitive` is true. It is the one function that applies the flag. The presenter, the chart
+caption, `packetLines` and stage 6's `TimelineEventSource` all go through it. Two readers pass
+`false` always: the timeline (a private event is **absent** there, whatever its kind) and every
+caption or note outside the Events screen that then words what it shows from `sensitive` (§10.5,
+§10.6).
 
-`packetLines` returns the lines of the coach packet's Events section, English regardless of the
-interface language, ISO dates:
+**Who owns what in the packet.** Stage 2 owns the packet grammar (stage 2 §7): headings of the form
+`== NAME ==`, two-space indented rows, oldest first, enum values printed as their raw values, free
+text through `CoachPacket.sanitize`, a size budget that holds by construction. This stage owns only
+the **body rows** of the events section, returned by `packetLines`. The heading `== EVENTS ==`, the
+blank line between sections, the `CoachPacketSection` case, the removal of `events` from the
+header's `not-recorded-by-app` line, the version number and the whole-packet goldens are written by
+the packet v2 change (§14.3) under stage 2's rules. `packetLines` never returns a heading.
+
+**The rows.** English whatever the interface language, ISO day keys, no tabs, no trailing spaces:
 
 ```
-EVENTS (entered by the owner; whole local days)
-- 2031-01-22: Supplement change
-- 2031-02-22 to 2031-02-24: Travel
-- 2031-03-10 to 2031-03-16: Travel. Note: Fixture trip
-- 2031-05-19, ongoing: Illness
+entered by the owner, whole local days, oldest first:
+  2031-02-03..2031-02-09: deload
+  2031-03-10..2031-03-16: travel; note "Fixture trip"
+  2031-03-26: custom "Fixture change"; note "Fixture note"
+  2031-05-19..ongoing: illness
 ```
 
-- Line 1 is the fixed header above.
-- One line per event of `visible(events, includeSensitive:)` that overlaps `[firstDay, lastDay]`.
-- Dates: `s` alone when `e == s`; `s to e`; `s, ongoing` when `e == nil`. The stored days are
-  printed whole, not clipped to the range.
-- Name: `Travel`, `Illness`, `Diet break`, `Deload`, `Supplement change`; for `custom`, the label.
-- A note is appended as `. Note: <note>`, with every run of whitespace and newlines collapsed to one
-  space.
-- With no line to print: the header, then `- none listed`. "Listed", because hidden sensitive
-  events may exist and the packet must neither reveal nor deny them.
-- An invalid range returns the header and `- none listed`.
+- Let `listed` be the events of `visible(events, includeSensitive:)` that overlap
+  `[firstDay, lastDay]`, in `normalized` order (oldest start first).
+- **Nothing listed:** the result is the single row `events: none listed in range`. "Listed", because
+  hidden sensitive events may exist and the packet must neither reveal nor deny them. An invalid
+  range (either day invalid, or `lastDay < firstDay`) gives the same single row.
+- **Otherwise** row 1 is the fixed intro `entered by the owner, whole local days, oldest first:`.
+- **Row cap.** At most `packetRowLimit` (12) event rows are printed: the **last** twelve of `listed`,
+  still oldest first. When `listed` holds more, the row
+  `  (<m> earlier events in range not shown)` comes directly after the intro, where `m` is
+  `listed.count - 12`. `m` counts only listed events; a hidden sensitive event is never counted.
+- **An event row** is two spaces, the dates, `: `, the name, and an optional note:
+  `  <dates>: <name>` or `  <dates>: <name>; note "<n>"`.
+  - Dates: `s` alone when `e == s`; `s..e`; `s..ongoing` when `e == nil`. The stored days are
+    printed whole, not clipped to the range.
+  - Name: the kind's raw value (`travel`, `illness`, `dietBreak`, `deload`, `supplementChange`);
+    for `custom`, `custom "<l>"` where `<l>` is `CoachPacket.sanitize(label)`.
+  - Note: `<n>` is `CoachPacket.sanitize(note)`. An event with a nil note has no note part.
+  - `CoachPacket.sanitize` (stage 2 §6.2) turns control characters and line breaks into spaces,
+    collapses runs of spaces, trims, replaces `"` with `'` and cuts at a character boundary to at
+    most 48 UTF-8 bytes; empty input gives `unnamed`. This function applies no other cleaning, so a
+    quoted value can never contain `"` or a line break.
 - Nothing else: no id, no `createdAt`, no count of hidden events, no sensitivity marker.
+
+**Size.** The widest event row is 140 bytes (two spaces, two ten-byte days joined by `..`, `: `,
+`custom "` + 48 + `"`, `; note "` + 48 + `"`), the intro is 53 and the "earlier" row is at most 57
+(an `Int` has at most 19 digits). With one `\n` per row the rows total at most
+`54 + 58 + 12 × 141 = 1,804` bytes; with stage 2's heading line and the blank line before it, 1,818.
+`packetByteAllowance` is 2,000. The packet v2 change adds this fixed allowance to stage 2's budget
+(`8000 + 220 × rangeDays`, stage 2 §7.10); the bound holds by construction, for any range length and
+any number of stored events, and a test builds the widest input and asserts it (§12.1).
+
+**The privacy scan.** The rows are part of the packet text that stage 2's scan reads, and that scan
+fails closed (stage 2 §7.11). A label or note that looks like an email address, a file path or a
+device identifier blocks the whole packet, and stage 2's blocked state says so. `packetLines` does
+not scan, does not drop a row and does not rewrite a note to get past the scan.
+
+**The switch.** `personalEvents.packetIncludesSensitive` (§9.1) is the `includeSensitive` argument.
+It is set in Settings (§10.7). The packet sheet shows its state as a read-only caption with no
+control: "Private events: left out" or "Private events: included". That caption is added by the
+packet v2 change.
 
 ## 8. Storage decision
 
@@ -335,7 +415,7 @@ EVENTS (entered by the owner; whole local days)
 | # | Home | Migration | What it costs | R42 |
 |---|---|---|---|---|
 | A | The `event` table under a sentinel device id | No | The table is the telemetry stream of straps and rings and one reader feeds scoring (§4.1). Every personal insert moves `analysisFingerprint`'s whole-table `MAX(rowid)` (`Reads.swift:221`), so logging a trip would make the app believe sensor data changed. Rows are insert-only: edit and delete need new SQL in `WhoopStore`, whose neighbours are declared Kotlin twins. The key `(deviceId, ts, kind)` has no id and collides for two events of one kind on one start; a synthetic `ts` would make the range reads meaningless. Storage counts and the access tool would count personal rows as sensor rows (`Reads.swift:981`, `LocalAccessCore.swift:346`). One real advantage: Room has the same table, so rows would survive an Android round trip with no contract change | Met with a sentinel id (C3) |
-| B | **A JSON list in settings, on the backup whitelist** (the stage 1 phases pattern) | No | Not transactional with the database. The whole list is rewritten on each change (events are few; a year of heavy use is under 100 KB). The value travels in the readable `settings.json` entry of the backup, whose header asks that the file stay safe to share (`BackupSettings.swift:11-15`); the archive already contains the health database, but an event note in plain JSON is easier to read than a SQLite row. The Swift whitelist gains a key the Kotlin one does not have (§9.4). Not queryable in SQL, which stage 6 may want | Met by construction: no device id exists in the store |
+| B | **A JSON list in settings, on the backup whitelist** (the stage 1 phases pattern) | No | Not transactional with the database. The whole list is rewritten on each change (events are few; a year of heavy use is under 100 KB). The value travels in the readable `settings.json` entry of the backup, whose header asks that the file stay safe to share (`BackupSettings.swift:11-15`); the archive already contains the health database, but an event note in plain JSON is easier to read than a SQLite row. The Swift whitelist gains a key the Kotlin one does not have (§9.4). Not queryable in SQL | Met by construction: no device id exists in the store |
 | C | `metricSeries`, one row per covered day per kind, under a sentinel id | No | One Double per `(day, key)`: no note, no id, no custom label, no ongoing state, and a range becomes many rows to rewrite on every edit. The series appears wherever series are enumerated (Compare, the access tool's exports) | Met with a sentinel id |
 | D | The Journal, one row per covered day | No | The Journal is read by the Coach's behaviour-to-outcome ranking (`Strand/AI/AICoach.swift:1249-1251`) and by journal analytics. Events would become "behaviours" correlated against recovery and would enter the in-app Coach context, the exact leak C7 forbids. A range is again many rows | Met (`noop-journal`) |
 | E | `labMarker` rows with the kind as the marker key | No | Lab Book would list events as markers and the Coach's Lab Book roll-up would print them. Rows are keyed by the active strap id until the separate Lab Book ownership change lands (R42) | Not met today |
@@ -460,7 +540,19 @@ final class PersonalEventStore: ObservableObject {
 - There is no count limit and nothing is ever trimmed. (Contrast `moments`, which deletes beyond
   500.)
 
-`PersonalEventsFlag` is the observable copy of the flag, the same shape as `CutScorecardFlag`.
+The observable copy of the flag is one line, a static on the store:
+
+```swift
+extension PersonalEventStore {
+    static let flag = ObservableDefaultsFlag(key: PersonalEventStore.enabledKey)
+}
+```
+
+`ObservableDefaultsFlag` is the scaffolding's class (stage 6 §9.4): the body of `CutScorecardFlag`
+with the key as a parameter, a published read-only `isEnabled` and `set(_:)`. Views observe
+`PersonalEventStore.flag`; the Settings switch calls `PersonalEventStore.flag.set(_:)`. This stage
+declares no flag class of its own. `PersonalEventStore.isEnabled` reads the same key from the
+store's own defaults object, so a store built over an injected suite in a test follows that suite.
 
 ### 9.4 Backup whitelist
 
@@ -470,27 +562,32 @@ final class PersonalEventStore: ObservableObject {
 | `noop.personalEventsEnabled` | — | — | No. A `noop.*` toggle is per install (`BackupSettings.swift:40-42`); after a restore the feature is off until switched on, and the events are there when it is |
 | `personalEvents.packetIncludesSensitive` | — | — | No. A Bool cannot cross, and off is the safe direction |
 
-Edits: `BackupSettings.whitelist` and `BackupSettings.appleDefaultsKey`
-(`BackupSettings.swift:49-74`, `:79-95`). The string is carried and never parsed there.
+Edits: one entry in `BackupSettings.whitelist` and one in `BackupSettings.appleDefaultsKey`
+(`BackupSettings.swift:49-74`, `:79-95` at the base commit), and one line naming the key in the
+comment block of fork-only keys that the scaffolding places above the Swift whitelist (§18). The
+string is carried and never parsed there.
+
+Seven fork-only keys join this file across stages 3, 5 and 6. There is one writer at a time, in
+stage order: stage 3 (two keys), then this stage (one key), then stage 6 (four keys). The same order
+holds for `BackupSettingsTests.swift`, where each stage adds new methods only, in the order of the
+source file. This stage's entry therefore sits after stage 3's two and is found by that position,
+not by a line number.
 
 Restore semantics, unchanged from every other key: a backup that carries the key **replaces** this
 device's list; a backup without it leaves the list alone (`BackupSettings.swift:120-127`).
 
-**Kotlin side: not updated, by the owner's decision (R43).** The exact drift this creates:
-
-- `BackupSettingsCodec.WHITELIST` (`android/app/src/main/java/com/noop/data/BackupSettings.kt:50-82`)
-  has no `personalEvents.items`. The Swift header's statement that the whitelist is mirrored
-  byte-for-byte becomes false for this one key; the comment added beside the key says so.
-- An iPhone backup restored by the Android app loses the events: unknown keys are dropped on decode.
-- A backup made by the Android app never carries events; restored on the iPhone it leaves the
-  iPhone's list untouched.
-- Android re-exporting a restored iPhone backup produces a file without events.
-- No existing test compares the two whitelists as wholes; the one cross-platform check compares the
-  two stage 1 keys only (`Tools/test_body_measurement_single_resolver.py:278`). Nothing fails.
+**Drift from the Android contract (R43).** AGENTS.md calls the backup whitelist a byte-identical
+contract between `BackupSettings.swift` and the Kotlin `BackupSettingsCodec`. This stage adds
+`personalEvents.items` to the Swift side only, so the two whitelists knowingly differ by this key:
+a backup made on the iPhone and restored by the Android app loses the events (unknown keys are
+dropped on decode), and a backup made by the Android app never carries them and leaves the iPhone's
+list untouched on restore. No Kotlin file is edited, and no existing test compares the two
+whitelists as wholes, so nothing fails. The fork-only comment block and the fork's personal
+documents record that the Kotlin whitelist is behind.
 
 **What the backup now contains.** Labels and notes of sensitive events, in clear text in
 `settings.json`. The backup is already an unencrypted copy of the health database (CONTEXT §7 item
-7). This raises the stakes of that backlog item and is put to the owner as S3.
+7). This raises the priority of the encrypted-backup backlog item and is put to the owner as S3.
 
 ### 9.5 Ownership (R42)
 
@@ -500,15 +597,26 @@ removes it with everything else.
 
 ## 10. Screens and states
 
-Frames are designed at G1 in a new round, `design/round7-events/`, with the pipeline stage 1 used
-(`design/round6-scorecard/`, `design/tools/serve.py`, a new command in `design/figma-plugin`). Every
-state below needs a frame at the default text size and at the largest accessibility size.
+Frames are designed at G1 in the round `design/round-s5-events/` (frames file `s5-frames.json`,
+plugin command `importS5`), with the pipeline stage 1 used (`design/round6-scorecard/`,
+`design/tools/serve.py`). The folder and the `importS5` command in `design/figma-plugin/code.js` and
+`manifest.json` are created by the orchestrator's scaffolding commit (§18), with the other stages'
+commands; the designer of this stage edits only files inside `design/round-s5-events/`. Every state
+below needs a frame at the default text size and at the largest accessibility size.
+
+Three surfaces are shared with other stages and are designed **once for all stages**, in one
+combined frame set approved once: the Health tab's "More health" card, the Settings section and the
+scorecard screen. This stage's frames show its own part inside that approved layout and do not
+re-open the order.
 
 ### 10.1 Entry points
 
-- A row "Events" in the Health tab, beside the scorecard's row
-  (`StrandiOS/Redesign/RedesignHealthView.swift:476-482`, `:523-532`), mounted only while the flag
-  is on. Its value is the count of events overlapping today ("1 now"), or nothing.
+- A row "Events" in the Health tab's "More health" card
+  (`StrandiOS/Redesign/RedesignHealthView.swift:476-482`, `:523-532`), mounted only while this
+  stage's flag is on, whatever the scorecard flag says. Its value is the count of events overlapping
+  today ("1 now"), or nothing. The card's rows have one fixed order across all stages: Scorecard,
+  Body record, Events, Timeline, Niggle log, Coach packet. "Events" is third: after "Body record"
+  when that row is mounted, otherwise after "Scorecard", otherwise first of these.
 - The scorecard's event note (§10.6) links to the Events screen.
 - No Today card, no tab, no widget.
 
@@ -629,10 +737,23 @@ Spoken summary: the chart's own summary, then "Events:" and the caption lines.
 
 ### 10.6 Scorecard annotation
 
+**During a diet break or a deload the scorecard keeps reporting.** A diet break or deload is an
+event, never a phase (§1), so the active phase, the judged week and the verdict are exactly what
+they would be with no event stored. The event is named in the note under the verdict and marked on
+the curves. That is the whole effect.
+
 `CutScorecardPresentationContext` gains `events: [PersonalEvent] = []` and
 `CutScorecardPresenter.present` gains two outputs. `CutScorecardModel.load()` fills `events` from
 `PersonalEventStore.events`, captured before its first suspension with its other inputs
-(`CutScorecardModel.swift:148-153`).
+(`CutScorecardModel.swift:148-153` at the base commit).
+
+This edit is written **after** stage 2 has moved `evaluateStored` and `CutScorecardEvaluation` out of
+`CutScorecardModel` into `CutScorecardInputBuilder.evaluation(today:)`, and after stage 3 has changed
+the builder's protein read; stage 6 adds its stored `evaluation` property after this stage. The
+events go from `load()` into the presenter's context only. They are never passed to
+`evaluation(today:)`, to the builder or to `CutScorecardInput` (§12.5 asserts it). On the screen the
+order inside `ScorecardView` is fixed by the combined frame: stage 2's toolbar item, stage 3's
+protein caption, this stage's note directly under the verdict, then stage 6's two link rows.
 
 ```swift
 struct EventNote: Equatable {
@@ -664,20 +785,134 @@ events, and no string of theirs changes.
 ### 10.7 Settings
 
 In the iPhone-only block beside the scorecard card (`Strand/Screens/SettingsView.swift:462-468`,
-`:1860-1871`): a switch "Personal events"; beneath it, visible only while on, a switch "Include
-private events in the coach packet" (off), with the footnote "Private events and their notes stay
-out of the packet unless this is on."
+`:1860-1871` at the base commit): a switch "Personal events"; beneath it, visible only while on, a
+switch "Include private events in the coach packet" (off), with the footnote "Private events and
+their notes stay out of the packet unless this is on."
+
+The order of what the stages add to Settings is fixed by the combined frame: the Coach packet card
+(stage 2), the Intake card (stage 3), the Body record card (stage 4), these two switches, then the
+"Log and timeline" section (stage 6). The edits land in that order, one stage at a time.
+
+The second switch is the only control for `personalEvents.packetIncludesSensitive`. The packet sheet
+shows the same value as a read-only caption (§7.5) and never edits it, so the two readouts are one
+stored Bool and cannot disagree.
 
 ### 10.8 Widgets and notifications
 
 None. This stage adds no widget kind, no widget field, no Live Activity field, no notification and
 no notification text. §12.5 proves the absence.
 
+### 10.9 App-side API
+
+The types the app-target tests of §12.3 are written against. All are in `Strand/Data/` (§5). Text
+is produced for `locale`; tests pass `Locale(identifier: "en_GB")` and compare against §11.
+
+```swift
+struct PersonalEventRow: Equatable, Identifiable {
+    var id: String                 // the event's id
+    var title: String              // the kind's name, or the owner's label; shown in full here only
+    var dateText: String           // "10 – 16 Mar", "22 Jan", "Since 19 May", "From 2 Jul"
+    var noteFirstLine: String?     // nil when the event has no note
+    var isPrivate: Bool            // shows the "Private" tag
+    var offersEndToday: Bool       // true for an ongoing event that has started
+}
+
+struct PersonalEventsPresentation: Equatable {
+    enum State: Equatable { case empty, rows, storeUnreadable }
+    var state: State
+    var now: [PersonalEventRow]          // overlapping today; newest start first
+    var upcoming: [PersonalEventRow]     // start after today; newest start first
+    var earlier: [PersonalEventRow]      // ended before today; newest start first
+    var unreadableEntriesText: String?   // "%lld entries could not be read. They are kept."
+    var healthRowValue: String?          // "%lld now"; nil when nothing overlaps today
+}
+
+struct PersonalEventCaption: Equatable {
+    var lines: [String]            // at most two, "Travel · 10 – 16 Mar" or "Private event · 26 Mar"
+    var moreText: String?          // "and %lld more"
+    var spokenText: String         // "Events:" then the lines and moreText, joined by ", "
+}
+
+struct PersonalEventDeleteConfirmation: Equatable {
+    var title: String              // "Delete this event?"
+    var detail: String             // the title and dateText of the row
+    var warning: String            // "This cannot be undone."
+    var confirmTitle: String       // "Delete"
+    var cancelTitle: String        // "Cancel"
+}
+
+enum PersonalEventPresenter {
+    /// The Events screen. The one place a sensitive label or note is turned into text.
+    static func present(events: [PersonalEvent], today: String, unreadableEntryCount: Int,
+                        needsAttention: Bool, locale: Locale) -> PersonalEventsPresentation
+    /// One line for an event outside the Events screen: its kind name, or "Private event" when
+    /// `sensitive`, then " · " and its dates. Never the label of a sensitive event, never a note.
+    static func outsideLine(for event: PersonalEvent, locale: Locale) -> String
+    /// The chart caption for a window; nil when no event overlaps it.
+    static func caption(events: [PersonalEvent], firstDay: String, lastDay: String, today: String,
+                        locale: Locale) -> PersonalEventCaption?
+    static func deleteConfirmation(for event: PersonalEvent, locale: Locale)
+        -> PersonalEventDeleteConfirmation
+    static func kindName(_ kind: PersonalEventKind, locale: Locale) -> String
+}
+
+struct PersonalEventDraft: Equatable {
+    enum Length: Equatable { case oneDay, until, ongoing }
+    var kind: PersonalEventKind = .travel
+    var label: String = ""
+    var start: Date
+    var length: Length = .oneDay
+    var end: Date                  // read only when length == .until
+    var note: String = ""
+    var isPrivate: Bool
+}
+
+@MainActor
+final class PersonalEventsModel: ObservableObject {
+    init(store: PersonalEventStore = .shared, now: @escaping () -> Date = Date.init,
+         timeZone: @escaping () -> TimeZone = { .current }, locale: Locale = AppLanguage.activeLocale)
+    @Published private(set) var presentation: PersonalEventsPresentation   // rebuilt on store.revision
+    func reload()
+    func deleteConfirmation(id: String) -> PersonalEventDeleteConfirmation?
+    func delete(id: String) throws
+    func endToday(id: String) throws         // sets endDay to today's key; .notFound if absent
+    var rawStoredText: String? { get }       // for "Copy stored text"
+    @discardableResult func discardUnreadableStore() -> Bool
+}
+
+@MainActor
+final class PersonalEventSheetModel: ObservableObject {
+    enum Phase: Equatable { case editing, saving, failed(storeUnreadable: Bool), saved }
+    /// `editing` nil: a new event with the defaults of §10.3.
+    init(store: PersonalEventStore = .shared, editing: PersonalEvent? = nil,
+         now: @escaping () -> Date = Date.init, timeZone: @escaping () -> TimeZone = { .current })
+    @Published var draft: PersonalEventDraft
+    @Published private(set) var phase: Phase
+    func setKind(_ kind: PersonalEventKind)  // moves isPrivate to the kind's default unless touched
+    func setPrivate(_ value: Bool)           // marks the switch as touched
+    var issues: [PersonalEventIssue] { get } // of the draft as it would be saved
+    var canSave: Bool { get }                // no issue and phase is .editing or .failed
+    var isPlanned: Bool { get }              // start day after today's key
+    var noteRemaining: Int? { get }          // nil until the note reaches 240 characters
+    func save()                              // captures the draft, then writes once; sets phase
+}
+```
+
+`PersonalEventChartSource` has the four functions of §10.5 and this initialiser:
+`init(store: PersonalEventStore = .shared, locale: Locale = AppLanguage.activeLocale)`. Its
+`MarkStyle` is `enum MarkStyle { case points, bars }`. Each function reads `store.events` once per
+call.
+
+A day key for "today", for a draft's start and for a draft's end is
+`LocalDayWindows(timeZone: timeZone()).dayKey(for:)` of the date, taken once per operation.
+
 ## 11. User-facing strings
 
 English source strings, all through `Strand/Resources/Localizable.xcstrings` in the ten locales
-(`de`, `en`, `es`, `fr`, `it`, `pl`, `pt-PT`, `ru`, `zh-Hans`, `zh-Hant`). The packet lines of §7.5
-are fixed English and are **not** localised.
+(`de`, `en`, `es`, `fr`, `it`, `pl`, `pt-PT`, `ru`, `zh-Hans`, `zh-Hant`). The packet rows of §7.5
+are fixed English and are **not** localised. The catalogue has one writer at a time across all
+stages, in integration order (Lab Book ownership, 2, 3, 4, 5, 6); this stage's Localiser runs as the
+last step of this stage.
 
 | Use | String |
 |---|---|
@@ -696,6 +931,7 @@ are fixed English and are **not** localised.
 | Scorecard note | "Events this week"; "Earlier in the weeks behind this verdict"; "Shown for context. Events do not change the verdict." |
 | Settings | "Personal events"; "Include private events in the coach packet"; "Private events and their notes stay out of the packet unless this is on." |
 | Spoken | "Events:" |
+| Packet sheet caption (added to the catalogue by the packet v2 change, not by this stage's Localiser) | "Private events: left out"; "Private events: included"; "Change this in Settings." |
 
 No string states or implies a cause ("because you travelled"), a diagnosis, or advice.
 
@@ -706,7 +942,11 @@ Tests are written from this document before the implementation, by an agent who 
 ### 12.1 Pure logic — `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/PersonalEventsTests.swift`
 
 Validation
-- `testCanonicalDayIsValidAndPaddedOrImpossibleDaysAreNot`
+- `testCanonicalDaysPassAndUnpaddedOrImpossibleDaysAreInvalidStartOrEndDays` (through `issues`:
+  `2031-03-10` has no issue; `2031-3-10`, `2031-02-30`, `0000-01-01` and the empty string give
+  `invalidStartDay` as a start and `invalidEndDay` as an end)
+- `testDayValidityAgreesWithCanonicalDayForGeneratedStrings` (fixed seed, 500 strings: `issues`
+  reports `invalidStartDay` exactly when `CanonicalDay.number` is nil)
 - `testEndBeforeStartIsAnIssue`
 - `testCustomKindNeedsALabelAndOtherKindsRejectOne`
 - `testLabelAndNoteLengthsAreCountedInCharacters` (a 40-character label of combined emoji passes; 41 fails)
@@ -745,16 +985,37 @@ Slots
 - `testCoveredSlotsOfNoEventsIsAllFalseAndOfNoSlotsIsEmpty`
 - `testInvalidSlotIsFalse`
 
-Visibility and packet
+Visibility
 - `testVisibleRemovesSensitiveEventsUnlessIncluded`
-- `testPacketLinesForTheFixtureWithSensitiveOff` (golden, §13.3)
-- `testPacketLinesForTheFixtureWithSensitiveOn` (golden, §13.3)
-- `testPacketLinesWithNothingListedSayNoneListed`
-- `testPacketLinesWithOnlySensitiveEventsAndSensitiveOffSayNoneListed`
-- `testPacketLinesPrintWholeStoredDaysNotClippedToTheRange`
-- `testPacketNoteCollapsesNewlinesAndRunsOfSpaces`
+- `testVisibleRemovesAPrivateDeloadAndAPrivateDietBreak` (the flag decides, not the kind: fixture
+  variant V9)
+- `testVisibleKeepsNormalizedOrder`
+
+Packet rows — a separate file, `PersonalEventsPacketTests.swift`, because it needs stage 2's
+`CoachPacket.sanitize` and is added by WP 5-9 (§14.1)
+- `testPacketLinesFourteenDayGoldenWithSensitiveOff` and `…WithSensitiveOn` (G-E1, §13.3)
+- `testPacketLinesTwentyEightDayGolden` (G-E2; identical with the switch on or off)
+- `testPacketLinesOngoingGoldenWithSensitiveOn` (G-E3)
+- `testPacketLinesOneDayGolden` (G-E4)
+- `testPacketLinesWithNothingListedSayNoneListed` (one row, no intro)
+- `testPacketLinesWithOnlySensitiveEventsAndSensitiveOffSayNoneListed` (G-E3 with the switch off)
+- `testPacketLinesPrintWholeStoredDaysNotClippedToTheRange` (G-E5)
+- `testPacketLabelAndNoteGoThroughCoachPacketSanitize` (a `"` becomes `'`; a line break and a run
+  of spaces become one space; a 280-character note is cut to at most 48 UTF-8 bytes at a character
+  boundary; the expected text is built by calling `CoachPacket.sanitize` in the test)
+- `testPacketLinesStopAtTheRowLimitWithAnEarlierNotShownRow` (G-E6)
+- `testEarlierNotShownCountsOnlyListedEvents` (G-E6 plus three sensitive one-day events in range,
+  switch off: the count stays 3)
+- `testExactlyTheRowLimitPrintsNoEarlierRow`
+- `testEveryRowAfterTheIntroStartsWithTwoSpacesAndNoRowHasATabATrailingSpaceOrALineBreak`
+- `testPacketLinesNeverReturnAHeading` (no row begins `==`)
 - `testPacketLinesContainNoIdAndNoCreatedAt`
 - `testPacketLinesForAnInvalidRange`
+- `testWidestPacketRowsStayUnderTheByteAllowance` (twenty events in range, each `custom` with a
+  40-character label of four-byte characters, a 280-character note and an end day; the rows joined
+  with one `\n` each, plus 14 bytes for stage 2's heading and blank line, are at most
+  `PersonalEvents.packetByteAllowance`)
+- `testRowLimitIsTwelveAndByteAllowanceIsTwoThousand`
 
 Properties
 - `testAddingAnEventOutsideARangeNeverChangesThatRangesResult`
@@ -776,6 +1037,8 @@ Properties
 
 `PersonalEventStoreTests.swift`
 - `testFlagDefaultsToOff`
+- `testStoreFlagIsAnObservableDefaultsFlagOverTheEnabledKey` (`PersonalEventStore.flag` follows a
+  write to `noop.personalEventsEnabled` made by another writer, and `set(true)` writes that key)
 - `testEventsAreEmptyAndTheKeyIsNotReadWhileTheFlagIsOff`
 - `testAddWritesSortedKeysAndNormalizedOrder`
 - `testAddTrimsLabelAndNoteAndTurnsAnEmptyNoteIntoNil`
@@ -805,6 +1068,7 @@ Properties
 
 `PersonalEventPresenterTests.swift` — one test per row of §10.2, §10.3 and §10.5's caption table,
 named for the state; plus
+- `testHealthRowValueCountsEventsOverlappingTodayAndIsEmptyWithNone`
 - `testSensitiveLabelAndNoteAppearOnlyInTheEventsScreenPresentation`
 - `testCaptionShowsTheTwoLatestStartsThenTheCount`
 - `testNoStringContainsAnInterpolatedNilOrAnEmptyDate`
@@ -833,6 +1097,9 @@ named for the state; plus
 - `testMoreThanThreeEventsAreCutWithACount`
 - `testNoJudgedWeekGivesNoNote`
 - `testMarkedHasOneEntryPerCurvePoint`
+- `testDietBreakAndDeloadLeaveTheVerdictAndTheActivePhaseUnchanged` (fixture E2 and E3: for every
+  fixture week they overlap, the presentation with events differs from the one without only in
+  `eventNote` and `marked`)
 
 Backup — `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (extended)
 - `testPersonalEventsRoundTripAsOneString`
@@ -865,17 +1132,34 @@ In the Python suite that already asserts on product source (stage 1 §8.6).
 - `test_widgets_watch_and_shared_payloads_never_name_personal_events`: no occurrence of
   `PersonalEvent` or `personalEvents.` under `StrandiOSWidgets/`, `StrandiOSShared/` or the watch
   targets.
-- `test_notification_producers_never_name_personal_events`: none in the seven files that build
+- `test_notification_producers_never_name_personal_events`: none in the eight files that build
   notification content (`Strand/App/AppModel.swift` excepted by a narrower pattern on its
   notification function; `Strand/System/BatteryNotifier.swift`, `CoachBriefScheduler.swift`,
   `IllnessNotifier.swift`, `StrainTargetNotifier.swift`, `WeighInReminder.swift`,
-  `WindDownNudge.swift`), and the test fails if a new file under `Strand/` or `StrandiOS/` builds
-  `UNMutableNotificationContent` without being added to the list.
+  `WindDownNudge.swift`, and stage 3's `Strand/System/IntakeCutoffReminder.swift`), and the test
+  fails if a new file under `Strand/` or `StrandiOS/` builds `UNMutableNotificationContent` without
+  being added to the list. Seven of the eight exist at the base commit. The eighth is stage 3's:
+  whichever of stages 3 and 5 merges second adds it to the list in the same commit. Stage 3 merges
+  first under the build order, so this stage's test is written with all eight. If stage 3's
+  reminder is not built, the entry is left out, because `test_allowlists_still_match` fails on a
+  listed file that does not exist.
 - `test_coach_context_never_reads_personal_events`: none in `Strand/AI/`.
 - `test_scorecard_logic_never_sees_events`: none in `CutScorecard.swift` or
   `CutScorecardInputBuilder.swift`.
 - `test_app_group_suite_is_never_given_the_events`: no file writes a `personalEvents.` key through
   `UserDefaults(suiteName:`.
+- `test_personal_events_declare_no_day_rule_of_their_own`: `PersonalEvents.swift` and
+  `PersonalEventsPacket.swift` contain no `parseYMD(`, no `formatYMD(` and no `isValidDay`; each
+  day-key question there is a `CanonicalDay.` call.
+- `test_no_flag_class_is_cloned`: no file declares `PersonalEventsFlag`, and
+  `noop.personalEventsEnabled` is observed only through `ObservableDefaultsFlag`.
+- `test_packet_lines_has_at_most_one_production_caller`: `packetLines(` occurs outside tests only in
+  `PersonalEventsPacket.swift` and, once the packet v2 change has merged, in stage 2's assembler.
+- `test_timeline_reads_events_only_through_visible`: when `Strand/Data/TimelineSources.swift` exists
+  and names `PersonalEventStore`, it also contains `PersonalEvents.visible(` with
+  `includeSensitive: false`. The check is skipped, and reported as skipped, while the file does not
+  exist (stage 6 merges after this stage); stage 6's own test of a private deload is the behavioural
+  half.
 - `test_allowlists_still_match`: each allowlisted file still contains its pattern.
 
 Behavioural scans, in `StrandTests/PersonalEventPrivacyTests.swift`. The fixture's sensitive label
@@ -905,7 +1189,7 @@ request.
 | F3 | Ongoing treated as ending on its start day | `testOngoingEventStartedBeforeTheWeekCovers` |
 | F4 | Week range of six days, or of eight | `testOneDayEventOnEachDayOfTheWeekIsWithin`, `testOneDayEventOnTheSundayBeforeIsBefore` |
 | F5 | `visible` ignores the flag | `testVisibleRemovesSensitiveEventsUnlessIncluded` |
-| F6 | `packetLines` prints a hidden-count line | `testPacketLinesWithOnlySensitiveEventsAndSensitiveOffSayNoneListed` |
+| F6 | `packetLines` prints a hidden-count line, or counts hidden events in the "earlier" row | `testPacketLinesWithOnlySensitiveEventsAndSensitiveOffSayNoneListed`, `testEarlierNotShownCountsOnlyListedEvents` |
 | F7 | Caption prints the label of a sensitive event | `testChartCaptionAndScorecardNoteContainNoSensitiveLabelOrNote` |
 | F8 | `coveredSlots` skips sensitive events | `testCoveredSlotsCountsSensitiveEvents` |
 | F9 | Store drops an unreadable element on save | `testUnreadableElementIsKeptVerbatimAcrossAddUpdateAndDelete` |
@@ -922,34 +1206,48 @@ request.
 | F20 | Thinning drops the last mark of a run | `testThinningKeepsTheFirstAndLastMarkOfEveryRun` |
 | F21 | Bar marks placed at index over count minus one | `testBarsPlacesIndexPlusHalfOverCount` |
 | F22 | Caption and marks read the store separately, one filtered | `testMarksAndCaptionAreResolvedFromTheSameEvents` |
+| F23 | The row cap removed from `packetLines` | `testPacketLinesStopAtTheRowLimitWithAnEarlierNotShownRow`, `testWidestPacketRowsStayUnderTheByteAllowance` |
+| F24 | A note printed without `CoachPacket.sanitize` | `testPacketLabelAndNoteGoThroughCoachPacketSanitize` |
+| F25 | `packetLines` returns the `== EVENTS ==` heading as its first row | `testPacketLinesNeverReturnAHeading` |
+| F26 | `visible` keeps a sensitive event whose kind is not sensitive by default | `testVisibleRemovesAPrivateDeloadAndAPrivateDietBreak` |
+| F27 | A private day-validity function written inside `PersonalEvents.swift` | `test_personal_events_declare_no_day_rule_of_their_own` |
+| F28 | The presenter suppresses the verdict while a diet break overlaps the judged week | `testDietBreakAndDeloadLeaveTheVerdictAndTheActivePhaseUnchanged` |
 
 ### 12.7 Parity
 
-**Written disposition (R43); no Kotlin is written.**
+**Written disposition (R43). Android is skipped; this stage has no Kotlin work.**
 
 - `PersonalEvents` (pure logic in `StrandAnalytics`) has no Kotlin twin. Android has no events
-  surface in this workstream and the owner has no Android device. Each public declaration carries
-  the comment "No Kotlin twin: personal iPhone fork, owner decision of 11 November 2026."
+  surface in this workstream. Each public declaration carries the comment "No Kotlin twin:
+  iPhone-only by the owner's decision (stage 1 ruling R43)."
 - `ChartAxisMarks` is `StrandDesign`, which has no Kotlin counterpart by design.
-- The stored shape that crosses a contract is the one whitelist key. Its drift is stated in §9.4.
+- The one stored shape that crosses a contract shared with Android is the whitelist key. Its drift
+  is stated in §9.4.
 - The gate script's Android rows are waived by flag and reported as waived (`Tools/personal/gate.sh`,
   `--waive android`), never as passed.
 - What the parity ledger and ratchet print for new one-sided declarations was not run (§16).
 
 ### 12.8 Simulator and rehearsal
 
-- Every frame of round 7 reproduced from `PersonalEventsDemo` at the default and largest text size,
-  Reduce Motion on and off; add, edit, delete, end-today and the unreadable-store path exercised by
-  tapping.
+- Every frame of `design/round-s5-events/s5-frames.json` reproduced from `PersonalEventsDemo` through
+  `--demo-screen events-<frame id>` at the default and largest text size, Reduce Motion on and off;
+  add, edit, delete, end-today and the unreadable-store path exercised by tapping. Captures come
+  from the simulator and the demo names, never from the phone.
+- The demo's data is the one Fixture Person: the stage 1 series (weigh-ins on Wednesdays from
+  2031-01-08, 100.0 kg falling towards the 94.0 kg target, protein floor 100 g, week 10 missed) with
+  the events of §13.1 added. `PersonalEventsDemo` builds its scorecard states from the stage 1 demo
+  fixture and does not define a second set of weights.
 - Side-by-side captures of each adopting chart with the flag off against the base commit: identical.
-- Real-data rehearsal (0B-7): the owner's history in a simulator with a handful of events entered
-  privately; check the scorecard note against the weeks the owner remembers, and a backup and
-  restore of that copy. Results stay under `PersonalData/`.
+- Real-data rehearsal (0B-7), run privately in a simulator: the scorecard note, a backup and a
+  restore. Its results stay out of the repository.
 
 ## 13. Fixture
 
-Everything here is invented. "Fixture Person" does not exist. The calendar is the stage 1 fixture's
-(stage 1 §13): week 1 starts Monday 2031-01-06, weigh-ins on Wednesdays, week 10 has no weigh-in.
+Everything here is invented. "Fixture Person" does not exist, and is the same invented person in
+every stage: the reference is stage 1 §13. Phase "Fixture cut", kind `cut`, started Monday
+2031-01-06, target 94.0 kg; weigh-ins on Wednesdays from 2031-01-08, starting at 100.0 kg; protein
+floor 100 g; week 10 (2031-03-10 to 2031-03-16) has no weigh-in. This stage adds events to that
+person and changes none of those values. Demo and app-target fixtures use that series (§12.8).
 
 ### 13.1 Events
 
@@ -965,6 +1263,10 @@ Everything here is invented. "Fixture Person" does not exist. The calendar is th
 | E8 | travel | — | 2031-02-22 | 2031-02-24 | — | false | 1007 |
 
 Stored ids are `e1` … `e8` padded to sixteen hex characters in the test fixture file.
+
+E2 and E3 are the diet-break and deload cases of §1's rule: both lie inside the one phase "Fixture
+cut", no phase starts or ends on their days, and the stage 1 verdict sequence (stage 1 §13.3) is
+unchanged with them stored.
 
 ### 13.2 Expected overlap by week
 
@@ -991,34 +1293,104 @@ judged week is week 12, the note's line is "Private event · 26 Mar", and E1 app
 section if `evidenceStartDay` is on or before 2031-03-16. The Test author reads `evidenceStartDay`
 from the stage 1 result and does not assume it.
 
-### 13.3 Packet goldens, range 2031-01-06 to 2031-06-04
+### 13.3 Packet row goldens
 
-Sensitive off:
+Each golden is the exact array `packetLines` returns for the eight events of §13.1 (G-E6 uses its
+own events). The ranges are the lengths stage 2's packet offers, ending on a fixture Wednesday.
+
+| Golden | Range | Days |
+|---|---|---|
+| G-E1 | 2031-03-13 to 2031-03-26 | 14 |
+| G-E2 | 2031-01-30 to 2031-02-26 | 28 |
+| G-E3 | 2031-05-08 to 2031-06-04 | 28 |
+| G-E4 | 2031-01-09 to 2031-01-22 | 14 |
+| G-E5 | 2031-04-10 to 2031-04-23 | 14 |
+| G-E6 | 2031-02-27 to 2031-03-26 | 28 |
+
+G-E1, sensitive off:
 
 ```
-EVENTS (entered by the owner; whole local days)
-- 2031-01-22: Supplement change
-- 2031-02-03 to 2031-02-09: Deload
-- 2031-02-22 to 2031-02-24: Travel
-- 2031-03-10 to 2031-03-16: Travel. Note: Fixture trip
-- 2031-04-14 to 2031-04-27: Diet break
+entered by the owner, whole local days, oldest first:
+  2031-03-10..2031-03-16: travel; note "Fixture trip"
 ```
 
-Sensitive on adds, in start order, `- 2031-03-26: Fixture change. Note: Fixture note` after the
-March travel line and `- 2031-05-19, ongoing: Illness` at the end.
+G-E1, sensitive on, adds one row at the end:
+
+```
+  2031-03-26: custom "Fixture change"; note "Fixture note"
+```
+
+G-E2, the same with the switch off or on:
+
+```
+entered by the owner, whole local days, oldest first:
+  2031-02-03..2031-02-09: deload
+  2031-02-22..2031-02-24: travel
+```
+
+G-E3, sensitive off, is the single row:
+
+```
+events: none listed in range
+```
+
+G-E3, sensitive on:
+
+```
+entered by the owner, whole local days, oldest first:
+  2031-05-19..ongoing: illness
+```
+
+G-E4, either setting:
+
+```
+entered by the owner, whole local days, oldest first:
+  2031-01-22: supplementChange
+```
+
+G-E5, either setting. The event runs four days past the range and is printed whole:
+
+```
+entered by the owner, whole local days, oldest first:
+  2031-04-14..2031-04-27: dietBreak
+```
+
+G-E6. Events: fifteen one-day `travel` events, no note, not sensitive, on 2031-03-01 to 2031-03-15,
+`createdAt` 2000 to 2014. Fourteen rows:
+
+```
+entered by the owner, whole local days, oldest first:
+  (3 earlier events in range not shown)
+  2031-03-04: travel
+  2031-03-05: travel
+  2031-03-06: travel
+  2031-03-07: travel
+  2031-03-08: travel
+  2031-03-09: travel
+  2031-03-10: travel
+  2031-03-11: travel
+  2031-03-12: travel
+  2031-03-13: travel
+  2031-03-14: travel
+  2031-03-15: travel
+```
+
+The whole-packet goldens that contain these rows under `== EVENTS ==` belong to the packet v2 change
+and are written there, on stage 2's fixture.
 
 ### 13.4 Variants
 
 | Variant | Change | Expected |
 |---|---|---|
-| V1 | No events | Every list empty; packet "none listed"; no note; no marks |
-| V2 | Only E5 and E6, sensitive off | Packet "none listed"; marks at weeks 12, 20, 21, 22; captions say "Private event" |
+| V1 | No events | Every list empty; packet rows are the single row `events: none listed in range`; no note; no marks |
+| V2 | Only E5 and E6, sensitive off | Packet rows are the single row `events: none listed in range` for any range; marks at weeks 12, 20, 21, 22; captions say "Private event" |
 | V3 | E1 with `endDay` 2031-03-09 (before its start) | Dropped by `normalized`; the store refuses to save it |
 | V4 | A second event with E1's id and a different start | The later one in input order is kept |
 | V5 | E5 given `endDay` 2031-05-25 | Weeks 21 and 22 lose their mark |
 | V6 | Stored string with one extra element of kind `"somethingNew"` | Eight events read; one unreadable entry reported and preserved through a save |
 | V7 | Stored value `"{"` | `needsAttention`; no events; writes refused |
 | V8 | App-target tests that involve the repository's clock-bound reads | Dates relative to the real clock (stage 1 ruling R31); the 2031 fixture is for pure logic and store-only cases |
+| V9 | E2 (deload) and E3 (diet break) with `sensitive` true | `visible(_, includeSensitive: false)` returns neither; captions and the scorecard note say "Private event"; with the switch off G-E2 loses its deload row and G-E5 becomes the single "none listed" row; weeks 5, 15 and 16 keep their marks |
 
 ## 14. Work packages and file ownership
 
@@ -1026,15 +1398,31 @@ March travel line and `- 2031-05-19, ongoing: Illness` at the end.
 
 | WP | Role | Files |
 |---|---|---|
-| 5-2 | Designer | `design/round7-events/` (new); a round 7 command in `design/figma-plugin/code.js` and `manifest.json` |
-| 5-3 | Test author | New: `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/PersonalEventsTests.swift`, `PersonalEventsFixture.swift`; `Packages/StrandDesign/Tests/StrandDesignTests/ChartAxisMarksTests.swift`; `StrandTests/PersonalEventStoreTests.swift`, `PersonalEventOwnershipTests.swift`, `PersonalEventPresenterTests.swift`, `PersonalEventSheetModelTests.swift`, `PersonalEventChartSourceTests.swift`, `CutScorecardEventNoteTests.swift`, `PersonalEventBackupTests.swift`, `PersonalEventPrivacyTests.swift`; `Tools/test_personal_events_boundaries.py`. Extended: `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (new methods only) |
-| 5-4 | Implementer A (pure) | `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEvents.swift` |
-| 5-5 | Implementer B (storage) | New: `Strand/Data/PersonalEventStore.swift`. Edited: `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (two entries and a comment) |
+| 5-2 | Designer | Files inside `design/round-s5-events/` only, including `s5-frames.json`. The folder and the `importS5` plugin command already exist (orchestrator's scaffolding, §18); `design/figma-plugin/code.js` and `manifest.json` are **not** edited by this stage. The combined frames for the Health card, Settings and the scorecard screen are a separate, shared design task |
+| 5-3 | Test author | New: `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/PersonalEventsTests.swift`, `PersonalEventsFixture.swift`; `Packages/StrandDesign/Tests/StrandDesignTests/ChartAxisMarksTests.swift`; `StrandTests/PersonalEventStoreTests.swift`, `PersonalEventOwnershipTests.swift`, `PersonalEventPresenterTests.swift`, `PersonalEventSheetModelTests.swift`, `PersonalEventChartSourceTests.swift`, `CutScorecardEventNoteTests.swift`, `PersonalEventBackupTests.swift`, `PersonalEventPrivacyTests.swift`; `Tools/test_personal_events_boundaries.py`. Extended, after stage 3's methods are in: `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (new methods only, after stage 3's) |
+| 5-4 | Implementer A (pure) | `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEvents.swift`. Needs the scaffolding's `CanonicalDay.swift`; does not need stage 2 |
+| 5-5 | Implementer B (storage) | New: `Strand/Data/PersonalEventStore.swift` (needs the scaffolding's `ObservableDefaultsFlag.swift`). Edited, after stage 3's two keys are in: `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (two entries and one line in the fork-only comment block) |
 | 5-6 | Implementer C (chart marks) | New: `Packages/StrandDesign/Sources/StrandDesign/ChartAxisMarks.swift`. Edited, one parameter and one row each: `NoopLineChart.swift`, `NoopBarChart.swift`, `StrandiOS/Scorecard/ScorecardWeekChart.swift` |
-| 5-7 | Implementer D, after G1 and after 5-4, 5-5, 5-6 merge | New: `Strand/Data/PersonalEventPresenter.swift`, `PersonalEventsModel.swift`, `PersonalEventChartSource.swift`; `Strand/Screens/PersonalEventChartCaption.swift`; `StrandiOS/Events/PersonalEventsView.swift`, `PersonalEventSheet.swift`, `PersonalEventsDemo.swift`. Edited: `Strand/Data/CutScorecardPresenter.swift` and `CutScorecardModel.swift` (the context field and the two outputs); `StrandiOS/Scorecard/ScorecardView.swift` (the note and `axisMarks:`); `StrandiOS/Redesign/RedesignRoute.swift`, `RedesignHealthView.swift` (the row); `RecoveryDetailView.swift`, `StrainDetailView.swift`, `StrandiOS/App/TrainingHubView.swift`, `Strand/Screens/MetricExplorerView.swift`, `Strand/Screens/TrendsView.swift` (two lines per chart site); `Strand/Screens/SettingsView.swift` (the two switches); `StrandiOS/App/StrandiOSApp.swift` debug block (one line: fall through to `PersonalEventsDemo.screen(named:)` after `ScorecardDemo`, `:623`) |
-| 5-8 | Localiser | `Strand/Resources/Localizable.xcstrings` |
-| 5-9 | Implementer A, after stage 2's builder merges | The one call from the packet builder to `PersonalEvents.packetLines`, and the packet preview's "private events left out" line. Files named by the stage 2 specification |
+| 5-7 | Implementer D, after G1 and after 5-4, 5-5, 5-6 merge | New: `Strand/Data/PersonalEventPresenter.swift`, `PersonalEventsModel.swift`, `PersonalEventChartSource.swift`; `Strand/Screens/PersonalEventChartCaption.swift`; `StrandiOS/Events/PersonalEventsView.swift`, `PersonalEventSheet.swift`, `PersonalEventsDemo.swift`. Edited: `Strand/Data/CutScorecardPresenter.swift` and `CutScorecardModel.swift` (the context field and the two outputs); `StrandiOS/Scorecard/ScorecardView.swift` (the note and `axisMarks:`); `RecoveryDetailView.swift`, `StrainDetailView.swift`, `StrandiOS/App/TrainingHubView.swift`, `Strand/Screens/MetricExplorerView.swift`, `Strand/Screens/TrendsView.swift` (two lines per chart site) |
+| 5-7h | Orchestrator, one small commit inside this stage's serialised step | The hotspot edits, in the approved order: `StrandiOS/Redesign/RedesignRoute.swift` (the case and the route switch), `RedesignHealthView.swift` (the row, third in the fixed order), `Strand/Screens/SettingsView.swift` (the two switches), and one array element for `PersonalEventsDemo.screen(named:)` in the demo registry of `StrandiOS/App/StrandiOSApp.swift` |
+| 5-8 | Localiser, last step of this stage | `Strand/Resources/Localizable.xcstrings` |
+| 5-9 | Implementer A, after stage 2 has merged | New: `Packages/StrandAnalytics/Sources/StrandAnalytics/PersonalEventsPacket.swift` and `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/PersonalEventsPacketTests.swift` (written by the Test author first). `packetLines` then has tests and no production caller until the packet v2 change |
 | 5-10 | Reviewers (correctness, contract, data-safety) and Verifier | None; read-only |
+
+`PersonalEventsDemo.screen(named:)` has the signature of `ScorecardDemo.screen(named:)`
+(`static func screen(named name: String) -> AnyView?`) and returns nil for every name that does not
+begin `events-`. The registry holds the providers in one order (scorecard, packet, intake, body
+record, events, stage 6); this stage adds its own file and its one element and changes no other
+element.
+
+**Not this stage's work: packet v2.** After stages 3 and 5 have merged, one follow-up change adds
+the `intake` and `events` sections to the packet together: both `CoachPacketSection` cases, the
+input fields, the removal of both names from the header's `not-recorded-by-app` line, one version
+bump, the events allowance in the byte budget (`PersonalEvents.packetByteAllowance`), one new set of
+whole-packet goldens, the read-only caption in the packet sheet (§7.5), the three caption strings
+(§11) and one revision of the Claude-side text. From this stage it takes `packetLines`, the two
+constants and `PersonalEventStore.packetIncludesSensitive`, unchanged. Stage 2 ships version 1
+unchanged, with `events` still listed under `not-recorded-by-app`.
 
 `project.yml` needs no change; the directories are included by path (stage 1 §14). Run
 `xcodegen generate` after adding files. `StrandiOS/Events/` is a new directory under an included
@@ -1044,53 +1432,78 @@ root.
 
 | Hotspot | Edit | Order |
 |---|---|---|
-| `Strand/Resources/Localizable.xcstrings` | New strings | Localiser only, once, after English is final. **Serialise with every other stage** |
-| `Strand/Screens/SettingsView.swift` | Two switches in the iPhone-only block | After stage 1's edits are merged; serialise with stages 2, 3 and 4 if they add switches |
-| `StrandiOS/App/StrandiOSApp.swift` debug block | One line | Serialise with any stage adding a demo screen |
-| `Packages/WhoopStore/.../BackupSettings.swift` | One key in two maps | Serialise with any stage adding a backup key |
-| `Strand/Data/CutScorecardPresenter.swift`, `CutScorecardModel.swift`, `StrandiOS/Scorecard/ScorecardView.swift`, `ScorecardWeekChart.swift` | Additive fields and one row | Serialise with stage 1 follow-ups and with stage 2's extraction if it touches the presenter |
-| `StrandiOS/Redesign/RedesignHealthView.swift`, `RedesignRoute.swift` | One row, one case | Serialise with stages 4 and 6 |
-| `Strand/Screens/MetricExplorerView.swift`, `TrendsView.swift` | Two lines per chart | Shared with macOS: build `Strand` too |
-| `NoopLineChart.swift`, `NoopBarChart.swift` | One defaulted parameter each | Serialise with stage 3 if its card adds chart options |
+| `Strand/Resources/Localizable.xcstrings` | New strings | One Localiser at a time, last step of each stage, in integration order: Lab Book ownership, 2, 3, 4, **5**, 6. Never two branches at once |
+| `StrandiOS/App/StrandiOSApp.swift` debug block | One array element in the demo registry | The scaffolding lands the registry first; then each stage adds one element in integration order |
+| `Strand/Screens/SettingsView.swift` | Two switches in the iPhone-only block | After the combined Settings frame is approved: 2 (card), 3 (card), 4 (card), **5** (two switches), 6 (section). Shared with macOS: build `Strand` after the edit |
+| `StrandiOS/Redesign/RedesignHealthView.swift` | One row | 2, 4, **5**, 6; rows in the approved order (§10.1) |
+| `StrandiOS/Redesign/RedesignRoute.swift` | One case, and the route switch | 3, 4, **5**, 6. Additive cases |
+| `StrandiOS/Scorecard/ScorecardView.swift` | The event note and `axisMarks:` | 2 (toolbar item), 3 (protein row caption and tap), **5**, 6 (two link rows) |
+| `Strand/Data/CutScorecardModel.swift` | `events` into the context in `load()` | 2 (moves `evaluateStored` out), **5**, 6 (its `evaluation` property). One small commit each |
+| `Strand/Data/CutScorecardPresenter.swift` | `eventNote` and `marked` | 4 (history caption and read-only rule), then **5**. Different functions; still serial |
+| `Packages/WhoopStore/.../BackupSettings.swift` and `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` | One key in two maps and one comment line; new test methods only | 3 (two keys), **5** (one key), 6 (four keys). One writer at a time |
+| `StrandiOS/Scorecard/ScorecardWeekChart.swift` | The `axisMarks` parameter | **5** first; stage 6 only reuses the view afterwards |
+| `Tools/test_personal_events_boundaries.py` notification list | Lists stage 3's `Strand/System/IntakeCutoffReminder.swift` | Whichever of stages 3 and 5 merges second adds the file in the same commit (§12.5). Stage 3's specification carries the same note |
+| `NoopLineChart.swift`, `NoopBarChart.swift`, `Strand/Screens/MetricExplorerView.swift`, `TrendsView.swift`, `RecoveryDetailView.swift`, `StrainDetailView.swift`, `StrandiOS/App/TrainingHubView.swift` | One defaulted parameter per chart type; two lines per chart site | This stage only. `MetricExplorerView` and `TrendsView` are shared with macOS: build `Strand` too |
 
 **Not edited:** `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, the
 three Today views, `Packages/StrandImport` `MarkerCatalog`, `Packages/WhoopStore/.../Database.swift`,
-any widget file, any notification file, `Strand/AI/`, anything under `android/`.
+`Strand/Data/CutScorecardInputBuilder.swift`, `Packages/StrandAnalytics/.../CutScorecard.swift`,
+`CanonicalDay.swift`, `ObservableDefaultsFlag.swift`, `design/figma-plugin/`, stage 2's
+`CoachPacket.swift` and assembler, stage 3's intake files, stage 6's `TimelineSources.swift`, any
+widget file, any notification file, `Strand/AI/`, anything under `android/`.
 
 ### 14.3 Parallel and serial
 
-- **Parallel with any other stage, from now:** 5-2 (design), 5-3 (tests), 5-4 (pure logic), 5-6
-  (the `StrandDesign` file and its tests; the three one-line chart edits wait their turn in §14.2).
-- **Parallel with each other:** 5-4, 5-5, 5-6.
-- **Serial:** 5-7 after G1 and after 5-4, 5-5, 5-6; 5-8 after 5-7's English is final; 5-9 after
-  stage 2 merges. If stage 5 merges before stage 2, `packetLines` ships tested with no production
-  caller and 5-9 adds the caller in stage 2's branch; the parity ledger's "production caller in the
-  same change" expectation (CONTEXT §7 item 3) is then knowingly unmet for that one function and the
-  pull request says so.
-- **For stage 6:** the checkpoint timeline can read `PersonalEventStore.events` and
-  `PersonalEvents.events(overlapping:_:in:)` as they are. The niggle log needs fields an event does
-  not have (location, character, triage); it should not be squeezed into `PersonalEvent`. If stage 6
-  needs SQL, §8.3 is the designed path.
+- **Before anything:** the orchestrator's scaffolding commit (§18).
+- **Parallel with any other stage, from now, with no app build:** 5-2 (design), 5-3 (tests, new
+  files only), 5-4 (pure logic and its `swift test`), the new `ChartAxisMarks.swift` of 5-6 and its
+  tests, and the new files of 5-5 and 5-7 written but not built. Package tests run one package at a
+  time per worktree.
+- **Serialised on the one app build tree**, as step 6 of the build order: Lab Book ownership, the
+  stage 1 follow-up, stage 2, stage 3, stage 4, then **this stage** (store, chart marks, scorecard
+  note, Events screen), then stage 6, then packet v2. Inside this stage: 5-4, 5-5, 5-6; then 5-7
+  after G1; then 5-7h; then 5-9; then 5-8 last.
+- **5-9 and the packet.** Stage 2 merges before this stage, so `CoachPacket.sanitize` exists when
+  5-9 is written. `packetLines` ships tested with no production caller; the packet v2 change adds
+  the caller. The parity ledger's "production caller in the same change" expectation (CONTEXT §7
+  item 3) is knowingly unmet for that one function between the two merges, and the pull request
+  says so.
+- **For stage 6.** `PersonalEventStore.events` is a synchronous main-actor **property** (not an
+  `async` function); it returns `[]` while this stage's flag is off or the store is unreadable.
+  Stage 6's `TimelineEventSource` is an adapter over it: it reads the property, calls
+  `PersonalEvents.visible(_, includeSensitive: false)`, then keeps the kinds it shows. A private
+  event of any kind, a private deload included, is absent from the timeline; stage 6 owns the test.
+  This stage offers stage 6 nothing else and changes nothing for it. The niggle log needs fields an
+  event does not have (location, character, triage) and is not squeezed into `PersonalEvent`. If a
+  later stage needs SQL, §8.3 is the designed path.
+- **Phone.** No install for this stage alone. Events are installed together with stage 6 and packet
+  v2 at one accepted milestone, after a fresh backup, with the flag off until the owner switches it
+  on.
 
 ## 15. Open questions for the owner
 
-Work proceeds on each recommendation.
+Work proceeds on each recommendation. Every row is **decided by default**: the recommendation is the
+design in force in this document. The last column says what changes if the owner says otherwise.
 
-| # | Question | Recommendation, in force until overruled |
-|---|---|---|
-| S1 | Where are events stored: a settings list carried in the backup (no migration), or a new database table (a migration)? | The settings list (§8.2). The table is designed in §8.3 and needs your go-ahead if you prefer it |
-| S2 | Are whole days enough, or does an event need a time of day? | Whole days. Every chart and the scorecard that would show an event is per day or per week |
-| S3 | Private events and their notes will be inside backup files, readable by anyone who opens the file. Keep them in the backup? | Yes: a record that vanishes on restore is worse, and the backup already holds the health database. It makes the "encrypted backups" backlog item more pressing |
-| S4 | Outside the Events screen, should a private event show its name, or the words "Private event"? | "Private event" everywhere else in the app: chart captions, the scorecard note, spoken text |
-| S5 | Which kinds start as private? | Illness and "Something else". You can flip the switch on any single event |
-| S6 | Should the classic charts (`TrendChart`, used when classic mode is on) also get marks? | No. They carry gridlines and a baseline rule you have rejected, and the redesign is the interface in use. Adoption later is one parameter |
-| S7 | Should the scorecard note also list events from the earlier weeks its rules look back over, or the judged week only? | Both, in two short sections, three lines each at most |
-| S8 | Should the in-app Coach (the ChatGPT-backed one) ever see events? | No, not in this stage. Its output reaches a notification and a widget, and its input leaves the phone |
-| S9 | The app already has its own strap-derived "illness watch". Should logging an illness event affect it, or the other way round? | Neither. One is your statement, the other is an estimate; they stay separate |
-| S10 | Should a chart caption be a link to the Events screen? | Not in this stage: the caption sits in screens shared with macOS that do not know the iPhone routes. The Health row and the scorecard note are the ways in |
-| S11 | Should the packet tell the coach that private events were left out? | No. The packet says "none listed" or lists what is visible. The app's own preview tells you how many were left out |
-| S12 | Should planned (future) events be allowed? | Yes. They appear under "Upcoming" and mark nothing until their days arrive |
-| S13 | Should "Mark a Moment" offer to create an event? | No. It stays as it is; it is a strap gesture with no kind or range |
+| # | Question | Recommendation, in force | If the owner says otherwise |
+|---|---|---|---|
+| S1 | Where are events stored: a settings list carried in the backup (no migration), or a new database table (a migration)? | The settings list (§8.2) | §8.3 is built instead: a migration, a data move from the settings key, a rehearsal on a copy of the database before any install. `PersonalEventStore` is the only file whose body changes; its API stays |
+| S2 | Are whole days enough, or does an event need a time of day? | Whole days. Every chart and the scorecard that would show an event is per day or per week | A new stored field and version `v` 2 of the element; overlap stays per day |
+| S3 | Private events and their notes will be inside backup files, in clear text, with the Android side knowingly behind (one of seven such fork-only keys across stages 3, 5 and 6). Keep them in the backup? | Yes: a record that vanishes on restore is worse, and the backup already holds the health database. Encrypted backups rise in priority | The key leaves the whitelist and §9.4's tests invert: events do not survive a restore, and the Events screen says so |
+| S4 | Outside the Events screen, should a private event show its name, or the words "Private event"? | "Private event" in chart captions, the scorecard note and spoken text; absent from stage 6's timeline; out of the packet unless switched on | The caption and the note print the kind name (never the note) for private events, and the privacy tests of §12.5 change their needles |
+| S5 | Which kinds start as private? | Illness and "Something else". You can flip the switch on any single event | `defaultSensitive` changes for the kinds named; stored events keep the flag they have |
+| S6 | Should the classic charts (`TrendChart`, used when classic mode is on) also get marks? | No. The redesign is the interface in use. Adoption later is one parameter | One more adopting family in §10.5 and its sites |
+| S7 | Should the scorecard note also list events from the earlier weeks its rules look back over, or the judged week only? | Both, in two short sections, three lines each at most | `earlierTitle` and `earlierLines` are dropped |
+| S8 | Should the in-app Coach (the one that sends its context to a network provider) ever see events? | No. Its output reaches a notification and a widget, and its input leaves the phone | A separate change with its own consent wording; the two Coach tests of §12.5 are replaced, not deleted |
+| S9 | The app already has its own strap-derived "illness watch". Should logging an illness event affect it, or the other way round? | Neither. One is your statement, the other is an estimate; they stay separate | A separate specification; nothing here reads the other |
+| S10 | Should a chart caption be a link to the Events screen? | Not in this stage: the caption sits in screens shared with macOS that do not know the iPhone routes. The Health row and the scorecard note are the ways in | The caption view gains an optional action supplied by the iPhone screens |
+| S11 | Should the packet tell the coach that private events were left out? | No. The packet says "none listed" or lists what is visible. The packet sheet shows you, as a read-only caption, whether private events are left out or included | A fixed row is added to `packetLines` and the events allowance is recomputed |
+| S12 | Should planned (future) events be allowed? | Yes. They appear under "Upcoming" and mark nothing until their days arrive | The sheet refuses a start after today |
+| S13 | Should "Mark a Moment" offer to create an event? | No. It stays as it is; it is a strap gesture with no kind or range | A separate change to the Automations screen |
+| S14 | During a diet break or a deload, should the scorecard keep giving its verdict with the event noted beneath it? And is a diet break an event, not a phase? | Yes to both. A diet break or deload is an event; phases are only the long blocks (§1, §10.6). Stages 1 and 6 state the same rule | If the verdict should pause instead, that is a change to stage 1's evaluation with a new ruling; this stage's presenter still only adds the note |
+| S15 | A supplement or medication name can reach the in-app Coach through the Journal, where stage 3 keeps its supplement ticks. Events themselves never reach it (S8). Should stage 3 keep those Journal questions out of the Coach context? | Yes; stage 3 builds the exclusion and its test. Nothing in this stage changes either way: no event, of kind "Supplement change" or any other, enters the Coach context | Stage 3 leaves the Journal as it is; this stage is unaffected |
+| S16 | The Health card, the Settings section and the scorecard screen each gain entries from several stages. Approve one combined layout, with the Health rows in the order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet? | Yes; approved once, before any view code, then this stage's own frames | The order in §10.1, §10.6 and §10.7 follows the layout you choose; no logic changes |
+| S17 | Install events on the phone together with stage 6 and packet v2 at one milestone, after a fresh backup, with the flag off until you switch it on? | Yes | The install plan changes; the code does not |
 
 ## 16. Not determined
 
@@ -1101,8 +1514,18 @@ Work proceeds on each recommendation.
 - **What `Tools/parity_ledger.py` and `parity_ratchet.py` report** for new public declarations in
   `StrandAnalytics` with no twin claim. Not run. The stored authority already fails to reproduce on
   this branch (BASELINE.md), so the effect could not be isolated by reading.
-- **Stage 2's names and its section order on this branch.** The packet builder does not exist here.
-  §7.5 fixes this stage's lines; where they are placed belongs to the stage 2 specification.
+- **Stage 2's code on this branch.** The packet renderer does not exist here. §7.5 follows the
+  grammar of the stage 2 specification as written; `CoachPacket.sanitize` was read from that
+  specification, not from code. Where the events section sits among the packet's sections, and the
+  input field that carries the rows, are fixed by the packet v2 change.
+- **A label or note that trips stage 2's privacy scan** blocks the whole packet (§7.5). Whether the
+  blocked state should name the events section, or the event sheet should warn while typing, is not
+  designed here.
+- **The exact declarations of the scaffolding** (`ObservableDefaultsFlag`, `CanonicalDay`, the demo
+  registry's element type, the wording of the fork-only backup comment block). §18 states what this
+  stage relies on; the scaffolding commit is the authority.
+- **The row height and divider rule of the Health card with three or more rows.** Left to the
+  combined frame.
 - **The exact x-values each `NoopLineChart` site plots** (`MetricExplorerView.swift:2356`,
   `TrendsView.swift:1039`). Both pass date-based points; whether every point sits on a day boundary
   was not traced. The implementer of 5-7 confirms per site and uses the `values` constructor.
@@ -1114,15 +1537,68 @@ Work proceeds on each recommendation.
   support tool). None was found under `Strand/`, `StrandiOS/` or `Packages/`.
 - **The token names in §10.5** are proposals. `NoopTheme.Layout` was read for its existing members
   only (`Packages/StrandDesign/Sources/StrandDesign/NoopTheme.swift:114-139`).
-- **Whether the owner's real history holds any `moments`.** Irrelevant to the design; noted because
-  that list silently drops entries beyond 500.
+- **Whether the `moments` list's silent trim beyond 500 entries should be fixed.** Outside this
+  stage; noted because it is the behaviour this stage's store avoids.
 - **Nothing was compiled or run.** Every API in §6, §9.3 and §10.5 is a design, not a build result.
 
 ## 17. Design approval record (G1)
 
-Not yet submitted. Frames required, round 7: Health row (2); Events screen (every row of §10.2);
-event sheet (every row of §10.3); delete confirmation; chart marks on a weekly curve, a thirty-day
-bar chart and a line chart, each with no event, one event, a dense run, and a missed week; the
-caption in each state of its table; the scorecard note in each state of §10.6; the two Settings
-switches. Two options to choose between, as their own frames: a dot per covered position (the
-recommendation) against a dot at the start and an open dot at the end.
+Not yet submitted. Two approvals are needed, in this order.
+
+1. **The combined layout, shared by all stages, approved once:** the Health tab's "More health" card
+   with every stage's row in the fixed order, the Settings section, and the scorecard screen. It is
+   not this stage's round and is not re-opened here.
+2. **This stage's frames,** `design/round-s5-events/s5-frames.json`: Health row (2, inside the
+   approved card); Events screen (every row of §10.2); event sheet (every row of §10.3); delete
+   confirmation; chart marks on a weekly curve, a thirty-day bar chart and a line chart, each with
+   no event, one event, a dense run, and a missed week; the caption in each state of its table; the
+   scorecard note in each state of §10.6 (inside the approved scorecard layout); the two Settings
+   switches (inside the approved Settings layout). Two options to choose between, as their own
+   frames: a dot per covered position (the recommendation) against a dot at the start and an open
+   dot at the end.
+
+Each frame id is also a demo name: `--demo-screen events-<frame id>`.
+
+## 18. Reconciliation (11 November 2026)
+
+What changed in this file for each conflict of the cross-stage check that names stage 5.
+
+| Conflict | Change in this file |
+|---|---|
+| X3 | `packetLines` now returns body rows only, in stage 2's grammar: no heading, a fixed intro row, two-space rows, raw kind values, label and note through `CoachPacket.sanitize`, a cap of 12 rows with an "earlier not shown" row, and a fixed allowance of 2,000 bytes (§6, §7.5). "None listed" wording kept. The switch stays `personalEvents.packetIncludesSensitive` and is shown in the packet sheet as a read-only caption (§7.5, §10.7). Goldens rewritten over 14-day and 28-day ranges (§13.3); tests and fault lines updated (§12.1, §12.6) |
+| X4 | The section case, heading, version bump, budget, whole-packet goldens, sheet caption and Claude-side text moved out of this stage to the one "packet v2" change after stages 3 and 5 (§1, §14.1, §14.3). WP 5-9 now delivers only `PersonalEventsPacket.swift` and its tests |
+| X5 | Design round renamed `design/round-s5-events/`, frames `s5-frames.json`, command `importS5`; the plugin files are no longer edited by this stage (§5, §10, §12.8, §14.1, §17) |
+| X6 | The debug block edit is one array element in the scaffolding's demo registry; demo names carry the prefix `events-` (§2, §5, §14.1, §14.2) |
+| X8 | `PersonalEventStore.events` is stated as a synchronous main-actor property that is `[]` while the flag is off; stage 6 adapts to it and this stage adds no `async` read (§4.3, §14.3) |
+| X9 | Stage 6's `TimelineEventSource` is listed as a reader that must pass through `visible(_, includeSensitive: false)`; a private event is absent from the timeline. Added a private deload and diet break variant, a `visible` test, a source scan and a fault line (§4.3, §7.5, §12.1, §12.5, §12.6, §13.4 V9, S4) |
+| X13 | Stated that no intake-target override is built or supplied; the intake screen may show the event caption only (§1) |
+| X14 | Stated the one rule: a diet break or deload is an event, phases are the long blocks, the scorecard keeps reporting with the note under the verdict (§1, §10.6, §13.1); a test and a fault line added; listed as S14, decided by default |
+| X15 | Recorded as S15, decided by default: stage 3 excludes its supplement Journal questions from the Coach context; no event of any kind enters it (S8 unchanged) |
+| X16 | The notification-producer scan lists eight files, the eighth being stage 3's `IntakeCutoffReminder.swift`; the second of the two stages to merge adds it (§12.5, §14.2) |
+| X18 | The `CutScorecardModel.load()` edit is ordered after stage 2's move and stage 3's builder change and before stage 6's property; the presenter edit after stage 4's; `ScorecardView` after stages 2 and 3 (§10.6, §14.2) |
+| X19 | `PersonalEvents.isValidDay` removed; every day-key question goes through `CanonicalDay`. The `PersonalEventsFlag` type removed; the flag is one static `ObservableDefaultsFlag` on the store (§5, §6, §7.1, §7.3, §7.4, §9.3, §12.1, §12.3, §12.5) |
+| X20 | Stated that there is one Fixture Person, the stage 1 one, with its phase, weights, floor and missed week; the demo uses that series (header, §12.8, §13) |
+| X21 | Backup edit ordered after stage 3's and before stage 6's, with one line in the shared fork-only comment block; the Android drift stated in one paragraph; folded into S3 as decided by default (§9.4, §14.2) |
+| X22 | Health row placed third in the fixed order; Settings and scorecard-screen order fixed by the combined frame; the combined layout is a separate approval (§10, §10.1, §10.6, §10.7, §17, S16) |
+
+Owner decisions adopted as the design in force: the settings list (S1), "Private event" outside the
+Events screen with illness and custom kinds private by default (S4, S5), no events in the in-app
+Coach (S8), the verdict continuing through a diet break or deload (S14), the fork-only backup key in
+clear text (S3), the combined layout (S16) and milestone installs (S17).
+
+Android (R43): this document contains no instruction to write or run Kotlin. The one stored-data
+contract it changes is the backup whitelist, and §9.4 states the drift.
+
+Also added, so that tests can be written from this document alone: the app-side API of §10.9.
+
+**Shared scaffolding this stage expects from the orchestrator's step 0**, one commit on the
+integration branch before any stage:
+
+| Scaffolding | What this stage relies on |
+|---|---|
+| The demo registry line in `StrandiOS/App/StrandiOSApp.swift` | An ordered list of demo providers consulted for an unknown `--demo-screen` name, in the order scorecard, packet, intake, body record, events, stage 6. This stage adds one element for `PersonalEventsDemo.screen(named:)` |
+| The plugin import commands and stage-named design folders | `importS5` in `design/figma-plugin/code.js` and `manifest.json`, reading `design/round-s5-events/s5-frames.json`; the folder `design/round-s5-events/` |
+| `ObservableDefaultsFlag` | `Strand/Data/ObservableDefaultsFlag.swift`: a main-actor `ObservableObject` with `init(key: String, defaults: UserDefaults = .standard)`, a published read-only `isEnabled` that follows every write to the key, and `set(_:)` |
+| `CanonicalDay` | `Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift` with `number(_:)`, `key(_:)`, `daysBetween(_:_:)` and `weekStart(_:)` as in stage 6 §6.0, and the one test that pins it to `CutScorecard.weekStart` |
+| `ChargeTypicalBand` | Nothing. This stage neither reads nor shows the typical range; listed so the absence is deliberate |
+| The fork-only backup keys comment | A comment block above the Swift whitelist in `BackupSettings.swift` listing every fork-only key; this stage adds the line for `personalEvents.items`. Also the note in the fork's personal documents that the Kotlin whitelist is knowingly behind |
