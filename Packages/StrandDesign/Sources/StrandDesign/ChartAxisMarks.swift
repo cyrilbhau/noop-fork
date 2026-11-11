@@ -1,11 +1,7 @@
-import Foundation
+import SwiftUI
 
 // Where the quiet event dots sit on a chart's time axis (stage 5 specification §10.5): the mark
-// positions and their layout. A mark carries no text and no value.
-//
-// This file is self-contained (Foundation only, no other declaration of any module), because the
-// specification's home for it is `Packages/StrandDesign/Sources/StrandDesign/ChartAxisMarks.swift`,
-// beside the row view that draws it; it can be moved there unchanged.
+// positions, their layout, and the row that draws them. A mark carries no text and no value.
 //
 // Pure and total: nothing here throws or traps, and no fraction or offset that is not a finite
 // number is ever returned.
@@ -72,6 +68,15 @@ public struct NoopChartAxisMarks: Equatable, Sendable {
         // type's invariant is "ascending, distinct".
         return NoopChartAxisMarks(fractions: ChartAxisMarkLayout.ascendingDistinct(fractions),
                                   accessibilityText: accessibilityText)
+    }
+}
+
+extension NoopChartAxisMarks {
+    /// A chart's spoken value with the marks' text appended: `value` alone when there is no marks
+    /// text, and "" when there is neither. A chart passes its existing value (nil when it has none).
+    public static func spokenValue(_ value: String?, appending marks: NoopChartAxisMarks?) -> String {
+        let extra = marks.flatMap { $0.fractions.isEmpty ? nil : $0.accessibilityText }
+        return [value, extra].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }
 
@@ -150,5 +155,41 @@ public enum ChartAxisMarkLayout {
             runStart = runEnd + 1
         }
         return kept
+    }
+}
+
+/// The fixed-height strip of event dots under a plot (stage 5 §10.5). Each mark is a small filled
+/// dot in the tertiary text colour: no line, band, rule, label or gesture. Marks with no fractions
+/// draw nothing and take no height, so a chart with no events is exactly as it was.
+public struct NoopChartAxisMarkRow: View {
+    public var marks: NoopChartAxisMarks
+    /// The plot's own leading and trailing insets, so a dot sits under the position it marks.
+    public var leading: CGFloat
+    public var trailing: CGFloat
+
+    public init(marks: NoopChartAxisMarks, leading: CGFloat = 0, trailing: CGFloat = 0) {
+        self.marks = marks
+        self.leading = leading
+        self.trailing = trailing
+    }
+
+    public var body: some View {
+        if !marks.fractions.isEmpty {
+            GeometryReader { geometry in
+                let offsets = ChartAxisMarkLayout.offsets(marks, width: geometry.size.width, leading: leading,
+                                                          trailing: trailing,
+                                                          minSpacing: NoopTheme.Layout.chartAxisMarkSpacing)
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(offsets.enumerated()), id: \.offset) { _, x in
+                        Circle()
+                            .fill(NoopTheme.textTertiary)
+                            .frame(width: NoopTheme.Layout.chartAxisMark, height: NoopTheme.Layout.chartAxisMark)
+                            .position(x: x, y: geometry.size.height / 2)
+                    }
+                }
+            }
+            .frame(height: NoopTheme.Layout.chartAxisMarkRow)
+            .accessibilityHidden(true)
+        }
     }
 }
