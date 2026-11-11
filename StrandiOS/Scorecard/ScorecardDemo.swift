@@ -1,5 +1,6 @@
 #if DEBUG
 import SwiftUI
+import UserNotifications
 import StrandAnalytics
 import StrandDesign
 import StrandImport
@@ -16,6 +17,8 @@ import WhoopStore
 //   cards-a1 … cards-a3            the Today card tile in each state (A3 is AX5)
 //   scorecard-live                 the real screen on this simulator's own store (not synthetic:
 //                                  pair it with `-noop.cutScorecardEnabled YES`)
+//   flow-<step>                    one step of a scripted flow on this simulator's own store, driven
+//                                  through the models the buttons call (see "Scripted flows" below)
 //
 // `--demo-scroll <0…1>` opens the scorecard, the weigh-in sheet and the phase sheet part-way down.
 //
@@ -29,6 +32,8 @@ enum ScorecardDemo {
     static func screen(named name: String) -> AnyView? {
         // The real screen on the simulator's own store and settings, to exercise the live wiring.
         if name == "scorecard-live" { return AnyView(ScorecardView()) }
+        // A scripted flow step on the simulator's own store (see "Scripted flows" below).
+        if name.hasPrefix("flow-") { return AnyView(ScorecardFlowHost(step: String(name.dropFirst(5)))) }
         let parts = name.split(separator: "-")
         guard parts.count == 2, let letter = parts[1].first, let number = Int(parts[1].dropFirst()) else { return nil }
         switch (String(parts[0]), letter) {
@@ -543,6 +548,7 @@ private struct ScorecardCardsDemo: View {
             }
             .padding(NoopTheme.Layout.gutter)
         }
+        .scorecardDemoScroll()
         .background(NoopTheme.canvas.ignoresSafeArea())
         .dynamicTypeSize(largest ? DynamicTypeSize.accessibility5...DynamicTypeSize.accessibility5
                                  : DynamicTypeSize.xSmall...DynamicTypeSize.accessibility5)
@@ -556,6 +562,395 @@ private struct ScorecardCardsDemo: View {
         return YourCardTile(card: .scorecard, inputs: inputs, isAccessibilitySize: largest, loading: false,
                             refreshSequence: 0, captionMinimum: 0, onCoach: {}, onStepSources: {},
                             loadStepsAverage: { _ in nil })
+    }
+}
+
+// MARK: - Scripted flows (simulator verification)
+
+/// DEBUG-only. `--demo-screen flow-<step>` runs ONE step of a scripted flow through the same model
+/// objects the buttons call (`WeighInSheetModel`, `WeighInHistoryModel`, `ScorecardPhaseDraft`,
+/// `CutScorecardFlag`, `WeighInReminder` over a stub centre), on this simulator's OWN store and
+/// settings and on the real clock, then shows the screen that step leaves behind. The store keeps
+/// what a step wrote, so a flow is a sequence of launches with a screenshot after each. A step whose
+/// name ends in a sheet state replays the earlier calls of its flow and stops before the write.
+///
+/// What each step observed is appended to `Documents/scorecard-flow.log` in the app's container.
+/// This drives the models, not the controls: gestures, the keyboard, focus, sheet presentation and
+/// navigation are not exercised. Every value is the synthetic fixture's. Never run it on a store
+/// that holds real readings.
+private struct ScorecardFlowHost: View {
+    let step: String
+    @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var profile: ProfileStore
+    @State private var outcome: Outcome?
+    @State private var showsSheet = true
+
+    private enum Shown {
+        case scorecard, gatedScorecard, log
+        case history(WeighInHistoryModel?)
+        case sheet(WeighInSheetModel, calendar: Bool)
+        case phase(ScorecardPhaseDraft)
+        /// Another surface of the app on the same store, for the one-number check.
+        case surface(String)
+    }
+
+    /// `show-<surface>` draws the surface this tall (`--demo-tall <points>`) inside an outer scroll
+    /// view, so that `--demo-scroll` can reach the part of it below the first screenful.
+    private static var surfaceHeight: CGFloat {
+        let arguments = CommandLine.arguments
+        return arguments.firstIndex(of: "--demo-tall")
+            .flatMap { arguments.indices.contains($0 + 1) ? Double(arguments[$0 + 1]) : nil }
+            .map { CGFloat($0) } ?? 4_000
+    }
+
+    private struct Outcome {
+        var context: ScorecardContext
+        var shown: Shown
+        var lines: [String]
+    }
+
+    /// A notification centre that only records, with a fixed permission.
+    private final class StubCenter: WeighInReminderCenter {
+        var status: UNAuthorizationStatus
+        var requests: [UNNotificationRequest] = []
+        init(status: UNAuthorizationStatus) { self.status = status }
+        func authorizationStatus() async -> UNAuthorizationStatus { status }
+        func requestAuthorization() async -> Bool { status == .authorized }
+        func add(_ request: UNNotificationRequest) async {
+            requests.removeAll { $0.identifier == request.identifier }
+            requests.append(request)
+        }
+        func removePendingRequests(withIdentifiers identifiers: [String]) {
+            requests.removeAll { identifiers.contains($0.identifier) }
+        }
+        func pendingRequests() async -> [UNNotificationRequest] { requests }
+    }
+
+    var body: some View {
+        Group {
+            if let outcome {
+                screen(outcome)
+                    .environment(\.scorecardContextOverride, outcome.context)
+                    .toolbarBackground(.hidden, for: .navigationBar)
+            } else {
+                NoopTheme.canvas.ignoresSafeArea()
+            }
+        }
+        .task {
+            guard outcome == nil else { return }
+            // The app opens its store during launch.
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            let context = ScorecardContext.live(repository: repo, profile: profile)
+            var result = await run(context)
+            result.lines += await Self.snapshot(context)
+            Self.write(step, result.lines)
+            outcome = result
+        }
+    }
+
+    @ViewBuilder
+    private func screen(_ outcome: Outcome) -> some View {
+        switch outcome.shown {
+        case .scorecard:
+            ScorecardScreen(context: outcome.context)
+        case .gatedScorecard:
+            ScorecardView()
+        case .history(let model):
+            WeighInHistoryScreen(context: outcome.context, model: model)
+        case .sheet(let model, let calendar):
+            ScorecardScreen(context: outcome.context)
+                .sheet(isPresented: $showsSheet) {
+                    WeighInSheetScreen(context: outcome.context, model: model, showsCalendar: calendar)
+                }
+        case .phase(let draft):
+            ScorecardScreen(context: outcome.context)
+                .sheet(isPresented: $showsSheet) {
+                    ScorecardPhaseSheet(context: outcome.context, draft: draft) {}
+                }
+        case .surface(let name):
+            ScrollView {
+                surface(name).frame(height: Self.surfaceHeight)
+            }
+            .scorecardDemoScroll()
+            .background(NoopTheme.canvas.ignoresSafeArea())
+        case .log:
+            ScrollView {
+                Text(verbatim: outcome.lines.joined(separator: "\n"))
+                    .noopFont(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(NoopTheme.Layout.gutter)
+            }
+            .background(NoopTheme.canvas.ignoresSafeArea())
+        }
+    }
+
+    @ViewBuilder
+    private func surface(_ name: String) -> some View {
+        switch name {
+        case "today": RedesignTodayView()
+        case "health": RedesignHealthView()
+        case "profile": ProfileSheet(path: .constant(NavigationPath()), onClose: {})
+        // The Your cards editor on the stored selection, and on a selection never edited.
+        case "editor", "editor-default":
+            let raw = name == "editor" ? UserDefaults.standard.string(forKey: DashboardCardPrefs.selectionKey) ?? "" : ""
+            TodayCustomizationSheet(
+                initialDestination: .yourCards, sectionOrderRaw: .constant(""), hiddenSectionsRaw: .constant(""),
+                keyMetricsRaw: .constant(""), keyMetricsDetailed: .constant(false),
+                keyMetricsWindowDays: .constant(14), dashboardCardsRaw: .constant(raw),
+                hostedCardsRaw: .constant(""), redesign: true)
+        default: SettingsView()
+        }
+    }
+
+    // MARK: The steps
+
+    /// 07:02 local, `offset` days from today.
+    private static func at(_ offset: Int) -> Date {
+        let calendar = Calendar.current
+        let day = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: Date())) ?? Date()
+        return day.addingTimeInterval(7 * 3_600 + 120)
+    }
+
+    private static func dayKey(_ offset: Int) -> String {
+        LocalDayWindows(timeZone: .current).dayKey(for: at(offset))
+    }
+
+    private static func describe(_ model: WeighInSheetModel) -> [String] {
+        ["sheet: step=\(model.step) phase=\(model.phase) weightText=\"\(model.weightText)\" waistText=\"\(model.waistText)\"",
+         "sheet: canAdvance=\(model.canAdvance) canSave=\(model.canSave) primaryTitle=\"\(model.primaryTitle)\" offersSkip=\(model.offersSkip) canEditWaist=\(model.canEditWaist)",
+         "sheet: weightHint=\"\(model.weightHint)\" waistHint=\"\(model.waistHint)\"",
+         "sheet: dateNote=\(model.dateNote ?? "nil") skipNote=\(model.skipNote ?? "nil") failure=\(model.failureMessage ?? "nil")"]
+    }
+
+    /// A new weigh-in through the sheet's model, up to `stop`. 0: weight typed. 1: Next pressed and
+    /// the waist typed. 2: Save (or Skip when `waist` is nil).
+    @MainActor
+    private func weighIn(_ context: ScorecardContext, offset: Int?, weight: String, waist: String?,
+                         stop: Int, lines: inout [String]) async -> WeighInSheetModel {
+        let model = context.sheetModel()
+        await model.prepare()
+        lines.append("prepare(): offered weightText=\"\(model.weightText)\" waistText=\"\(model.waistText)\"")
+        if let offset { model.takenAt = Self.at(offset) }
+        model.weightText = weight
+        lines.append("typed weight \(weight)" + (offset.map { ", takenAt \(Self.dayKey($0)) 07:02" } ?? ", takenAt now"))
+        if stop >= 1 {
+            lines += Self.describe(model)
+            model.advance()
+            lines.append("advance()")
+            if let waist { model.waistText = waist; lines.append("typed waist \(waist)") }
+        }
+        if stop >= 2 {
+            lines += Self.describe(model)
+            if waist != nil { await model.save(); lines.append("save()") } else { await model.skipWaist(); lines.append("skipWaist()") }
+            if model.phase == .saved { await context.model.load() }
+        }
+        lines += Self.describe(model)
+        return model
+    }
+
+    @MainActor
+    private func historyRow(_ context: ScorecardContext, offset: Int, lines: inout [String])
+        async -> (WeighInHistoryModel, WeighInHistoryRow?) {
+        let model = context.historyModel()
+        await model.load()
+        guard case .loaded(let history) = model.state else { return (model, nil) }
+        let row = history.rows.first { $0.day == Self.dayKey(offset) }
+        lines.append("history row for \(Self.dayKey(offset)): " + (row.map {
+            "\($0.dateText) weight=\($0.weightText ?? "nil") waist=\($0.waistText ?? "nil") canEdit=\($0.canEdit) canDelete=\($0.canDelete) represents=\($0.representsWeek)"
+        } ?? "none"))
+        return (model, row)
+    }
+
+    @MainActor
+    private func run(_ context: ScorecardContext) async -> Outcome {
+        var lines: [String] = []
+        let flag = CutScorecardFlag.shared
+        func done(_ shown: Shown) -> Outcome { Outcome(context: context, shown: shown, lines: lines) }
+        if step.hasPrefix("show-") { return done(.surface(String(step.dropFirst(5)))) }
+        switch step {
+        case "state":
+            return done(.log)
+        case "scorecard":
+            await context.model.load()
+            return done(.scorecard)
+        case "history":
+            return done(.history(nil))
+
+        // Settings switch.
+        case "flag-on", "flag-off":
+            lines.append("flag before: \(flag.isEnabled)")
+            flag.set(step == "flag-on")
+            lines.append("CutScorecardFlag.set(\(step == "flag-on")); flag after: \(flag.isEnabled); stored: \(UserDefaults.standard.bool(forKey: CutScorecardSettings.enabledKey))")
+            return done(.gatedScorecard)
+
+        // Your cards editor: the stored selection with the scorecard card first.
+        case "card-add":
+            let defaults = UserDefaults.standard
+            let raw = defaults.string(forKey: DashboardCardPrefs.selectionKey) ?? ""
+            let current = DashboardCardPrefs.decodeEnabled(raw)
+            let edited = [.scorecard] + current.filter { $0 != .scorecard }
+            defaults.set(DashboardCardPrefs.encode(edited), forKey: DashboardCardPrefs.selectionKey)
+            lines.append("selection before: \(current.map(\.rawValue))")
+            lines.append("selection after: \(DashboardCardPrefs.decodeEnabled(defaults.string(forKey: DashboardCardPrefs.selectionKey) ?? "").map(\.rawValue))")
+            return done(.log)
+
+        // First phase and rules.
+        case "phase-first-open", "phase-first-save":
+            var draft = ScorecardPhaseDraft.current(settings: context.settings, today: context.today)
+            lines.append("draft opened: isNewPhase=\(draft.isNewPhase) name=\(draft.name) start=\(draft.startDay) target=\(String(describing: draft.targetWeightKg)) band=\(draft.rateLowPercentPerWeek)-\(draft.rateHighPercentPerWeek)")
+            guard step == "phase-first-save" else { return done(.phase(draft)) }
+            draft.name = Fixture.phase.name
+            draft.startDay = Self.dayKey(-23)
+            draft.targetWeightKg = Fixture.phase.targetWeightKg
+            draft.rateLowPercentPerWeek = Fixture.phase.rateLowPercentPerWeek
+            draft.rateHighPercentPerWeek = Fixture.phase.rateHighPercentPerWeek
+            draft.parameters = Fixture.parameters
+            lines.append("edited to the fixture: canSave=\(draft.canSave) invalid=\(draft.invalidFields.map(\.rawValue)) message=\(draft.validationMessage ?? "nil")")
+            lines.append("save(to:) returned \(draft.save(to: context.settings)); stored phases: \(context.settings.phases.map { "\($0.kind.rawValue) \($0.name) \($0.startDay)" })")
+            await context.model.load()
+            return done(.scorecard)
+        case "phase-edit-open":
+            let draft = ScorecardPhaseDraft.current(settings: context.settings, today: context.today)
+            lines.append("draft opened: isNewPhase=\(draft.isNewPhase) name=\(draft.name) start=\(draft.startDay)")
+            return done(.phase(draft))
+        case "phase-new-open", "phase-new-save":
+            var draft = ScorecardPhaseDraft.current(settings: context.settings, today: context.today)
+                .startingNewPhase(today: context.today)
+            draft.kind = .other
+            draft.name = "Maintenance"
+            lines.append("startingNewPhase: isNewPhase=\(draft.isNewPhase) kind=\(draft.kind.rawValue) start=\(draft.startDay) canSave=\(draft.canSave)")
+            guard step == "phase-new-save" else { return done(.phase(draft)) }
+            lines.append("save(to:) returned \(draft.save(to: context.settings)); stored phases: \(context.settings.phases.map { "\($0.kind.rawValue) \($0.name) \($0.startDay)" })")
+            await context.model.load()
+            return done(.scorecard)
+
+        // A weigh-in today: weight, then waist.
+        case "weighin-weight":
+            return done(.sheet(await weighIn(context, offset: nil, weight: "97.6", waist: "98.5", stop: 0, lines: &lines), calendar: false))
+        case "weighin-waist":
+            return done(.sheet(await weighIn(context, offset: nil, weight: "97.6", waist: "98.5", stop: 1, lines: &lines), calendar: false))
+        case "weighin-save":
+            _ = await weighIn(context, offset: nil, weight: "97.6", waist: "98.5", stop: 2, lines: &lines)
+            return done(.scorecard)
+
+        // Backdated into earlier weeks.
+        case "backdate-open":
+            return done(.sheet(await weighIn(context, offset: -14, weight: "99.2", waist: "99.5", stop: 0, lines: &lines), calendar: true))
+        case "backdate-save":
+            for (offset, weight, waist) in [(-14, "99.2", "99.5"), (-21, "100.0", "100.0"), (-7, "98.4", "99.0")] {
+                _ = await weighIn(context, offset: offset, weight: weight, waist: waist, stop: 2, lines: &lines)
+            }
+            return done(.scorecard)
+
+        // A weight with the waist skipped.
+        case "skip-open":
+            return done(.sheet(await weighIn(context, offset: -9, weight: "98.9", waist: nil, stop: 1, lines: &lines), calendar: false))
+        case "skip-save":
+            _ = await weighIn(context, offset: -9, weight: "98.9", waist: nil, stop: 2, lines: &lines)
+            return done(.history(nil))
+
+        // Edit a value, then a date.
+        case "edit-value-open", "edit-value-save":
+            let (_, row) = await historyRow(context, offset: -7, lines: &lines)
+            guard let row else { return done(.log) }
+            let model = context.sheetModel(editing: row)
+            await model.prepare()
+            lines += Self.describe(model)
+            model.weightText = "98.3"
+            lines.append("typed weight 98.3")
+            guard step == "edit-value-save" else { lines += Self.describe(model); return done(.sheet(model, calendar: false)) }
+            model.advance()
+            lines.append("advance()")
+            lines += Self.describe(model)
+            await model.save()
+            lines.append("save()")
+            lines += Self.describe(model)
+            if model.phase == .saved { await context.model.load() }
+            return done(.history(nil))
+        case "edit-date-open", "edit-date-save":
+            let (_, row) = await historyRow(context, offset: -9, lines: &lines)
+            guard let row else { return done(.log) }
+            let model = context.sheetModel(editing: row)
+            await model.prepare()
+            model.takenAt = Self.at(-8)
+            lines.append("takenAt moved to \(Self.dayKey(-8)) 07:02")
+            lines += Self.describe(model)
+            guard step == "edit-date-save" else { return done(.sheet(model, calendar: true)) }
+            model.advance()
+            lines.append("advance()")
+            lines += Self.describe(model)
+            await model.save()
+            lines.append("save()")
+            lines += Self.describe(model)
+            if model.phase == .saved { await context.model.load() }
+            return done(.history(nil))
+
+        // Delete a reading: ask, then confirm.
+        case "delete-ask", "delete-confirm":
+            let (model, row) = await historyRow(context, offset: -8, lines: &lines)
+            guard let row else { return done(.log) }
+            model.requestDelete(row)
+            let question = model.deleteConfirmation
+            lines.append("requestDelete: pending=\(model.pendingDelete?.dateText ?? "nil") confirmation=\(String(describing: question))")
+            guard step == "delete-confirm" else { return done(.history(model)) }
+            await model.confirmDelete()
+            lines.append("confirmDelete(): pending=\(model.pendingDelete?.dateText ?? "nil")")
+            await context.model.load()
+            return done(.history(nil))
+
+        // The weekly reminder over a stub centre: allowed, then refused.
+        case "reminder-on", "reminder-denied", "reminder-off":
+            let center = StubCenter(status: step == "reminder-denied" ? .denied : .authorized)
+            let reminder = WeighInReminder(center: center, settings: context.settings)
+            let outcome = await reminder.setEnabled(step != "reminder-off")
+            lines.append("setEnabled(\(step != "reminder-off")) with the stub centre \(step == "reminder-denied" ? "denied" : "authorized") -> \(outcome); stored switch: \(context.settings.reminderEnabled)")
+            await reminder.reconcile(latestWeighInDay: WeighInReminder.latestWeighInDay(in: context.provider, today: context.today))
+            lines.append("reconcile(): \(center.requests.count) pending")
+            for request in center.requests {
+                lines.append("pending \(request.identifier): \"\(request.content.title)\" / \"\(request.content.body)\" \((request.trigger as? UNCalendarNotificationTrigger).map { "\($0.dateComponents) repeats=\($0.repeats)" } ?? "no calendar trigger")")
+            }
+            return done(.log)
+
+        default:
+            lines.append("unknown flow step")
+            return done(.log)
+        }
+    }
+
+    // MARK: The record
+
+    /// What the one resolver calls current after the step, and what the list holds.
+    @MainActor
+    private static func snapshot(_ context: ScorecardContext) async -> [String] {
+        await context.provider.refresh()
+        func current(_ kind: BodyMeasurementKind) -> String {
+            guard let reading = context.provider.current(kind, consumer: .display) else { return "nil" }
+            return "\(reading.value) from \(reading.source) on \(reading.day ?? "no day")"
+        }
+        var lines = ["after: flag=\(CutScorecardFlag.shared.isEnabled) today=\(context.today)",
+                     "after: resolver weight (display) = \(current(.weight)); waist = \(current(.waist))"]
+        let history = context.historyModel()
+        await history.load()
+        if case .loaded(let loaded) = history.state {
+            lines.append("after: history has \(loaded.rows.count) rows")
+            lines += loaded.rows.map {
+                "  \($0.dateText) | \($0.weightText ?? "-") | \($0.waistText ?? "not measured") | \($0.caption) | represents=\($0.representsWeek)"
+            }
+        }
+        return lines
+    }
+
+    private static func write(_ step: String, _ lines: [String]) {
+        guard let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let url = folder.appendingPathComponent("scorecard-flow.log")
+        let text = (["## flow-\(step)"] + lines).joined(separator: "\n") + "\n\n"
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(Data(text.utf8))
+            try? handle.close()
+        } else {
+            try? Data(text.utf8).write(to: url)
+        }
     }
 }
 #endif
