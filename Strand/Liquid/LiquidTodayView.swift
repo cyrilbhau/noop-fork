@@ -107,6 +107,8 @@ struct LiquidTodayView: View {
     /// #1862: the optional Coach launcher sheet. Presentation state only — opening it requests nothing.
     @State private var showCoachLauncher = false
     @State private var showSettings = false
+    /// The weigh-in sheet the Weight tile opens with the scorecard flag on (ruling R41).
+    @State private var showWeighInSheet = false
     /// The iPhone shell's Profile sheet (replaces the More tab). nil on macOS, where the avatar opens Settings.
     @Environment(\.openProfile) private var openProfile
     @State private var synthesisExpanded = false
@@ -494,6 +496,9 @@ struct LiquidTodayView: View {
         .sheet(isPresented: $showCoachLauncher) {
             CoachLauncherSheet()
         }
+        #if os(iOS)
+        .sheet(isPresented: $showWeighInSheet) { WeighInSheet() }
+        #endif
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 SettingsView()
@@ -1279,8 +1284,13 @@ struct LiquidTodayView: View {
             ktile(String(localized: "Steps"), icon: keyMetricIcon(metric), stepsText, "", StrandPalette.chargeColor,
                   fracOver(stepCount, 10000), key: stepsDetailKey, detailMetric: stepsDetailMetric)
         case .weight:
+            // Ruling R41: the tap target is the one decision every weight readout shares. Flag off
+            // it is the catalogue page, as it was; flag on it leads to a correction.
+            let correction = BodyMeasurementCorrection.route(for: .liquidTodayWeightTile,
+                                                             policy: scorecardFlag.displayPolicy)
             let (val, cap) = weightTile(bodyWeight)
-            ktile(String(localized: "Weight"), icon: keyMetricIcon(metric), val, "", StrandPalette.metricAmber, nil, key: "weight", caption: cap)
+            ktile(String(localized: "Weight"), icon: keyMetricIcon(metric), val, "", StrandPalette.metricAmber, nil,
+                  key: correction.metricKey, caption: cap, opensWeighIn: Self.presentsWeighIn(correction))
         case .calories:
             // #616: imported-first value (imported ?: activeKcalEst) + route the tap to the matching
             // detail source, so the number, its sparkline and the chart it opens all agree.
@@ -1319,7 +1329,8 @@ struct LiquidTodayView: View {
     }
 
     private func ktile(_ label: String, icon: String, _ value: String, _ unit: String, _ tint: Color, _ frac: Double?,
-                       key: String? = nil, detailMetric: MetricDescriptor? = nil, caption: String? = nil) -> some View {
+                       key: String? = nil, detailMetric: MetricDescriptor? = nil, caption: String? = nil,
+                       opensWeighIn: Bool = false) -> some View {
         let displayValue = Self.tileDisplayValue(value, unit: unit)
         let tile = VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -1376,7 +1387,11 @@ struct LiquidTodayView: View {
         // #430 parity: tap -> the metric's trend detail (the same Explore dossier its MetricRow pushes,
         // closure-based NavigationLink per #38). A metric with no catalog entry stays inert.
         return Group {
-            if let metric = detailMetric ?? key.flatMap({ key in
+            if opensWeighIn {
+                Button { showWeighInSheet = true } label: { tile }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the weigh-in sheet")
+            } else if let metric = detailMetric ?? key.flatMap({ key in
                 MetricCatalog.all.first(where: { $0.key == key })
             }) {
                 NavigationLink { MetricDetailView(metric: metric) } label: { tile }
@@ -1385,6 +1400,16 @@ struct LiquidTodayView: View {
                 tile
             }
         }
+    }
+
+    /// True when the tile presents the weigh-in sheet for `route`. The sheet is an iPhone screen:
+    /// on macOS no route presents it, and a correction route leaves the tile without a tap target.
+    private static func presentsWeighIn(_ route: BodyMeasurementCorrectionRoute) -> Bool {
+        #if os(iOS)
+        return route.offersCorrection
+        #else
+        return false
+        #endif
     }
 
     // MARK: - Last workouts
@@ -1635,7 +1660,7 @@ struct LiquidTodayView: View {
     /// the provider supplies the profile value as it is now.
     private func weightTile(_ dated: ResolvedBodyMeasurement?) -> (value: String, caption: String) {
         let shown = BodyMeasurementProvider.live(repository: repo, profile: profile).displayWeightValue(dated)
-        let caption = dated != nil ? String(localized: "latest") : String(localized: "from profile")
+        let caption = BodyMeasurementCorrection.todayCaption(dated: dated, policy: scorecardFlag.displayPolicy)
         return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
     }
 

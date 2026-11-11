@@ -454,6 +454,8 @@ struct TodayView: View {
     /// #1862: the optional Coach launcher sheet, opened from the default-OFF Coach dashboard card.
     /// Presentation state only — nothing is requested from a provider by opening it.
     @State private var showCoachLauncher = false
+    /// The weigh-in sheet the Weight tile opens with the scorecard flag on (ruling R41).
+    @State private var showWeighInSheet = false
     @State private var showUpdatesInbox = false
 
     /// The NEWEST day-key (max yyyy-MM-dd in `repo.days`) announced to the inbox. Persisted (not @State)
@@ -1649,6 +1651,9 @@ struct TodayView: View {
         .sheet(isPresented: $showCoachLauncher) {
             CoachLauncherSheet()
         }
+        #if os(iOS)
+        .sheet(isPresented: $showWeighInSheet) { WeighInSheet() }
+        #endif
         .sheet(isPresented: $showUpdatesInbox) {
             UpdatesInboxView(onClose: { showUpdatesInbox = false })
         }
@@ -4168,7 +4173,7 @@ struct TodayView: View {
                 }
             )
         case .weight:
-            StatTile(
+            let weight = StatTile(
                 label: "Weight",
                 value: weightTile(shownWeightReading).value,
                 caption: weightTile(shownWeightReading).caption,
@@ -4176,6 +4181,15 @@ struct TodayView: View {
                 sparkline: shownWeightSpark,
                 sparkColor: StrandPalette.accent
             )
+            // Ruling R41: flag off the tile is bare, as it was; flag on a tap leads to a correction.
+            if Self.presentsWeighIn(BodyMeasurementCorrection.route(for: .classicTodayWeightTile,
+                                                                    policy: scorecardFlag.displayPolicy)) {
+                Button { showWeighInSheet = true } label: { weight }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the weigh-in sheet")
+            } else {
+                weight
+            }
         case .calories:
             StatTile(
                 label: "Calories",
@@ -5276,8 +5290,18 @@ struct TodayView: View {
     /// the provider supplies the profile value as it is now.
     private func weightTile(_ dated: ResolvedBodyMeasurement?) -> (value: String, caption: String) {
         let shown = bodyMeasurements.displayWeightValue(dated)
-        let caption = dated != nil ? String(localized: "latest") : String(localized: "from profile")
+        let caption = BodyMeasurementCorrection.todayCaption(dated: dated, policy: scorecardFlag.displayPolicy)
         return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
+    }
+
+    /// True when the tile presents the weigh-in sheet for `route`. The sheet is an iPhone screen:
+    /// on macOS no route presents it, and the tile stays without a tap target.
+    private static func presentsWeighIn(_ route: BodyMeasurementCorrectionRoute) -> Bool {
+        #if os(iOS)
+        return route.offersCorrection
+        #else
+        return false
+        #endif
     }
 
     /// The weight part of `loadHistoryWide`, on its own. Called when the provider's revision moved

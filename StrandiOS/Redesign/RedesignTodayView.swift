@@ -629,15 +629,16 @@ struct RedesignTodayView: View {
             let provider = BodyMeasurementProvider.live(repository: repo, profile: profile)
             let dated = dayModel.shownBodyWeight(provider)
             let shown = provider.displayWeightValue(dated)
-            // Specification §10.8. Flag off: the caption and the route are as they were. Flag on: a
-            // weigh-in is named as a Lab Book reading and the row opens the scorecard it belongs to.
-            let isWeighIn = scorecardFlag.isEnabled && dated?.source == .labBook
-            let caption = dated == nil ? String(localized: "from profile")
-                : isWeighIn ? CutScorecardPresenter.sourceCaption(.labBook) : String(localized: "latest")
+            // Specification §10.8 and ruling R41. Flag off: the caption and the route are as they
+            // were. Flag on: the reading is named by its source, and the row opens the scorecard,
+            // which hosts the weigh-in sheet and the history, whatever the source of the value.
+            let policy = scorecardFlag.displayPolicy
+            let correction = BodyMeasurementCorrection.route(for: .redesignTodayWeightRow, policy: policy)
             return MetricRowContent(
-                title: "Weight", color: NoopTheme.temp, subtitle: caption,
+                title: "Weight", color: NoopTheme.temp,
+                subtitle: BodyMeasurementCorrection.todayCaption(dated: dated, policy: policy),
                 value: UnitFormatter.massFromKilograms(shown.value, system: unitSystem), unit: nil,
-                sparkKey: "weight", route: .metric("weight"), opensScorecard: isWeighIn)
+                sparkKey: "weight", route: correction.metricRoute, opensScorecard: correction == .scorecard)
         default:
             // Score rows retain their existing hero-only presentation; A4 is a separate follow-up.
             return MetricRowContent(title: "", color: NoopTheme.textTertiary, value: nil)

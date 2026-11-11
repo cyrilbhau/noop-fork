@@ -578,8 +578,10 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 #if os(iOS)
                 // Stage 1 specification §10.7: with a dated reading the rows above show it, and a
-                // new value is logged as a weigh-in instead of stepped.
-                if datedBodyReading(.weight) != nil || datedBodyReading(.waist) != nil {
+                // new value is logged as a weigh-in instead of stepped. Ruling R41: the way into
+                // the weigh-in sheet is offered whenever the rows' route says so, a dated reading
+                // or not, so the first weigh-in can be logged from here too.
+                if bodyRowsOfferWeighIn {
                     rowDivider
                     Button { showWeighInSheet = true } label: {
                         Text("Log weigh-in")
@@ -590,10 +592,12 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(StrandPalette.accent)
                     .sheet(isPresented: $showWeighInSheet) { WeighInSheet() }
-                    Text("With the scorecard on, weight and waist come from the latest dated reading, so Settings and the scorecard cannot disagree.")
-                        .font(StrandFont.footnote)
-                        .foregroundStyle(StrandPalette.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if datedBodyReading(.weight) != nil || datedBodyReading(.waist) != nil {
+                        Text("With the scorecard on, weight and waist come from the latest dated reading, so Settings and the scorecard cannot disagree.")
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 #endif
                 rowDivider
@@ -2050,6 +2054,16 @@ struct SettingsView: View {
         return nil
         #endif
     }
+
+    #if os(iOS)
+    /// True when the Weight or the Waist row leads to the weigh-in sheet: with the scorecard flag
+    /// on, whatever the rows show. False with the flag off, when the stepper is the editor.
+    private var bodyRowsOfferWeighIn: Bool {
+        let policy = scorecardFlag.displayPolicy
+        return BodyMeasurementCorrection.route(for: .settingsWeightRow, policy: policy) == .weighInSheet
+            || BodyMeasurementCorrection.route(for: .settingsWaistRow, policy: policy) == .weighInSheet
+    }
+    #endif
 
     /// A dated reading in place of the stepper: the value, then its source and its day.
     private func bodyReadingControl(_ reading: ResolvedBodyMeasurement) -> some View {
