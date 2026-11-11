@@ -49,6 +49,8 @@ final class CoachPacketModel: ObservableObject {
     private let pasteboard: CoachPacketPasteboardWriting
     private let now: () -> Date
     private var generation = 0
+    /// The text the last `copy()` put on the clipboard.
+    private var copiedText: String?
     private var expiryTick: Task<Void, Never>?
 
     init(assemble: @escaping @MainActor () async -> CoachPacketOutcome,
@@ -93,7 +95,12 @@ final class CoachPacketModel: ObservableObject {
             return
         }
         switch outcome {
-        case .ready(let document): state = .ready(document)
+        case .ready(let document):
+            // Ruling A21: "Copied" means the text on screen. A reload that shows other text (the
+            // foreground reload, a flag change, Try again) clears the confirmation. The stale-clipboard
+            // caption stays tied to a changed control (CoachPacketModelTests, behaviour 5).
+            if case .copied = copyState, document.text != copiedText { copyState = .none }
+            state = .ready(document)
         case .blocked: state = .blocked
         case .unavailable: state = .unavailable
         }
@@ -150,6 +157,7 @@ final class CoachPacketModel: ObservableObject {
         guard let document = leavingDocument else { return }
         let plan = CoachPacketCopyPlan(text: document.text, copiedAt: now())
         pasteboard.write(plan)
+        copiedText = document.text
         earlierCopyExpiresAt = nil
         copyState = .copied(expiresAt: plan.expiresAt)
         forgetWhenExpired(plan.expiresAt)
