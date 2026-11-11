@@ -84,7 +84,7 @@ for one.
 | 6 | One observable copy of a feature flag exists | Confirmed for the scorecard key only; the class is not generic. Step 0 adds the generic `ObservableDefaultsFlag` (§9.4) | `CutScorecardModel.swift:18-63` |
 | 7 | Baselines for resting heart rate and HRV exist | Confirmed. `Repository.chargeBaselines` is resolved once per refresh by `ChargeBaselines.resolve` and is "the single funnel every Charge readout below the headline reads" | `Strand/Data/Repository.swift:185-190`, `:1004`, `:1037`; `Packages/StrandAnalytics/Sources/StrandAnalytics/ChargeBaselines.swift:151` |
 | 8 | Today shows trends for HRV and resting heart rate | Confirmed: sparklines built from the merged daily rows (`repo.days`), keyed `hrv` and `rhr`, filtered to a 7, 14 or 30 day window | `Strand/Liquid/LiquidTodayView.swift:3363-3364`, `:3639-3647`, `:1188-1194`; `StrandiOS/Redesign/RedesignTodayView.swift:602` |
-| 9 | A "typical range" is shown for HRV and resting heart rate | Confirmed, in one place: Recovery detail's factors, `baseline ± Baselines.sigma(state)` when the baseline is usable. The expression is a local function | `StrandiOS/Redesign/ScoreDetailData.swift:156-165`; `Baselines.swift:602`. It is the only app-target caller of `Baselines.sigma`. Step 0 moves the expression to `ChargeTypicalBand` (§8.2) |
+| 9 | A "typical range" is shown for HRV and resting heart rate | Confirmed, in one place: Recovery detail's factors, the baseline plus and minus the recovery engine's spread for that baseline state, when the baseline is usable. The expression is a local function and the only one of its kind in the app targets | `StrandiOS/Redesign/ScoreDetailData.swift:156-165`. Step 0 moves the expression to `ChargeTypicalBand.range(_:)`, the only name stage 6 uses for it (§8.2) |
 | 10 | `HRVReadiness` is available as a trend read model | It exists, is experimental, opt-in, and read only by the Test Centre. It is a **tier** (primed, normal, suppressed) | `Packages/StrandAnalytics/Sources/StrandAnalytics/HRVReadiness.swift:1-28`, `:93`; `Strand/Screens/TestCentreView.swift:753`. Not used by this stage (D9) |
 | 11 | The `event` table can hold personal events | It is a strap stream table: primary key `(deviceId, ts, kind)`, carries a `synced` column, is written by the collector and by `recordEvent`, and is in the list a strap delete clears | `Packages/WhoopStore/Sources/WhoopStore/Database.swift:28-34`, `:130-135`; `WhoopStore.swift:187-192`; `StreamStore.swift:288`; `DeviceRegistryStore.swift:162-165`. Not used by this stage (D1) |
 | 12 | `labMarker` is cleared by a strap delete | Confirmed today; ruling R42 reverses it in a separate change that has not landed on this branch | `DeviceRegistryStore.swift:166-173` |
@@ -114,7 +114,7 @@ functions.
 | A7 | Stage 2 moves `evaluateStored` out of `CutScorecardModel` to `CutScorecardInputBuilder.evaluation(today:) async -> CutScorecardEvaluation`, and moves the `CutScorecardEvaluation` type beside the builder. Stage 2 adds no stored evaluation to the model; stage 6 adds it (§8.3) | Stage 2 (§8.2 there) | §8.3 |
 | A8 | The packet has no niggle section; "packet v2" adds intake and events only | Stage 2 | §1 |
 | A9 | Stage 3 adds a widget and a reminder; stage 6 adds neither, so the notification count is unchanged by this stage | Stage 3 | §10.9 |
-| A10 | The Health tab's "More health" card, the Settings screen and the scorecard screen each have one combined design frame covering every stage, approved once, with the fixed row order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet | Orchestrator and Designer | §10.1; work package 6-8 |
+| A10 | The Health tab's "More health" card, the Settings screen and the scorecard screen each have one combined design frame covering every stage, approved once. The Settings cards and the Health rows follow one order, top to bottom: Scorecard, Coach packet, Intake, Body record, Events, Niggle log, Recovery context, Timeline. The combined frame set is the authority; this specification states only its own three places, the last three | Orchestrator and Designer | §10.1; work package 6-8a |
 | A11 | Stage 5 adds `axisMarks: NoopChartAxisMarks? = nil` to `ScorecardWeekChart`. Stage 6 reuses the view after that change and passes no marks | Stage 5 | §10.7 |
 | A12 | Lab Book ownership (R42) lands first in the build order. Stage 6 stores nothing in `labMarker`, so it does not depend on it except through A1 | Lab Book ownership | §9 |
 | A13 | Routes `RedesignRoute.bodyRecord` (stage 4) and `RedesignRoute.personalEvents` (stage 5) exist when their adapters are written | Stages 4, 5 | §10.8 |
@@ -163,7 +163,7 @@ published merged as `Repository.days` (`Repository.swift:184`, set at `:1036`).
 |---|---|---|
 | `Strand/Data/CutScorecardSettings.swift:106-117` | The one reader and writer of `cutScorecard.phases` | The timeline reads `phases` through this type only |
 | `Strand/Data/CutScorecardModel.swift:881` (`ScorecardPhaseDraft.save`), `StrandiOS/Scorecard/ScorecardPhaseSheet.swift` | Writes phases | Untouched. A phase item on the timeline opens this sheet to correct it (R41) |
-| `Strand/Data/CutScorecardModel.swift:141-180` | Evaluates and presents; after stage 2 it calls `CutScorecardInputBuilder.evaluation(today:)` | Gains one stored read-only property (§8.3), after the edits of stages 2 and 5 to the same file |
+| `Strand/Data/CutScorecardModel.swift:141-180` | Evaluates and presents; after stage 2 it calls `CutScorecardInputBuilder.evaluation(today:)` | Gains one stored read-only property (§8.3), in this stage's place in the shared-file order (§14.1) |
 | `Strand/Data/CutScorecardPresenter.swift` (projection strings), `StrandiOS/Scorecard/ScorecardView.swift:507` | Show the projection | Untouched. The timeline's projection item is built from the same evaluation and worded by the same `Wording` (`CutScorecardPresenter.swift:1024`, `:1044`) |
 | `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift:74-75`, `:95-96` | Back up phases and rules | Untouched for those keys |
 
@@ -199,7 +199,7 @@ Created by this stage:
 | Views | `NiggleLogView`, `NiggleDetailView`, `NiggleSheet`, `NiggleRulesSheet`, `PausedExerciseSheet` | `StrandiOS/NiggleLog/` |
 | | `CutStressView` | `StrandiOS/Scorecard/CutStressView.swift` |
 | | `CheckpointTimelineView`, `CheckpointSheet` | `StrandiOS/Timeline/` |
-| Demo | `Stage6Demo`, one element of the demo registry; names begin `niggle-`, `cutstress-` or `timeline-` (§12.8) | `StrandiOS/NiggleLog/Stage6Demo.swift` |
+| Demo | `Stage6Demo`, one element of the demo registry; reserved prefixes `niggle-`, `cutstress-` and `timeline-` (§12.8) | `StrandiOS/NiggleLog/Stage6Demo.swift` |
 | Routes | `RedesignRoute.niggleLog`, `.niggle(id: String)`, `.cutStress`, `.checkpointTimeline` | `StrandiOS/Redesign/RedesignRoute.swift` |
 | Flags (Bool, default `false`) | `noop.niggleLogEnabled`, `noop.cutStressEnabled`, `noop.checkpointTimelineEnabled` | `NiggleLogSettings.enabledKey`, `CutStressModel.enabledKey`, `CheckpointTimelineSettings.enabledKey` |
 | Observable copies of the flags | `NiggleLogSettings.flag`, `CutStressModel.flag`, `CheckpointTimelineSettings.flag`, each `static let … = ObservableDefaultsFlag(key: enabledKey)` | the same three files |
@@ -642,10 +642,11 @@ target.
   there is nothing here for those to disagree with. A weekly mean is labelled "week average".
 - The typical range comes from `ChargeTypicalBand.range(_ state: BaselineState?) -> ClosedRange<Double>?`,
   which step 0 extracts from the local function at `ScoreDetailData.swift:156-160` with the same
-  body. Recovery detail calls it; stage 2's packet assembler takes its centre and sigma through the
-  same type; the cut-stress presenter calls `range`. Stage 6 edits neither `ChargeTypicalBand.swift`
-  nor `ScoreDetailData.swift` and changes no formula. `Baselines.sigma(` appears in the app targets
-  only inside `ChargeTypicalBand.swift` (§12.4).
+  body. Recovery detail calls it; stage 2's packet assembler takes the range from
+  `ChargeTypicalBand.range(_:)` and holds no sigma; the cut-stress presenter calls `range`. Stage 6
+  edits neither `ChargeTypicalBand.swift` nor `ScoreDetailData.swift`, changes no formula, and
+  computes no band, centre or spread of its own: `ChargeTypicalBand.range(_:)` is the only way a
+  stage 6 file obtains the range (§12.4).
 - The framing sentence on the screen is fixed (§11): it says the figures are context for the coach
   and are not used by any score.
 - Enforced by test (§12.4): `CutStressTrend` and `CutStressModel` are referenced only from their
@@ -674,8 +675,9 @@ awaiting that model's `load()`. It never builds a `CutScorecardInput`, never cal
 `CutScorecard.evaluate` and never calls `CutScorecardInputBuilder.evaluation(today:)` itself, so the
 projection day on the timeline is the one the scorecard screen is showing.
 
-Order on this file: stage 2 (moves `evaluateStored` out), then stage 5 (events into the
-presentation context), then this property. It is one small commit of its own.
+Order on this file: the one shared-file order of §14.1. This property is stage 6's edit, made
+after every earlier editor in that order has made its own and before packet v2. It is one small
+commit of its own (6-8b).
 
 ### 8.4 Timeline sources: the two adapters
 
@@ -937,8 +939,9 @@ restore would silently lose the log, which is the outcome R42 exists to prevent.
 Edits to `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift`: four entries in
 `BackupSettings.whitelist`, four in `appleDefaultsKey`, and the four names added to the fork-only
 comment block step 0 placed above the whitelist. The file has one writer at a time across stages, in
-the order stage 3 (two keys), stage 5 (one key), stage 6 (four keys); this stage's entries follow
-stage 5's. `BackupSettingsTests.swift` is extended in the same order, new methods only.
+the one shared-file order of §14.1; this stage's four entries are added in stage 6's place in that
+order, below the entries of every earlier editor. `BackupSettingsTests.swift` is extended in the
+same order, new methods only.
 
 **Android drift (R43).** The Kotlin whitelist is not edited and is knowingly behind. A backup made
 on the iPhone and restored on Android drops the four keys; a backup made on Android never carries
@@ -969,16 +972,32 @@ all stages, approved once by the owner; this stage's rows go where that frame pu
 
 ### 10.1 Entry points
 
+The Settings cards and the Health tab rows of every stage follow one order, top to bottom, drawn
+in the combined frame set, which is the authority: Scorecard, Coach packet, Intake, Body record,
+Events, Niggle log, Recovery context, Timeline. This stage's entries are the last three of that
+list, in that order. This specification states only those three places.
+
 | Where | Row | Shown when | Position |
 |---|---|---|---|
-| Health tab, "More health" card (`RedesignHealthView.swift:472-482`) | "Timeline", detail = next upcoming item's date or nothing | `noop.checkpointTimelineEnabled` | Fixed order of the combined frame: Scorecard, Body record, Events, **Timeline**, **Niggle log**, Coach packet |
-| Same card | "Niggle log", detail = open count or nothing | `noop.niggleLogEnabled` | As above, after Timeline |
-| Scorecard screen links card (`ScorecardView.swift:548-559`) | "Recovery context" | `noop.cutStressEnabled` | Per the combined scorecard frame; added after stage 2's toolbar item, stage 3's protein caption and stage 5's event note are in |
-| Same card | "Timeline" | `noop.checkpointTimelineEnabled` | As above |
-| Settings | One section "Log and timeline" with three toggles | Always on iPhone; macOS does not show it | Last of the stage sections: after stage 2's card, stage 3's card, stage 4's card and stage 5's two switches |
+| Health tab, "More health" card (`RedesignHealthView.swift:472-482`) | "Niggle log", detail = open count or nothing | `noop.niggleLogEnabled` | Sixth place of the one order: the first of this stage's rows |
+| Same card | "Timeline", detail = next upcoming item's date or nothing | `noop.checkpointTimelineEnabled` | Eighth and last place of the one order, below "Niggle log" |
+| Scorecard screen links card (`ScorecardView.swift:548-559`) | "Recovery context" | `noop.cutStressEnabled` | Per the combined scorecard frame; above "Timeline" |
+| Same card | "Timeline" | `noop.checkpointTimelineEnabled` | Per the combined scorecard frame; below "Recovery context" |
+| Settings | Card "Niggle log", holding the switch for `noop.niggleLogEnabled` | iPhone only; macOS does not show it | Sixth place of the one order |
+| Settings | Card "Recovery context", holding the switch for `noop.cutStressEnabled` | iPhone only | Seventh place |
+| Settings | Card "Timeline", holding the switch for `noop.checkpointTimelineEnabled` | iPhone only | Eighth and last place |
 
-A row whose stage is not merged or whose flag is off is simply absent; the order of the rows that
-are present does not change. With all three stage 6 flags off the Health card, the scorecard links
+Recovery context has the seventh place of the one order. Its Settings card takes that place. Its
+entry point is the scorecard screen's link row, and this stage adds no "Recovery context" row to
+the Health card, so on that card this stage's two rows are adjacent.
+
+A Settings card is the place its own switch is turned on, so the three cards are present on
+iPhone whether their switch is on or off; each shows its title, its one-line description and its
+switch, and nothing else. A Health row or a scorecard link is present only while its own flag is
+on.
+
+A row whose flag is off is simply absent; the order of the rows that are present does not
+change. With all three stage 6 flags off the Health card, the scorecard links
 card and every other screen are exactly as before.
 
 The "Next:" detail on the Health row is the date of the first `upcoming` item of the built list
@@ -1147,7 +1166,7 @@ translated, capitalised or shortened. English sources:
 |---|---|
 | Health rows | "Niggle log", "Timeline"; details "%lld open", "Next: %@" |
 | Scorecard links | "Recovery context", "Timeline" |
-| Settings | "Log and timeline"; "Niggle log" / "Record a complaint and see it against your own rules. Off by default."; "Recovery context" / "Weekly resting heart rate and HRV beside the scorecard. Not a score."; "Timeline" / "Phases, checkpoints and your estimate in one list."; "Everything stays on this iPhone." |
+| Settings (three cards, each a title and a description) | "Niggle log" / "Record a complaint and see it against your own rules. Off by default."; "Recovery context" / "Weekly resting heart rate and HRV beside the scorecard. Not a score."; "Timeline" / "Phases, checkpoints and your estimate in one list." |
 | Log sections | "Your rule for seeing a professional", "Open", "Paused by your coach", "Observations", "Resolved" |
 | Day count | "Day %lld", "Resolved after %lld days", "noted %@", "since %@", "Resumed %@" |
 | Action words | "Watch", "Modify training", "See a professional" |
@@ -1302,7 +1321,8 @@ commit as this stage's other shared-file edits:
 
 ### 12.2 Store — `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (extended)
 
-New methods only, placed after stage 5's (the order of the source file: stage 3, stage 5, stage 6).
+New methods only, placed in this stage's place in the shared-file order of §14.1, below the
+methods of every earlier editor.
 
 - `testStage6ListsRoundTripAsStrings`
 - `testStage6FlagsAreNotExported`
@@ -1463,9 +1483,13 @@ must still match.
   `IntelligenceEngine`, a scorer, `CutScorecard*`, `AICoach*`, `CoachPacket*`, `StrandiOSWidgets/`,
   `StrandiOSShared/`)
 - `test_timeline_is_built_only_by_its_model`
-- `test_typical_band_has_one_definition` (`Baselines.sigma(` appears in app targets only in
-  `ChargeTypicalBand.swift`; this holds once stage 2's packet assembler reads its centre and sigma
-  through `ChargeTypicalBand`, as the build order requires)
+- `test_typical_band_has_one_definition` (tree-wide over the app targets: exactly one declaration
+  of `ChargeTypicalBand` and of its `range(` function, in `ChargeTypicalBand.swift`; the cut-stress
+  presenter contains `ChargeTypicalBand.range(`; no stage 6 file builds a `ClosedRange` from a
+  `BaselineState` by any other means; the spread function that `ChargeTypicalBand.range` wraps is called in the app
+  targets from `ChargeTypicalBand.swift` alone. The last clause holds because stage 2's packet
+  assembler takes the range from `ChargeTypicalBand.range(_:)` and holds no sigma, as the build
+  order requires)
 - `test_stage6_defines_no_flag_observer` (`UserDefaults.didChangeNotification` appears in no stage 6
   file; each stage 6 flag is an `ObservableDefaultsFlag(`)
 - `test_stage6_has_no_day_arithmetic_of_its_own` (`parseYMD(`, `julianDayNumber(`, `DateFormatter`
@@ -1553,9 +1577,10 @@ Android is skipped by the owner's decision. No Kotlin is written or run and no o
 ### 12.8 Simulator and rehearsal
 
 Every frame of §10 is reproduced through `Stage6Demo`, which is one element of step 0's demo
-registry: this stage adds its own file and one array element, last in the registry's order
-(scorecard, packet, intake, body record, events, stage 6), and edits no other demo line. Its names
-use only this stage's prefixes:
+registry: this stage adds its own file, `StrandiOS/NiggleLog/Stage6Demo.swift`, and one registry
+element, in stage 6's place in the shared-file order of §14.1, and edits no other demo line. The
+element answers only names that begin with one of this stage's three reserved prefixes and returns
+nil for every other name:
 
 | Prefix | Names |
 |---|---|
@@ -1569,8 +1594,9 @@ resume, add and tick a checkpoint, a refused waypoint and a target date are exer
 
 One Fixture Person serves every stage's demo. `Stage6Demo` defines no weights, phases, scans or
 events of its own: its scorecard states are seeded by the seeding stage 1's demo uses (the stage 1
-weekly series, weigh-ins on Wednesdays, protein floor 100 g), its scan days come from stage 4's demo
-seed and its spans from stage 5's. It adds only the stage 6 strings of §13 and the nights of §13.3.
+weekly series, weigh-ins on Wednesdays, protein floor 100 g), and its scan days and spans are the
+Fixture Person's of §13.4, given to the two adapters through their closure initialisers (§8.4). It
+adds only the stage 6 strings of §13 and the nights of §13.3.
 Per stage 1 ruling R31, app-target tests and simulator runs that read nights from the repository use
 dates relative to the real clock; the 2031 fixture is for the pure functions and the settings.
 
@@ -1715,28 +1741,34 @@ no stage 6 package.
 | 6-6 | Implementer C (niggle log), after G1 and 6-4, 6-5 | New: `Strand/Data/NiggleLogModel.swift`, `NiggleLogPresenter.swift`; `StrandiOS/NiggleLog/*.swift` except the demo |
 | 6-7 | Implementer D (cut-stress and timeline), after G1 and 6-4, 6-5 | New: `Strand/Data/CutStressModel.swift`, `CutStressPresenter.swift`, `CheckpointTimelineModel.swift`, `CheckpointTimelinePresenter.swift`; `StrandiOS/Scorecard/CutStressView.swift`; `StrandiOS/Timeline/*.swift` |
 | 6-8 | Implementer E (demo), after 6-6 and 6-7 | New: `StrandiOS/NiggleLog/Stage6Demo.swift` |
-| 6-8a | Orchestrator: the hotspot commit, one small commit in this stage's serialised step | Edited: `StrandiOS/Redesign/RedesignRoute.swift` (four cases and the route switch); `StrandiOS/Redesign/RedesignHealthView.swift` (two rows in `moreCard`, in the fixed order); `StrandiOS/Scorecard/ScorecardView.swift` (two link rows); `Strand/Screens/SettingsView.swift` (one section, iPhone only, last); `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (four keys and the comment block); `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (three methods); `StrandiOS/App/StrandiOSApp.swift` debug block (one array element in the demo registry) |
-| 6-8b | Orchestrator: the scorecard model commit | Edited: `Strand/Data/CutScorecardModel.swift` (the one property of §8.3), after stage 2's and stage 5's edits to that file |
+| 6-8a | Orchestrator: the hotspot commit, one small commit in this stage's serialised step | Edited: `StrandiOS/Redesign/RedesignRoute.swift` (four cases and the route switch); `StrandiOS/Redesign/RedesignHealthView.swift` (two rows in `moreCard`, in the places of §10.1); `StrandiOS/Scorecard/ScorecardView.swift` (two link rows); `Strand/Screens/SettingsView.swift` (three cards, iPhone only, the last three of the one order of §10.1); `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (four keys and the comment block); `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` (three methods); `StrandiOS/App/StrandiOSApp.swift` debug block (one element in the demo registry) |
+| 6-8b | Orchestrator: the scorecard model commit | Edited: `Strand/Data/CutScorecardModel.swift` (the one property of §8.3), in stage 6's place in the shared-file order (§14.1) |
 | 6-9 | Implementer B (adapters), after stage 4 and stage 5 are on the integration branch | Edited: `Strand/Data/TimelineSources.swift` (the two `live` bodies) |
 | 6-10 | Localiser, last | `Strand/Resources/Localizable.xcstrings` |
 | 6-11 | Reviewers (correctness, contract, data safety), Verifier | None; read-only |
 
 ### 14.1 Shared hotspots
 
-| Hotspot | Edited for stage 6 | Order across stages |
+Every shared file has one writer at a time, in one order for every hotspot: Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage 6, then packet v2. An
+editor that does not touch a given file is skipped. The table states only this stage's position.
+
+| Hotspot | Edited for stage 6 | This stage's position |
 |---|---|---|
-| `Strand/Resources/Localizable.xcstrings` | **Yes**, 6-10 only | One Localiser at a time, the last step of each stage: Lab Book ownership, 2, 3, 4, 5, 6 |
-| `Strand/Screens/SettingsView.swift` | **Yes**, 6-8a | After the combined Settings frame is approved: 2 (card), 3 (card), 4 (card), 5 (two switches), 6 (section). Shared with macOS: build `Strand` afterwards |
-| `StrandiOS/App/StrandiOSApp.swift` debug block | **Yes**, 6-8a, one array element | Step 0 lands the registry; each stage then adds one element in integration order |
-| `StrandiOS/Redesign/RedesignRoute.swift` | **Yes**, 6-8a | 3, 4, 5, 6. Additive cases; the route switch is updated with them |
-| `StrandiOS/Redesign/RedesignHealthView.swift` (`moreCard`) | **Yes**, 6-8a | 2, 4, 5, 6; rows in the approved order |
-| `StrandiOS/Scorecard/ScorecardView.swift` (`linksCard`) | **Yes**, 6-8a | 2 (toolbar item), 3 (protein row caption and tap), 5 (event note and `axisMarks`), 6 (two link rows) |
-| `Strand/Data/CutScorecardModel.swift` | **Yes**, 6-8b, one property | 2 (moves `evaluateStored` out), 5 (events into the context), 6 (the `evaluation` property) |
-| `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` and `BackupSettingsTests.swift` | **Yes**, 6-8a | 3 (two keys), 5 (one key), 6 (four keys); tests as new methods in the same order |
-| `StrandiOS/Scorecard/ScorecardWeekChart.swift` | No; reused | Stage 5 adds `axisMarks`; stage 6 only uses the view, after stage 5 |
-| `StrandiOS/Redesign/ScoreDetailData.swift`, `Strand/Data/ChargeTypicalBand.swift` | No | Step 0 extracts `ChargeTypicalBand`; stage 2's assembler and this stage's presenter then call it |
-| `design/figma-plugin/code.js`, `manifest.json` | No | One orchestrator commit adds `importS2` to `importS6` before any designer starts |
-| `Strand/Data/CutScorecardInputBuilder.swift` | No | Stages 2 and 3 only |
+| `Strand/Resources/Localizable.xcstrings` | **Yes**, 6-10 only, the last step of this stage | Stage 6's place: after stage 5, before packet v2 |
+| `Strand/Screens/SettingsView.swift` | **Yes**, 6-8a, three cards | Stage 6's place: after stage 5, before packet v2; after the combined Settings frame is approved. Shared with macOS: build `Strand` afterwards |
+| `StrandiOS/App/StrandiOSApp.swift` debug block | **Yes**, 6-8a, one registry element | Stage 6's place: after stage 5, before packet v2. Step 0 lands the registry |
+| `StrandiOS/Redesign/RedesignRoute.swift` | **Yes**, 6-8a, four additive cases and the route switch | Stage 6's place: after stage 5, before packet v2 |
+| `StrandiOS/Redesign/RedesignHealthView.swift` (`moreCard`) | **Yes**, 6-8a, two rows | Stage 6's place: after stage 5, before packet v2 |
+| `StrandiOS/Scorecard/ScorecardView.swift` (`linksCard`) | **Yes**, 6-8a, two link rows | Stage 6's place: after stage 5, before packet v2 |
+| `Strand/Data/CutScorecardModel.swift` | **Yes**, 6-8b, the one `evaluation` property | Stage 6's place: after stage 5, before packet v2 |
+| `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` and `BackupSettingsTests.swift` | **Yes**, 6-8a, four keys and three test methods | Stage 6's place: after stage 5, before packet v2 |
+| `StrandiOS/Scorecard/ScorecardWeekChart.swift` | No; reused as it stands when this stage's step starts, with `axisMarks` present (A11) | Not an editor |
+| `StrandiOS/Redesign/ScoreDetailData.swift`, `Strand/Data/ChargeTypicalBand.swift` | No; step 0's. This stage's presenter calls `ChargeTypicalBand.range(_:)` | Not an editor |
+| `design/figma-plugin/code.js`, `manifest.json` | No; step 0's | Not an editor |
+| `Strand/Data/CutScorecardInputBuilder.swift`, `Strand/Data/CutScorecardPresenter.swift` | No | Not an editor |
+| `Strand/Data/BodyMeasurementResolver.swift`, `Strand/Data/BodyMeasurementProvider.swift` | No. Stage 6 reads no body measurement and takes no part in the weigh-in and scan ranking, which is a stage 1 ruling on the resolver | Not an editor |
+| `Strand/AI/AICoach.swift`, `CoachPacket*` | No. Stage 6 feeds nothing to the Coach or the packet (§1, §8.2) | Not an editor |
+| `Packages/WhoopStore/.../LabMarkerStore.swift` | No. Stage 6 stores nothing in `labMarker` (§9.1) | Not an editor |
 | `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, the three Today views | No | No Today card (D7) |
 | `Packages/StrandImport` `MarkerCatalog` | No | No catalogue key |
 | `project.yml` | No | |
@@ -1748,9 +1780,10 @@ no stage 6 package.
 - **In parallel with any other stage, now, with no app build:** 6-2 (design source), 6-3 (new test
   files), 6-4 and its `swift test` (one package at a time per worktree), 6-5, and the new-file code
   of 6-6, 6-7 and 6-8, written but not built.
-- **Serialised on the single app build tree, as step 7 of the build order:** the niggle log and the
-  cut-stress screen may be integrated any time after stage 2's step; the timeline's two adapters
-  (6-9) after stage 4's and stage 5's steps. In this stage's step: 6-8a, then 6-8b, then `xcodegen
+- **Serialised on the single app build tree, as step 7 of the build order,** after stage 5's step
+  and before packet v2: every shared-file edit of this stage (6-8a, 6-8b, 6-10) is made in this
+  step and in no earlier one, and the timeline's two adapters (6-9) are written here, when stage 4
+  and stage 5 are on the integration branch. In this stage's step: 6-8a, then 6-8b, then `xcodegen
   generate`, the `NOOPiOS` build, the `Strand` build, `StrandTests`, the gate script; 6-10 last.
 - **Never built here:** `xcodebuild` and the simulator are run only on the single app build tree by
   the orchestrator, not in a stage worktree.
@@ -1783,7 +1816,7 @@ proceeds on it. The last column says what changes if the owner decides otherwise
 | Q15 | Three separate switches, or one? No Today card, no notification | Three, so each part can be accepted on the phone on its own | One switch collapses the three keys of §9.4 into one |
 | Q16 | A weight on a checkpoint is a **waypoint only**. The one target weight stays in your phase; a waypoint is never called a target, the scorecard never reads it, and the sheet refuses a waypoint equal to or beyond the phase target and points to the phase sheet. The date you want to reach the target by is a checkpoint with no weight, attached to the phase. Acceptable? | Yes | If a checkpoint were allowed its own target weight, the scorecard's projection and the timeline could show two targets for one variable (R41); that would need a new ruling on which one the scorecard judges, and §7.3 step 4, §9.3 and the F36 to F40 tests would be rewritten |
 | Q17 | A diet break or a deload is an event, never a phase; phases are only the long blocks. During one the scorecard keeps giving its verdict with the event noted beneath it, and the timeline shows it as a span | Yes (shared with stages 1 and 5) | If a break were a phase, the timeline's span kinds would move to phase items and stage 1's "no verdict for kind `other`" would apply during it; all three specifications would change together |
-| Q18 | The Health card, Settings and the scorecard screen each get one combined layout for all stages, with the order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet | Yes; needed before any view code | A different order moves two rows and one section in 6-8a and nothing else |
+| Q18 | The Health card, Settings and the scorecard screen each get one combined layout for all stages, with one order for the Settings cards and the Health rows: Scorecard, Coach packet, Intake, Body record, Events, Niggle log, Recovery context, Timeline. This stage's three are the last three | Yes; needed before any view code | A different order moves two rows and three cards in 6-8a and nothing else |
 | Q19 | Installed on the phone together with stage 5, after a fresh backup, with all three switches off | Yes | A separate install changes only the schedule |
 | Q20 | The fixture's rule day counts, locations and sides in §13 are invented. Please confirm none happens to match a rule or an entry of your own | Assumed invented and kept | Any that matches is replaced by another invented value and the tables of §13.2 are recomputed |
 
@@ -1836,7 +1869,7 @@ The alternative that would need a go-ahead, a `niggle` table with a migration, i
 - **The day stage 4 reports for an imported scan.** Stage 6 uses `BodyScan.day` as given and does
   not decide it.
 - **The combined Health, Settings and scorecard frames** are not yet approved; row positions in
-  §10.1 follow the fixed order and wait for them.
+  §10.1 follow the one order stated there and wait for them.
 - **How large `UserDefaults` strings behave at the limits in §9.2** on the device. The limits were
   chosen to keep each string in the tens of kilobytes; no measurement was made.
 - **How many weeks `Repository.days` covers on a device.** `refresh(days:)` defaults to 4000
@@ -1896,3 +1929,25 @@ Shared scaffolding this stage expects from the orchestrator's step 0:
 - `CanonicalDay` with its test pinned to `CutScorecard.weekStart` (surface in §6.0);
 - `ChargeTypicalBand`, extracted from `ScoreDetailData.swift` (§8.2);
 - the comment block above the Swift backup whitelist that lists the fork-only keys (§9.5).
+
+### Second pass
+
+What the independent re-check and the orchestrator's rulings (a) to (k) changed in this file. Where
+a row of the table above disagrees with a row here, this one stands.
+
+| Item | Change in this file |
+|---|---|
+| X7, ruling (j) | §8.2 now says stage 2's packet assembler takes the range from `ChargeTypicalBand.range(_:)` and holds no sigma. Every remaining mention of the engine's spread function by name is gone: §2.1 row 9, §8.2 and the source scan `test_typical_band_has_one_definition` (§12.4) are worded through `ChargeTypicalBand` only. The scan keeps its name, which stage 2's specification cites. |
+| X6, ruling (h) | §12.8 states this stage's demo file (`StrandiOS/NiggleLog/Stage6Demo.swift`), its one registry element and its three reserved prefixes (`niggle-`, `cutstress-`, `timeline-`), and no longer lists any other stage's provider or the registry's order. The demo's scan days and spans are the Fixture Person's of §13.4, passed to the two adapters through their closure initialisers, so `Stage6Demo` depends on no other stage's demo file. |
+| X22, ruling (d) | The one order for Settings cards and Health rows is Scorecard, Coach packet, Intake, Body record, Events, Niggle log, Recovery context, Timeline; this stage's three are the last three. §10.1 is rewritten to it: on the Health card "Niggle log" now comes before "Timeline"; in Settings the single "Log and timeline" section becomes three cards, "Niggle log", "Recovery context", "Timeline". The strings "Log and timeline" and "Everything stays on this iPhone." are removed from §11. A10, Q18, work package 6-8a and §18 follow. This supersedes the X22 row above. |
+| Ruling (c), and the re-check's "stage 3 became an editor" | §14.1 gives the one shared-file order (Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage 6, then packet v2) once and, for each hotspot, only this stage's position in it. The lists of other stages' edits are removed from §4.2, §8.3, §9.5, §10.1, §12.2, 6-8a, 6-8b and §14.1, which also removes the stale model order "2, 5, 6". §14.2 places every shared-file edit of this stage in its own serialised step. This supersedes the wording of the X18 and X21 rows above; the edits themselves are unchanged. |
+| Ruling (e) | The mention of stage 5's "two switches" in Settings is gone; this file says nothing about the private-events packet switch. §8.4 is unchanged: a private event is absent from the timeline whatever that switch says. |
+| Rulings (a), (g), (i) | Nothing in this stage specified the weigh-in and scan ranking, the `LabMarkerStore` steps or an `AICoach.swift` edit. §14.1 now lists those files as not edited by stage 6. |
+| Rulings (b), (f), (k) | No change: this stage stores no protein floor (the fixture's 100 g is whole grams), writes no packet row, and the re-check found no privacy point in this file. |
+| X10 | No change here. The names in this file (`weightWaypoint`, `waypointWeightKg`, `targetDate`, `phaseStartDay`) are the ones the stage 1 specification is to cite. |
+
+One point left to the combined frame set: Recovery context holds the seventh place of the one
+order and has a Settings card there, but this stage gives it no Health row (its entry point is the
+scorecard link, §10.1). If the combined frame draws a "Recovery context" Health row, that is one
+more row in 6-8a between "Niggle log" and "Timeline", one more string use, and one more flag-off
+assertion in `Stage6FlagOffTests.swift`.
