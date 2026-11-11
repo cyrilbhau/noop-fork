@@ -17,6 +17,11 @@ source at `0b89b814`, the text says what ownership changes. Second, the orchestr
 scaffolding commit (step 0 of the build order) exists before any stage 4 code: the demo registry,
 the plugin command `importS4`, `ObservableDefaultsFlag`, `CanonicalDay`.
 
+A second pass on the same day applied the orchestrator's rulings on the re-check (§20, "Second
+pass"). The one that changes the most text: the rule that a manual weigh-in outranks a scan within
+its week is **not** specified here. It is ruling R44 of the stage 1 specification, implemented by
+stage 1's work package 1-11 inside this stage's serialised step (§8.4).
+
 This file contains no personal measurement, target, date, medication or injury detail. Every number
 in an example belongs to the synthetic "Fixture Person" of §13, who is the Fixture Person of the
 stage 1 specification §13.
@@ -38,8 +43,9 @@ next scan.
   report prints them, saved and edited in one database transaction.
 - A scan's total mass stored as an ordinary `weight` reading and its body-fat percentage as an
   ordinary `body_fat` reading, so neither variable gains a second number (ruling R41).
-- One resolver rule: in a week that holds both a manual weigh-in and a scan, the weigh-in is the
-  week's weight (§8.4).
+- No resolver code. In a week that holds both a manual weigh-in and a scan, the weigh-in is the
+  week's weight; that rule is ruling R44 of the stage 1 specification, and stage 4 only tells the
+  owner when it applies and tests it with scans (§8.4).
 - Derived figures computed by one tested function from stored entries and never stored.
 - A scan-to-scan comparison, a benchmark list with entry and history, and one "Body record" screen
   that hosts them, behind the default-off flag `noop.bodyRecordEnabled`.
@@ -124,14 +130,14 @@ Every site in the stage 1 specification §4.1 stands. The sites stage 4 adds or 
 
 | Site | What it does | Action |
 |---|---|---|
-| `Strand/Data/BodyMeasurementResolver.swift:116-126` | Admits every Lab Book `weight` row as a candidate | **Changed in one step (§8.4):** a `weight` row whose source is `body-scan` is left out when its week also holds a usable `manual` weight row. In every other case a scan's total mass is a candidate from the moment it is saved (§8) |
+| `Strand/Data/BodyMeasurementResolver.swift:116-126` | Admits every Lab Book `weight` row as a candidate | **Not edited by stage 4.** Stage 1's work package 1-11 changes it (ruling R44, §8.4): a scan's `weight` row is left out in a week that also holds a manual weigh-in. In every other case a scan's total mass is a candidate from the moment it is saved (§8) |
 | `Strand/Data/BodyMeasurementProvider.swift:238-250` | Reads `weight` rows; after ownership, one call to `LabBookRows.marker` over every id | Not edited by stage 4 (ownership is its only editor). It is how a scan's total mass is read back |
 | `Strand/Data/WeighInStore.swift:196-200` (`readings(_:)`) | The read the weigh-in history uses | Reader of the scan's total mass for the scan screens (§9.1). Not edited by stage 4 |
 | `Strand/Data/WeighInStore.swift:35` (`weightRangeKg`) | The accepted weight range | Reused as the range of a scan's total mass. Unchanged |
 | New `Strand/Data/BodyRecordStore.swift` | Writes the scan's `weight` row in the same transaction as the scan's other rows, then runs the same finish as a weigh-in (`WeighInStore.swift:204-207`): `repository.refresh()`, then `provider.refresh()`, which mirrors the profile | New writer, inside the funnel's rules (§8.2) |
-| `Strand/Data/CutScorecardPresenter.swift:822-890` (`history`) | Lists every weight row; a Lab Book row of any source is editable and deletable; marks the row that represents each week | Changed twice. Always: the week's representative is chosen from `BodyMeasurementResolver.withoutOutrankedScans` (§8.4), so the caption and the resolver cannot disagree. When `noop.bodyRecordEnabled` is on: a row whose source is `body-scan` is captioned as a scan, is not editable or deletable there, and opens its scan (§10.7) |
+| `Strand/Data/CutScorecardPresenter.swift:822-890` (`history`) | Lists every weight row; a Lab Book row of any source is editable and deletable; marks the row that represents each week | The mark on each week's representative follows ruling R44 and is stage 1's edit (work package 1-11), made before stage 4's. Stage 4's edit, behind a defaulted parameter: while `noop.bodyRecordEnabled` is on, a row whose source is `body-scan` is captioned as a scan, is not editable or deletable there, and opens its scan (§10.7) |
 | `StrandiOS/Scorecard/WeighInHistoryView.swift:152` (`rowView`) | Draws a history row | Changed: a scan row's tap pushes the scan |
-| `Strand/Data/CutScorecardInputBuilder.swift` | Builds the weekly series from the resolver's series | Not edited. It inherits §8.4 through the resolver's series: a scan's total mass is its week's point only when that week has no manual weigh-in |
+| `Strand/Data/CutScorecardInputBuilder.swift` | Builds the weekly series from the resolver's series | Not edited by stage 4. It inherits ruling R44 through the resolver's series: a scan's total mass is its week's point only when that week has no manual weigh-in |
 | `Tools/test_body_measurement_single_resolver.py` (`lab-marker-key` pattern) | Fails on a literal `markerKey: "weight"` outside the allowlist | Unchanged and still binding: `BodyRecordStore` names the key through `BodyMeasurementKind.weight.markerKey` and is not added to the allowlist |
 
 ### 4.2 Body-fat percentage
@@ -171,7 +177,7 @@ dated scan, or in Lab Book's list of readings.
 
 | Site | What leaves | Action |
 |---|---|---|
-| `Strand/AI/AICoach.swift:1283-1302` | With "Also share my patterns & Lab Book" on, the latest value of up to eight markers goes to the Coach provider. After ownership the rows come from `LabBookRows.category` | Changed by one line, written after ownership's read change and after stage 2's extraction have both merged: a key for which `MarkerCatalog.isScanOnlyMarker` or `MarkerCatalog.isBenchmark` is true is skipped. No such row exists before stage 4, so the text for existing data is unchanged |
+| `Strand/AI/AICoach.swift:1283-1302` | With "Also share my patterns & Lab Book" on, the latest value of up to eight markers goes to the Coach provider. After ownership the rows come from `LabBookRows.category` | Changed by one line, written after ownership's read change, stage 2's extraction and stage 3's one-line supplement exclusion have all merged: a key for which `MarkerCatalog.isScanOnlyMarker` or `MarkerCatalog.isBenchmark` is true is skipped. No such row exists before stage 4, so the text for existing data is unchanged |
 | Stage 2's coach packet | Version 1 carries weight and waist only | No scan or benchmark section. None is added until the owner asks; it would then be its own change with its own version bump |
 | `metricSeries` under `lab-book` | The daily projection of every numeric row | New keys appear in it. Readers found: the Lab Book detail's own comparison (`LabBookView.swift:906`). No widget, notification or export reader of `lab-book` was found in `Strand/`, `StrandiOS/`, `StrandiOSShared/` or `StrandiOSWidgets/` |
 | `Strand/Data/CsvExport.swift:101-110` | The CSV export's series sidecar | Covers the imported and computed ids, not `lab-book`. Unchanged |
@@ -199,13 +205,14 @@ dated scan, or in Lab Book's list of readings.
 | Comparison and derived figures | `BodyRecordMath`, `BodyRecordReading`, `BodyRecordChange`, `BodyRecordDelta`, `BodyRecordDirection`, `BodyRecordComparison`, `BodyScanComponents`, `BodyScanDerived`, `BodyScanDerivedValue`, `BodyScanDerivedGap`, `BodyScanComponentSource`, `BodyScanDerivation`, `BodyScanCheckInput`, `BodyScanCheck`, `BodyScanChecks` | New `Packages/StrandAnalytics/Sources/StrandAnalytics/BodyRecord.swift` |
 | Multi-row store call | `WhoopStore.replaceLabMarkers(deleteIds:upsert:)` | `Packages/WhoopStore/Sources/WhoopStore/LabMarkerStore.swift` |
 | Read path for every Lab Book row | `LabBookRows` (owned by Lab Book ownership, §6.2 of its specification) | `Strand/Data/LabBookRows.swift`. Stage 4 calls it and does not edit it. There is no `LabBookUnion` |
-| Weigh-in outranks scan | `BodyMeasurementResolver.withoutOutrankedScans(_:)`, `BodyMeasurementResolver.weighInSource` | `Strand/Data/BodyMeasurementResolver.swift` |
+| Weigh-in outranks scan | Nothing declared by stage 4. The rule and its function `withoutOutrankedScans` are stage 1's (ruling R44, work package 1-11) | `Strand/Data/BodyMeasurementResolver.swift`, not edited by stage 4 |
+| The sheet's weigh-in line (H8) | `BodyRecordPresenter.weighInOutranksDraft(draftRow:weighInRows:today:)` | `Strand/Data/BodyRecordPresenter.swift` (§8.4) |
 | Field table | `BodyScanField`, `BodyScanSection`, `BodyScanEntryUnit` | New `Strand/Data/BodyScanFields.swift` |
 | Read and write funnel | `BodyRecordStore`, `BodyScan`, `BodyScanDraft`, `BodyRecordError` | New `Strand/Data/BodyRecordStore.swift` |
 | Settings and flags | `BodyRecordSettings`, with the two static instances `BodyRecordSettings.enabledFlag` and `BodyRecordSettings.labReportUnitsFlag` of the shared `ObservableDefaultsFlag` | New `Strand/Data/BodyRecordSettings.swift`. There is no `BodyRecordFlags` type |
 | Model and presenter | `BodyRecordModel`, `BodyScanSheetModel`, `BenchmarkSheetModel`, `BodyRecordPresenter` | New `Strand/Data/BodyRecordModel.swift`, `Strand/Data/BodyRecordPresenter.swift` |
 | Screens | `BodyRecordView`, `BodyScanSheet`, `BodyScanDetailView`, `BodyScanCompareView`, `BenchmarkDetailView`, `BenchmarkSheet`, `BodyRecordKit` | New folder `StrandiOS/BodyRecord/` |
-| Demo harness | `BodyRecordDemo`, with `static func screen(named: String) -> AnyView?` | New `StrandiOS/BodyRecord/BodyRecordDemo.swift`, plus one element in the scaffolding's demo-provider list |
+| Demo harness | `BodyRecordDemo`, with `static func screen(named: String) -> AnyView?`; reserved prefixes `bodyrecord-`, `scan-`, `compare-`, `bench-`, `labunits-` | New `StrandiOS/BodyRecord/BodyRecordDemo.swift`, plus one element in the scaffolding's demo registry (§12.10) |
 | Design round | `design/round-s4-body-record/`, plugin command `importS4`, frames file `s4-frames.json` | Folder and command created by the scaffolding commit |
 | Navigation | `RedesignRoute.bodyRecord`, `.bodyScan(id: String)`, `.bodyScanCompare(earlierId: String?, laterId: String?)`, `.benchmark(key: String)` | `StrandiOS/Redesign/RedesignRoute.swift` |
 | Feature flag, 4A | `noop.bodyRecordEnabled`, Bool, default `false` | `BodyRecordSettings.enabledKey` |
@@ -219,7 +226,9 @@ which runs only on the macOS `Strand` scheme, can test them, as stage 1 did (sta
 
 ### 5.2 Scan markers
 
-Appended to `MarkerCatalog.bodyRecord` in this order. Every entry has `referenceTextHint: nil` and
+Appended to `MarkerCatalog.bodyRecord` in this order. The list is the set of figures a generic
+whole-body composition report can print, not the layout of any one report; the owner confirms it
+(§15, O11). Every entry has `referenceTextHint: nil` and
 `higherIsBetter: nil`. "Stored unit" is the catalogue's `canonicalUnit` and the unit every row the
 scan sheet writes carries.
 
@@ -259,7 +268,8 @@ Every field is optional (§7.7). A scan with any subset of them is complete.
 ### 5.3 Benchmark markers
 
 Appended to `MarkerCatalog.bodyRecord` after the scan markers. Category `other` (D3). The list is a
-general set of common bodyweight and grip tests; anything else is a custom benchmark.
+generic set of common bodyweight and grip benchmarks; anything else is a custom benchmark. The owner
+confirms this list too (§15, O11).
 
 | Key | Display name | Stored unit | Decimals |
 |---|---|---|---|
@@ -818,8 +828,8 @@ Therefore:
 
 - Under the `unified` policy the resolver already admits every Lab Book `weight` row whatever its
   source (`BodyMeasurementResolver.swift:116-126`). Newest day wins; on one day the greatest
-  `takenAt` wins, then the greatest `id` (stage 1 specification §8.2). Stage 4 adds one step in
-  front of that, §8.4, and changes nothing else in the resolver.
+  `takenAt` wins, then the greatest `id` (stage 1 specification §8.2). Stage 1's ruling R44 puts
+  one step in front of that (§8.4). Stage 4 changes nothing in the resolver.
 - The scan screens read the total from that same row, through the weigh-in store's read
   (`WeighInStore.swift:196-200`, which after ownership is `LabBookRows.marker`), picking the row
   whose `(source, takenAt)` is the scan's.
@@ -852,76 +862,70 @@ are unchanged: they open the weigh-in sheet or the history. In the history a sca
 it came from and opens the scan (§10.7), and the scan has Edit and Delete. Deleting a scan deletes
 its total-mass row with it, and the delete sheet says so.
 
-### 8.4 A manual weigh-in outranks a scan within its week
-
-Decided by default from the cross-stage check (X11), pending the owner (§15, O2 and O3). It is a
-change to the resolver's rule, so it needs a new ruling in the stage 1 specification §18; the text
-here is that ruling's content.
+### 8.4 A manual weigh-in outranks a scan within its week (stage 1's ruling)
 
 A scan's total mass comes from another instrument than the bathroom scale, clothed and later in
-the day. If it could stand for a week that also has a morning weigh-in, it would move the fitted
-rate and could change the verdict. So:
+the day. The cross-stage check (X11) therefore ruled that within one week a manual weigh-in
+outranks a scan, for the weekly point and for the current value.
 
-> Within one week, a usable `manual` weight row outranks every `body-scan` weight row of that week,
-> for the weekly point and for the current value. In a week with no usable `manual` weight row, a
-> `body-scan` row is an ordinary reading.
+**That rule has one home, and it is not this document.** It is ruling R44 of the stage 1
+specification (stated in its §8.2 as rule 3 and in its §18; resolver cases in its §13.5): a ruling
+on `BodyMeasurementResolver`, the function `withoutOutrankedScans` in
+`Strand/Data/BodyMeasurementResolver.swift` with its two callers. It is implemented by stage 1's
+work package 1-11, which runs inside this stage's serialised step: after 4-4a has declared
+`MarkerCatalog.scanSource`, the constant the rule names, and before 4-4c and 4-5 write any scan
+(§14). This specification does not restate the algorithm, declares no resolver function or
+constant, and edits neither `BodyMeasurementResolver.swift` nor the mark on a week's representative
+in the weigh-in history. Where this section and the ruling differ, the ruling is right.
 
-Exactly:
+What stage 4 relies on from the ruling, and tests with scans its own writer saved (§12.4, §13.4):
 
-- **Week** is `CanonicalDay.weekStart(row.day)`, the Monday rule the scorecard uses. A row whose
-  `day` is not canonical belongs to no week: it outranks nothing and is not outranked.
-- **Manual** is a row whose `source` equals `BodyMeasurementResolver.weighInSource` (`"manual"`,
-  what the weigh-in sheet and the Lab Book editor write). **Scan** is a row whose `source` equals
-  `MarkerCatalog.scanSource`. Rows of any other source (`lab-csv`, an import) are neither: they are
-  not outranked and they outrank nothing.
-- **Usable** is `BodyMeasurementResolver.normalizedValue(of: row, as: .weight) != nil`. A manual
-  row in an unknown unit does not outrank a scan.
-- The rule applies to `weight` rows only. No scan writes a `waist` row.
-- It is one stored number still (R41 stands): nothing is copied, changed or deleted. The scan keeps
+- A scan in a week that also holds a manual weigh-in is neither that week's point nor the current
+  value, whichever of the two is later (V7, V7b).
+- A scan alone in its week is an ordinary reading: the week's point and, while it is the newest
+  reading, the current weight (V7a, V7c).
+- A scan imported by CSV carries the source `lab-csv` (§7.6). It is not outranked and it outranks
+  nothing; it competes by instant like any other reading (V7d).
+- Rows dated after the as-of day never suppress. Looking back at a day before the weigh-in was
+  saved still gives the scan (V7f).
+- One stored number still (R41 stands): nothing is copied, changed or deleted. The scan keeps
   showing its own total with its own date, as a dated figure and never as "current".
+- The rule does not depend on `noop.bodyRecordEnabled`. A `body-scan` row can exist only if that
+  flag was once on, and it keeps being read after the flag goes off.
 
-One function states the rule, in `Strand/Data/BodyMeasurementResolver.swift`:
+**What stage 4 adds: the sheet's line (H8).** The scan sheet tells the owner when the rule will
+apply to the scan being typed. It asks the resolver; it has no rule of its own:
 
 ```swift
-extension BodyMeasurementResolver {
-    /// The source the weigh-in sheet and the Lab Book editor write.
-    static let weighInSource = "manual"
-
-    /// `rows` without every row whose key is `weight`, whose source is `MarkerCatalog.scanSource`
-    /// and whose week also holds a usable `weight` row with source `weighInSource`. Order is kept.
-    /// Rows of any other key pass through untouched.
-    static func withoutOutrankedScans(_ rows: [LabMarkerRow]) -> [LabMarkerRow]
+extension BodyRecordPresenter {
+    /// H8. True exactly when the resolver, given the weigh-in rows and the weight row this draft
+    /// would write, holds no entry for that row as of `today`.
+    static func weighInOutranksDraft(draftRow: LabMarkerRow, weighInRows: [LabMarkerRow],
+                                     today: String) -> Bool
 }
 ```
 
-The scan source is named only through `MarkerCatalog.scanSource`, so the resolver file imports
-`StrandImport` and never spells the literal (§12.5). The function has exactly two callers, and a
-source scan keeps it that way (§12.5):
+- `draftRow` is the `weight` row a save would write for the draft's total mass (§9.1): the scan
+  source, the instant and day of §7.8, the value in kilograms. With no total mass typed there is no
+  such row, the line is not shown and the function is not called.
+- `weighInRows` are the rows of `WeighInStore.readings(.weight)` whose source is the weigh-in
+  source, named through the constant the stage 1 ruling leaves in the tree for it (§18). Stage 4
+  declares no such constant.
+- The result is computed from one call,
+  `BodyMeasurementResolver.series(.weight, candidates:, policy: .unified)` as of `today`, over
+  candidates whose Lab Book rows are `weighInRows + [draftRow]`, with no Apple Health values and no
+  profile value. It is true when no entry of that series carries `draftRow.id` as its `rowId`.
+- With only weigh-ins beside it, the draft's row can be missing from the series for one reason
+  only: the ruling left it out. Which week a row belongs to, whether a weigh-in in an unknown unit
+  counts (V7e: it does not), and what the as-of day admits are all the resolver's answers. The
+  presenter does no week arithmetic and decides no outranking itself.
+- `today` is the device's local day at the moment the sheet evaluates. A scan's day is never in the
+  future (§7.8), so every stored row is dated on or before it.
+- It is a caller of the resolver's `series`, the funnel every reader uses, and not a caller of
+  `withoutOutrankedScans`: the ruling's two callers stay two.
 
-1. `BodyMeasurementResolver.series`, `unified` policy, weight kind: the Lab Book fold at `:116-126`
-   iterates `withoutOutrankedScans(candidates.labBook)` in place of `candidates.labBook`. `resolve`
-   and the scorecard's weekly points are built from `series`, so the current value, the Today tile,
-   the estimates' input, the profile mirror and the week's point all follow from one list.
-2. `CutScorecardPresenter.history`: the loop that marks each week's representative
-   (`CutScorecardPresenter.swift:861-866`) skips an entry whose weight row is not in
-   `withoutOutrankedScans(weights)`. The entry is still listed, with "Not the weekly point".
-
-What follows, stated so nobody finds it later:
-
-- A scan on Wednesday and a manual weigh-in on the Monday of the same week: the current weight on
-  Wednesday is Monday's weigh-in, although the scan is newer. That is the rule, not a defect.
-- A scan in a week with no manual weigh-in is that week's point and, while it is the newest
-  reading, the current weight.
-- Entering a manual weigh-in later in a scan's week moves the week's point and the current value
-  from the scan to the weigh-in at that moment. Deleting the weigh-in moves them back.
-- An Apple Health value in the scan's week is not a manual weigh-in. The existing rule stands:
-  newest day wins, and on one day Lab Book beats Apple Health.
-- The rule is not gated by `noop.bodyRecordEnabled`. A `body-scan` row can exist only if that flag
-  was once on, and it keeps being read after the flag goes off. With `noop.cutScorecardEnabled` off
-  the legacy policies never read Lab Book, so nothing changes.
-
-The scan sheet tells the owner when this applies (§10.2, H8), and the weigh-in history already
-captions which reading represents each week.
+The weigh-in history captions which reading represents each week; that mark is stage 1's (its
+§10.4), and stage 4 only adds the scan caption and the read-only rule beside it (§10.7).
 
 ## 9. Storage
 
@@ -1076,8 +1080,16 @@ this file has merged (one writer at a time on this file):
 public func replaceLabMarkers(deleteIds: [String], upsert rows: [LabMarkerRow]) async throws -> Int
 ```
 
-Inside one `syncWrite` (`WhoopStore.swift:171-173`, a single GRDB write transaction), in this
-order:
+Inside its one `syncWrite` (`WhoopStore.swift:171-173`, a single GRDB write transaction) the
+function calls ownership's module-internal in-transaction steps and writes no SQL of its own:
+`deleteWithCopies(db, id:)` for each id of `deleteIds`, then `ownerUpsert(db, rows:)`, then one
+`reprojectCells(db, cells:)` over the union of the `touched` sets of `LabBookDayCell` the first two
+returned (ownership specification §6.1 and §6.3, landed by LO-2). The returned count is
+`ownerUpsert`'s `written`. Work package 4-4c adds this one function and no helper.
+
+What those three calls do, in the order they run, described here so the tests of §12.3 can be read
+without the ownership specification; the rules themselves are ownership's (§7.2, §7.4) and are not
+specified a second time:
 
 1. **Deletes**, by the rule of `deleteLabMarkerAndCopies(id:)` (ownership specification §7.4). For
    each id: load the row; load every stored row with its `(markerKey, takenAt, source)` under any
@@ -1094,9 +1106,8 @@ order:
    It has no device-id filter: a cell's value is the row with the greatest `takenAt`, then the
    greatest `id`, among all rows of that marker and day under any id (ownership specification §7.2).
 
-With both arguments empty it does nothing and returns 0. The implementer shares the per-row delete
-and upsert steps with ownership's two functions as private helpers that take the open database
-handle, so the rules exist once.
+With both arguments empty it does nothing and returns 0. An id that `deleteWithCopies` reports as
+not stored (an empty `deleted`) is skipped.
 
 This is a function, not a schema change: no migration, no new table, no new column, no new index.
 
@@ -1171,10 +1182,11 @@ There is **no widget and no notification** in this stage; that list is empty by 
 ### 10.1 Body record screen (`BodyRecordView`, route `.bodyRecord`)
 
 Reached from a row in the Health tab's "More health" card, mounted only while the flag is on, in the
-manner of the scorecard row (`StrandiOS/Redesign/RedesignHealthView.swift:474-483`). The card's row
-order is fixed across stages: Scorecard, **Body record**, Events, Timeline, Niggle log, Coach
-packet. The Body record row sits directly beneath the Scorecard row, or first when the scorecard is
-off.
+manner of the scorecard row (`StrandiOS/Redesign/RedesignHealthView.swift:474-483`). The Health tab
+rows and the Settings cards share one order across all stages, each entry present only while its
+own flag is on. **Body record is the fourth entry of that order.** The combined frame set drawn by
+the orchestrator's designer is the authority for the whole list; this specification states only its
+own position.
 
 | # | State | Shows |
 |---|---|---|
@@ -1203,7 +1215,7 @@ The screen shows no "current weight". A scan's total mass appears with the scan'
 | H5 | Not a number | "Use digits and one decimal separator." Save disabled |
 | H6 | Figures that do not add up | One line under the affected section (§11). Save stays enabled |
 | H7 | Only the total mass entered | "Add at least one scan figure besides total mass." Save disabled |
-| H8 | A manual weigh-in already in the chosen day's week | A neutral line: "You have a weigh-in this week. It stays this week's weight; the scan keeps its own total." Shown whenever §8.4 would leave the scan's total out, and only then |
+| H8 | A manual weigh-in in the chosen day's week | A neutral line: "You have a weigh-in this week. It stays this week's weight; the scan keeps its own total." Shown exactly when `BodyRecordPresenter.weighInOutranksDraft` is true (§8.4): a total mass is typed and stage 1's resolver would leave its row out. Never shown for a draft with no total mass |
 | H9 | Editing | Fields prefilled in the display unit; Save and Delete |
 | H10 | Editing, day changed to one that already has a scan at that instant | "Another scan is already recorded at that time." Nothing is written |
 | H11 | Saving | Controls disabled |
@@ -1279,10 +1291,11 @@ While `noop.bodyRecordEnabled` is on, a weight row whose source is `body-scan` s
 `.bodyScan(id:)`. While the flag is off it is an ordinary Lab Book row, as every non-manual row is
 today (`CutScorecardPresenter.swift:876-889`).
 
-In both flag states the lead of the caption follows §8.4: a scan row in a week that has a usable
-manual weigh-in reads "Not the weekly point", and the weigh-in that outranks it reads "Represents
-its week". After ownership the history lists rows under every device id; stage 4 changes nothing
-about which rows are listed.
+In both flag states the lead of the caption follows stage 1's ruling R44 and is written by stage
+1's work package 1-11, not by this stage: a scan row in a week that has a manual weigh-in reads
+"Not the weekly point", and the weigh-in that outranks it reads "Represents its week" (stage 1
+specification §10.4). After ownership the history lists rows under every device id; stage 4 changes
+nothing about which rows are listed or which one is marked.
 
 ### 10.8 Settings
 
@@ -1290,8 +1303,8 @@ Two rows in a "Body record" card built as the scorecard card is (`Strand/Screens
 iPhone only, in this order: "Report units in Lab Book" first, then "Body record" (scans and
 benchmarks). The order is the order they are built and accepted in. Both off by default. Switching
 either off hides its surfaces and deletes nothing. The card's place among the other stages' cards is
-the one the combined Settings frame fixes: after the Coach packet card and the Intake card, before
-the Events switches and the "Log and timeline" section.
+the fourth entry of the one order the Settings cards and the Health tab rows share (§10.1); the
+combined frame set is the authority.
 
 ## 11. User-facing strings
 
@@ -1445,7 +1458,8 @@ Checks
 
 Seeded with the ten rows F1 to F10 of the ownership fixture (ownership specification §13), through
 its `LabBookOwnershipFixture.swift`, with their cells projected. Row labels below are that
-fixture's.
+fixture's. The tests call the public `replaceLabMarkers` only; the in-transaction steps it is
+built from are tested by ownership (its §12.2).
 
 - `testReplaceWithOnlyUpsertsBehavesAsTheOwnerUpsert` — the same rows through
   `upsertOwnerLabMarkers` on a second store give an identical table and identical cells.
@@ -1535,7 +1549,12 @@ Benchmarks
 - `testBenchmarkUnderAnUnregisteredIdIsListed`
 
 `BodyRecordSingleNumberTests.swift` (the single-resolver assertions, with the scorecard flag on
-unless stated)
+unless stated). Every typed scan in these tests is saved through `BodyRecordStore.save` (V7d's
+imported scan is seeded as the CSV import writes it), so they exercise stage 1's ruling R44 with
+the rows this stage really writes. They assert only what the resolver
+returns (`resolve` and `series` through the provider, the builder's weekly points, the history's
+mark), never how it gets there, and they need stage 1's work package 1-11 in the tree. The rule's
+own unit tests and its resolver cases are stage 1's (its §12.3 and §13.5) and are not repeated.
 
 - `testScanTotalMassIsTheResolverValueWhenItsWeekHasNoWeighIn` — scan A alone: the Today tile
   input, the estimate weight, the scorecard's `currentWeightKg`, the week's point, the profile
@@ -1549,12 +1568,11 @@ unless stated)
 - `testWeeklyPointIsTheWeighInWhenBothExist` — the input builder's weekly series for V7.
 - `testAddingAWeighInMovesEverySurfaceTogether` and `testDeletingThatWeighInMovesThemBack`
 - `testDeletingTheScanMovesEverySurfaceBackTogether`
-- `testCsvWeightRowNeitherOutranksNorIsOutranked` (V7d)
+- `testCsvImportedScanIsNotOutrankedAndCompetesByInstant` (V7d)
 - `testManualRowInAnUnknownUnitDoesNotOutrank` (V7e)
+- `testAWeighInAfterTheAsOfDayDoesNotSuppressTheScan` (V7f) — the value as of the scan's day and
+  the day after is the scan's; as of the weigh-in's day it is the weigh-in's.
 - `testAppleHealthValueInTheScanWeekDoesNotOutrankIt`
-- `testRowWithANonCanonicalDayIsNeitherOutrankedNorOutranking`
-- `testWithoutOutrankedScansKeepsOrderAndLeavesOtherKeysAlone`
-- `testWaistSeriesIsUnchangedByTheRule`
 - `testHistoryRepresentativeAgreesWithTheResolver` — for V7, V7a, V7b and V7c the row captioned
   "Represents its week" is the row whose value the resolver's series holds for that week.
 - `testCombinedSeedLeavesTheStageOneWeeklySeriesUnchanged` — stage 1's weigh-ins plus scans A, B
@@ -1569,7 +1587,12 @@ state, each asserting the presentation built from the fixture; plus:
 
 - `testNoStateRendersAMissingValueAsZero`
 - `testAConflictingKeyIsNeverRenderedAsANumber`
-- `testWeighInThisWeekLineShowsOnlyWhenTheScanWouldBeOutranked` (H8)
+- `testWeighInThisWeekLineShowsOnlyWhenTheScanWouldBeOutranked` (H8) — true for V7, V7b and V7f;
+  false for V7a, V7c and V7e.
+- `testWeighInLineAgreesWithTheResolverForEveryVariant` — for V7, V7a, V7b, V7c, V7e and V7f,
+  `weighInOutranksDraft` is true exactly when, after the save, the resolver's series as of today
+  holds no entry for the scan's weight row.
+- `testWeighInLineIsNotShownWithoutATotalMass`
 - `testNoStringContainsAnInterpolatedNilNaNOrInfinity`
 - `testEveryDisplayedScanValueEqualsLabBookFormat` — for every body-record key and a spread of
   values that do not round to zero from below.
@@ -1612,9 +1635,11 @@ state, each asserting the presentation built from the fixture; plus:
   `BodyRecordComparison.compare(` appear in the app targets only in `BodyRecordPresenter.swift`.
 - `test_scan_source_literal_is_not_respelled` — `"body-scan"` appears outside `Packages/` nowhere.
 - `test_replace_lab_markers_has_one_app_caller` — `replaceLabMarkers(` only in `BodyRecordStore.swift`.
-- `test_outranking_rule_has_two_callers` — `withoutOutrankedScans(` appears in the app targets only
-  in `BodyMeasurementResolver.swift` (its definition and the one call in `series`) and once in
-  `CutScorecardPresenter.swift`.
+- `test_stage_4_does_not_call_the_outranking_function` — `withoutOutrankedScans(` appears in no
+  file under `Strand/Data/BodyRecord*.swift`, `Strand/Data/BodyScanFields.swift` or
+  `StrandiOS/BodyRecord/`. Who may call it is stage 1's to assert (ruling R44).
+- `test_weigh_in_line_has_one_caller` — `weighInOutranksDraft(` appears in the app targets only in
+  `BodyRecordPresenter.swift` (its definition) and `BodyRecordModel.swift` (the sheet model).
 - `test_no_union_code_in_stage_4` — the strings `LabBookUnion` and `unionedDeviceIds` appear in no
   file under `Strand/` or `StrandiOS/`.
 - `test_no_flag_class_is_cloned` — no file under `Strand/Data/BodyRecord*.swift` or
@@ -1624,9 +1649,9 @@ state, each asserting the presentation built from the fixture; plus:
 Two existing scans stay binding and must stay green:
 
 - `Tools/test_body_measurement_single_resolver.py` proves that no new file reads or writes a
-  `weight` row by a literal key. Its assertions are kept. Where it names line numbers of
-  `BodyMeasurementResolver.swift` that §8.4's edit moves, the Test author updates the numbers only,
-  after ownership's own update of that file.
+  `weight` row by a literal key. Its assertions are kept and stage 4 does not edit the file: any
+  line number in it that the resolver edit moves is updated by stage 1's work package 1-11, the
+  package that makes the edit.
 - Ownership's `Tools/test_lab_book_single_read_path.py` proves that no stage 4 file reads
   `labMarker` by device id or by an all-id store call. Stage 4 adds nothing to its allowlist.
 
@@ -1637,12 +1662,12 @@ pinned by literals (§12.1); the Health list has no new row; the routes are unre
 is unchanged; the weigh-in history treats every source as today; the Coach context is unchanged for
 existing data; no row is written. The baseline suite's results are unchanged.
 
-Three things are **not** flag-gated, by design, and are stated here so nobody finds them later:
-`MarkerCatalog.definition(for:)` resolves body-record keys, the Coach roll-up skips them, and the
-resolver leaves out a scan's weight row in a week with a manual weigh-in (§8.4). None can change
-anything until a body-record row exists, which needs the flag to have been on.
-`testCombinedSeedLeavesTheStageOneWeeklySeriesUnchanged` and the whole stage 1 suite, which holds no
-`body-scan` row, prove the resolver step is inert without one.
+Two things of this stage are **not** flag-gated, by design, and are stated here so nobody finds
+them later: `MarkerCatalog.definition(for:)` resolves body-record keys, and the Coach roll-up skips
+them. A third, stage 1's ruling R44 (§8.4), is not gated by this stage's flags either. None can
+change anything until a body-record row exists, which needs the flag to have been on.
+`testCombinedSeedLeavesTheStageOneWeeklySeriesUnchanged` shows the combined seed leaves stage 1's
+weekly points as they were.
 
 ### 12.7 Parity (ruling R43)
 
@@ -1658,11 +1683,12 @@ Kotlin counterpart. The written disposition, recorded with the change:
 reads: no migration, no new table or column, no new category, no backup whitelist key, and
 `MarkerCatalog.builtIn` and the built-in CSV alias table stay byte-identical to their Kotlin twins.
 What it adds exists on the Swift side only: 29 catalogue entries in a second list, one CSV scope,
-the extended unit table, the `valueText` annotation on numeric rows, the source id `body-scan`, the
-store call `replaceLabMarkers`, and the rule that a manual weigh-in outranks a scan within its
-week. An Android install that opened the same database would list every such row under its stored
-category with a name made from its key, show the stored-unit value, ignore the annotation, and
-treat a scan's `weight` row as an ordinary weight reading.
+the extended unit table, the `valueText` annotation on numeric rows, the source id `body-scan` and
+the store call `replaceLabMarkers`. An Android install that opened the same database would list
+every such row under its stored category with a name made from its key, show the stored-unit value,
+ignore the annotation, and treat a scan's `weight` row as an ordinary weight reading. The rule that
+a manual weigh-in outranks a scan is stage 1's, and its disposition is written there (stage 1
+specification §12.7).
 
 The same drift, item by item:
 
@@ -1678,7 +1704,6 @@ The same drift, item by item:
 | P8 | `BodyRecord.swift` (compare, derive, checks) | No twin | Android has no comparison |
 | P9 | Scan identity by `(source, takenAt)` and source `body-scan` | Unknown to Android | Scan rows appear as separate Lab Book cards |
 | P10 | Backup whitelist | Equal | None. No key was added |
-| P11 | A manual weigh-in outranks a `body-scan` weight row within its week (§8.4) | Android's weight resolver knows no such rule | On Android a scan's total mass would count as the newest weight even in a week with a weigh-in |
 
 The Swift tests pin the Swift side: `testBodyRecordCatalogueIsPinned` holds the catalogue literal,
 `testFixtureScanAToScanBTable` and `testFixtureDerivedValuesForScansABAndC` hold the expected
@@ -1736,13 +1761,16 @@ the pull request.
 | F40 | The occupancy check limited to registered ids, or to the active id | `testOccupancySpansUnregisteredAndOtherBrandIds` |
 | F41 | A conflicting key shown as the value of its first row | `testConflictingScanRowsAreBothKeptAndTheKeyIsConflicting` |
 | F42 | A scan with a conflicting key left editable | `testConflictingScanIsNotEditableAndIsDeletable` |
-| F43 | The outranking step removed from `series` | `testManualWeighInOutranksAScanOnTheSameDay`, `testWeeklyPointIsTheWeighInWhenBothExist` |
-| F44 | Outranking applied across weeks (any manual row outranks any scan) | `testManualWeighInInThePreviousWeekDoesNotOutrank` |
-| F45 | Outranking applied only on the scan's own day | `testManualWeighInOutranksALaterScanInTheSameWeek` |
-| F46 | A `lab-csv` weight row treated as a scan, or as a weigh-in | `testCsvWeightRowNeitherOutranksNorIsOutranked` |
-| F47 | The history's representative chosen without the rule | `testHistoryRepresentativeAgreesWithTheResolver` |
-| F48 | A flag class cloned for stage 4 | `test_no_flag_class_is_cloned` |
-| F49 | `scans()` returns nothing while the flag is off | `testScansReadDoesNotConsultTheFlag` |
+| F43 | A flag class cloned for stage 4 | `test_no_flag_class_is_cloned` |
+| F44 | `scans()` returns nothing while the flag is off | `testScansReadDoesNotConsultTheFlag` |
+| F45 | `weighInOutranksDraft` decides by itself (any weigh-in row in the same calendar week returns true, the resolver not asked) | `testWeighInLineAgreesWithTheResolverForEveryVariant` (V7e: a weigh-in in an unknown unit) |
+| F46 | `weighInOutranksDraft` always false | `testWeighInThisWeekLineShowsOnlyWhenTheScanWouldBeOutranked` |
+| F47 | The scan sheet writes its total-mass row with the weigh-in's source | `testSaveWritesOneRowPerEnteredFieldWithTheScanSource` |
+
+Breaking the outranking rule itself (removing it, applying it across weeks, applying it on the
+scan's day only, treating a CSV row as a scan, marking the history without it) is stage 1's fault
+list (its §12.6), run with work package 1-11. The tests of `BodyRecordSingleNumberTests` that name
+V7 to V7f fail under those breaks as well, and the Verifier records that they do.
 
 ### 12.9 Privacy scans
 
@@ -1760,8 +1788,10 @@ the pull request.
 
 Every frame of §10 reproduced from the fixture through `--demo-screen`, at the default and the
 largest text size, with Reduce Motion on and off; enter, edit, move to another day, delete and
-compare exercised by tapping. The names, all lower case, use only the prefixes reserved for this
-stage in the demo registry (`bodyrecord-`, `scan-`, `compare-`, `bench-`, `labunits-`):
+compare exercised by tapping. This stage's demo file is `StrandiOS/BodyRecord/BodyRecordDemo.swift`
+and it has one element in the orchestrator's demo registry (step 0 adds the registry; WP 4-H adds
+the element). The names, all lower case, use only the prefixes reserved for this stage
+(`bodyrecord-`, `scan-`, `compare-`, `bench-`, `labunits-`):
 
 | Frames | Demo names |
 |---|---|
@@ -1792,10 +1822,10 @@ and its total mass is the stage 1 weight of that day. So:
 
 - the **combined seed** (stage 1's weigh-ins and waists, plus the three scans and the benchmarks
   below) is one consistent person, and is what `BodyRecordDemo` and any simulator seed use;
-- by §8.4 every scan's week holds a manual weigh-in, so in the combined seed the scans change
-  nothing in stage 1's weekly points, rates or verdicts;
+- every scan's week holds a manual weigh-in, so by stage 1's ruling R44 (§8.4) the scans change
+  nothing in stage 1's weekly points, rates or verdicts in the combined seed;
 - tests that need a scan to be the resolver's value seed the scan without that week's weigh-in
-  (variants V7a to V7e).
+  (variants V7a to V7f).
 
 Tests in the pure packages use the zone-free values below. App-target tests that need an instant use
 12:00 UTC of the day with the time zone injected as UTC. Device ids are those of the ownership
@@ -1901,8 +1931,9 @@ Each is the fixture with one change. "Alone" means seeded without stage 1's weig
 | V7a | Scan A alone | The resolver's value as of 2031-01-08, the week's point and the current value are 100.0, from the scan's row |
 | V7b | Scan A alone, plus a manual weigh-in of 101.0 kg at 07:00 UTC on Monday 2031-01-06 (same week, earlier day) | As V7: 101.0 everywhere, as of 2031-01-08 as well |
 | V7c | Scan A alone, plus a manual weigh-in of 101.0 kg at 07:00 UTC on Sunday 2031-01-05 (the week before) | The scan is not outranked: the value as of 2031-01-08 is 100.0; the week of 2030-12-30 has the point 101.0 and the week of 2031-01-06 the point 100.0 |
-| V7d | Scan A alone, plus a `lab-csv` weight row of 101.0 kg at 07:00 UTC on 2031-01-08 | The scan is not outranked and the CSV row is not a weigh-in: the later instant wins, 100.0 |
-| V7e | Scan A alone, plus a manual weight row of 16.0 in the unit `stone` at 07:00 UTC on 2031-01-08 | The row is not usable, so it does not outrank: 100.0 |
+| V7d | The rows of scan A imported by CSV (source `lab-csv`, `takenAt` 12:00 UTC on 2031-01-08), nothing else that day; plus a manual weigh-in of 101.0 kg at 07:00 UTC on 2031-01-08 | The imported scan's weight row is not outranked: it competes by instant, and noon is later than 07:00, so the value as of 2031-01-08 and the week's point are 100.0. H8 does not apply (an imported scan has no sheet) |
+| V7e | Scan A alone, plus a manual weight row of 16.0 in the unit `stone` at 07:00 UTC on 2031-01-08 | The resolver does not admit the row, so it does not outrank: 100.0. H8 is not shown |
+| V7f | Scan A alone, then a manual weigh-in of 101.0 kg at 07:00 UTC on Friday 2031-01-10 (same week, later day) | Rows after the as-of day never suppress: the value as of 2031-01-08 and as of 2031-01-09 is 100.0, the scan's. As of 2031-01-10 it is 101.0, and the week's point evaluated with today 2031-01-10 is 101.0. Opening the scan's sheet on 2031-01-10 shows H8 |
 | V8 | Scan A alone, plus stage 1's weigh-in of 99.2 kg on 2031-01-15 | The resolver's current value is 99.2; scan A's total stays 100.0 inside the scan |
 | V9 | Scan A's fat-mass row rewritten with unit `stone` | Fat mass is unreadable in A: G5, I5; the comparison row is `onlyLater` |
 | V10 | The same scan rows imported by CSV in the wide scope | A scan with source `lab-csv`, read-only (G6, I6) |
@@ -1951,50 +1982,60 @@ package starts, from this document alone.
 - Lab Book ownership, merged (step 1 of the serialised order): `LabBookRows`, `LabMarkerUnion`,
   `upsertOwnerLabMarkers`, `deleteLabMarkerAndCopies`, the all-id `reprojectCells`, and the removal
   of `BodyMeasurementProvider.unionedDeviceIds`.
-- Stage 2's extraction in `AICoach.swift`, merged, before the one-line roll-up skip.
+- Stage 2's extraction in `AICoach.swift` and stage 3's one-line supplement exclusion there, both
+  merged, before the one-line roll-up skip.
+- Stage 1's ruling R44 written in the stage 1 specification. Its work package 1-11 is not a
+  prerequisite of the stage: it runs inside this stage's serialised step (below).
 - The combined design frame set for the Health card, Settings and the scorecard screen, approved,
   before the hotspot commit.
 
 | WP | Role | Files |
 |---|---|---|
 | 4-2 | Designer | Files inside `design/round-s4-body-record/` only (`index.html`, `model.js`, `bodyrecord.js`, `bodyrecord.css`, `README.md`, `s4-frames.json`), imported with the plugin command `importS4` to the page "Stage 4 · Body record". The Designer does not edit `design/figma-plugin/code.js` or `manifest.json` |
-| 4-3 | Test author | New: `Packages/StrandImport/Tests/StrandImportTests/MarkerCatalogBodyRecordTests.swift`, `LabMarkerCsvBodyRecordScopeTests.swift`, `MarkerUnitTableTests.swift`; `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/BodyRecordTests.swift`, `BodyRecordFixture.swift`; `Packages/WhoopStore/Tests/WhoopStoreTests/LabMarkerReplaceTests.swift` (it uses ownership's `LabBookOwnershipFixture.swift` and does not edit it); `StrandTests/BodyRecordStoreTests.swift`, `BodyRecordSingleNumberTests.swift`, `BodyRecordPresenterTests.swift`, `BodyRecordFlagTests.swift`, `LabReportUnitsEditorTests.swift`; `Tools/test_body_record_single_source.py`. Edited, after ownership's own edits to the same files: `StrandTests/OneNumberPerVariableTests.swift` (two added tests), `Tools/test_body_measurement_single_resolver.py` (line numbers only, §12.5) |
-| 4-4a | Implementer A1 | `Packages/StrandImport/Sources/StrandImport/MarkerCatalog.swift`, `LabMarkerCsvImport.swift`; new `MarkerUnitTable.swift` |
+| 4-3 | Test author | New: `Packages/StrandImport/Tests/StrandImportTests/MarkerCatalogBodyRecordTests.swift`, `LabMarkerCsvBodyRecordScopeTests.swift`, `MarkerUnitTableTests.swift`; `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/BodyRecordTests.swift`, `BodyRecordFixture.swift`; `Packages/WhoopStore/Tests/WhoopStoreTests/LabMarkerReplaceTests.swift` (it uses ownership's `LabBookOwnershipFixture.swift` and does not edit it); `StrandTests/BodyRecordStoreTests.swift`, `BodyRecordSingleNumberTests.swift`, `BodyRecordPresenterTests.swift`, `BodyRecordFlagTests.swift`, `LabReportUnitsEditorTests.swift`; `Tools/test_body_record_single_source.py`. Edited, after ownership's own edits to the same file: `StrandTests/OneNumberPerVariableTests.swift` (two added tests) |
+| 4-4a | Implementer A1. The catalogue package: it declares `MarkerCatalog.scanSource`, which stage 1's work package 1-11 needs | `Packages/StrandImport/Sources/StrandImport/MarkerCatalog.swift`, `LabMarkerCsvImport.swift`; new `MarkerUnitTable.swift` |
+| 1-11 | **Stage 1's package**, listed here only for its place in this stage's serialised step: after 4-4a has merged, before 4-4c and 4-5. Its role, tests and files are in the stage 1 specification §14, not here | None of stage 4's. It is the only editor of `Strand/Data/BodyMeasurementResolver.swift`, and it makes its edit to `Strand/Data/CutScorecardPresenter.swift` before 4-5 makes this stage's |
 | 4-4b | Implementer A2 | New `Packages/StrandAnalytics/Sources/StrandAnalytics/BodyRecord.swift` |
-| 4-4c | Implementer A3, after ownership's LO-2 has merged | `Packages/WhoopStore/Sources/WhoopStore/LabMarkerStore.swift` (the one function of §9.2 and the private helpers it shares with ownership's two functions) |
-| 4-5 | Implementer B, after 4-4a, b, c and after ownership's LO-3 has merged | New: `Strand/Data/BodyRecordSettings.swift`, `BodyScanFields.swift`, `BodyRecordStore.swift`, `BodyRecordModel.swift`, `BodyRecordPresenter.swift`. Edited: `Strand/Data/BodyMeasurementResolver.swift` (§8.4: the constant, the function, and one line in `series`), `Strand/Data/CutScorecardPresenter.swift` (the representative loop of §8.4, and the history caption and the read-only rule behind a defaulted parameter), `Strand/AI/AICoach.swift` (the roll-up skip, one line, after stage 2's extraction) |
+| 4-4c | Implementer A3, after ownership's LO-2 has merged | `Packages/WhoopStore/Sources/WhoopStore/LabMarkerStore.swift` (the one function of §9.2, composed from ownership's `deleteWithCopies`, `ownerUpsert` and `reprojectCells`; no helper and no SQL statement of its own) |
+| 4-5 | Implementer B, after 4-4a, b, c, after stage 1's 1-11 and after ownership's LO-3 has merged | New: `Strand/Data/BodyRecordSettings.swift`, `BodyScanFields.swift`, `BodyRecordStore.swift`, `BodyRecordModel.swift`, `BodyRecordPresenter.swift` (it holds `weighInOutranksDraft`, §8.4). Edited: `Strand/Data/CutScorecardPresenter.swift` (the history caption and the read-only rule behind a defaulted parameter; not the week mark), `Strand/AI/AICoach.swift` (the roll-up skip, one line, after stage 2's extraction and stage 3's line) |
 | 4-6 | Implementer C, after G1 and 4-5 | New: `StrandiOS/BodyRecord/BodyRecordView.swift`, `BodyScanSheet.swift`, `BodyScanDetailView.swift`, `BodyScanCompareView.swift`, `BenchmarkDetailView.swift`, `BenchmarkSheet.swift`, `BodyRecordKit.swift`, `BodyRecordDemo.swift`. Edited: `StrandiOS/Scorecard/WeighInHistoryView.swift` (the scan row's tap), `Strand/Screens/LabBookView.swift` (the CSV scope argument) |
-| 4-H | Orchestrator, one small commit inside stage 4's serialised step, after 4-6's new files exist | `StrandiOS/Redesign/RedesignRoute.swift` (the four cases of §5.1 and the route switch), `StrandiOS/Redesign/RedesignHealthView.swift` (the Body record row, in the fixed order of §10.1), `Strand/Screens/SettingsView.swift` (the card of §10.8, in the fixed order), `StrandiOS/App/StrandiOSApp.swift` (one element, `BodyRecordDemo.screen(named:)`, in the demo-provider list, after intake and before events) |
+| 4-H | Orchestrator, one small commit inside stage 4's serialised step, after 4-6's new files exist | `StrandiOS/Redesign/RedesignRoute.swift` (the four cases of §5.1 and the route switch), `StrandiOS/Redesign/RedesignHealthView.swift` (the Body record row, in the fixed order of §10.1), `Strand/Screens/SettingsView.swift` (the card of §10.8, in the fixed order), `StrandiOS/App/StrandiOSApp.swift` (one element, `BodyRecordDemo.screen(named:)`, in the demo registry) |
 | 4-7 | Implementer D (4B), after 4-4a and after ownership has merged | `Strand/Screens/MarkerEditorView.swift`; `Strand/Screens/LabBookView.swift` (the "Entered as" line in `historyRow`); the editor draft type in `Strand/Data/BodyRecordPresenter.swift` |
 | 4-8 | Localiser, once, after the strings are final, last step of the stage | `Strand/Resources/Localizable.xcstrings` |
 | 4-9 | Reviewers (correctness, contract, data safety) and Verifier | Evidence only |
 
-**Shared files this stage edits**, each with one writer at a time across all stages, in the order
-the cross-stage check fixes:
+**Shared files this stage edits.** Every shared file has one writer at a time, and the stages
+take their turn at it in one order: Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage
+6, then packet v2. **Stage 4 is fourth**: it edits a shared file only after ownership, stage 2 and
+stage 3 have finished with it, and before stage 5 starts. That holds for every row below; the last
+column adds only what is particular to stage 4's own turn.
 
-| File | Stage 4 writer | Order across stages |
+| File | Stage 4 writer | Within stage 4's turn |
 |---|---|---|
-| `Strand/Resources/Localizable.xcstrings` | 4-8 | One Localiser at a time, last step of each stage: ownership, 2, 3, **4**, 5, 6 |
-| `StrandiOS/App/StrandiOSApp.swift` (debug block) | 4-H | Scaffolding lands the list; each stage adds one element in integration order |
-| `Strand/Screens/SettingsView.swift` | 4-H | After the combined Settings frame is approved: 2, 3, **4**, 5, 6. Shared with macOS: build `Strand` after it |
-| `StrandiOS/Redesign/RedesignHealthView.swift` | 4-H | 2, **4**, 5, 6, rows in the approved order |
-| `StrandiOS/Redesign/RedesignRoute.swift` | 4-H | 3, **4**, 5, 6. Additive cases |
-| `Strand/Data/CutScorecardPresenter.swift` | 4-5 | **4**, then 5. Different functions; still serial |
-| `Strand/AI/AICoach.swift` | 4-5 | Ownership (the roll-up read), 2 (the extraction), then **4** (the roll-up skip) |
-| `Packages/WhoopStore/.../LabMarkerStore.swift` | 4-4c | Ownership, then **4-4c** |
-| `Strand/Screens/LabBookView.swift` | 4-6, then 4-7 | Ownership (load, save, CSV import, delete), then **4-6** (CSV scope argument), then **4-7** ("Entered as" line) |
-| `Strand/Screens/MarkerEditorView.swift` | 4-7 | Ownership only reads it; **4-7** edits after ownership merges |
-| `StrandiOS/Scorecard/WeighInHistoryView.swift` | 4-6 | Stage 4 only, after ownership, whose history lists rows under every id |
-| `StrandTests/OneNumberPerVariableTests.swift`, `Tools/test_body_measurement_single_resolver.py` | 4-3 | Ownership rewrites line references and re-checks the cross-id cases; stage 4 then adds its two tests |
-| `Packages/StrandImport/.../MarkerCatalog.swift`, `LabMarkerCsvImport.swift` | 4-4a | Stage 4 only |
-| `Strand/Data/BodyMeasurementResolver.swift` | 4-5 | Stage 4 only. No other stage lists it; stage 1's ruling for §8.4 is recorded before the edit |
+| `Strand/Resources/Localizable.xcstrings` | 4-8 | The Localiser, last step of the stage |
+| `StrandiOS/App/StrandiOSApp.swift` (debug block) | 4-H | One registry element. The registry itself is the orchestrator's step 0 |
+| `Strand/Screens/SettingsView.swift` | 4-H | After the combined frame set is approved. Shared with macOS: build `Strand` after it |
+| `StrandiOS/Redesign/RedesignHealthView.swift` | 4-H | The row, in this stage's place of the approved order (§10.1) |
+| `StrandiOS/Redesign/RedesignRoute.swift` | 4-H | Additive cases and the route switch |
+| `Strand/Data/CutScorecardPresenter.swift` | 4-5 | After stage 1's 1-11 (the week mark), which runs earlier in this same step |
+| `Strand/AI/AICoach.swift` | 4-5 | The roll-up skip, one line. Stage 4 is the fourth and last editor: Lab Book ownership (the roll-up read), then stage 2's extraction, then stage 3's one-line supplement exclusion, then this |
+| `Packages/WhoopStore/.../LabMarkerStore.swift` | 4-4c | After ownership's LO-2, on top of its in-transaction steps (§9.2) |
+| `Strand/Screens/LabBookView.swift` | 4-6, then 4-7 | 4-6 (CSV scope argument), then 4-7 ("Entered as" line), both after ownership's edits |
+| `Strand/Screens/MarkerEditorView.swift` | 4-7 | After ownership has merged |
+| `StrandiOS/Scorecard/WeighInHistoryView.swift` | 4-6 | After ownership, whose history lists rows under every id |
+| `StrandTests/OneNumberPerVariableTests.swift` | 4-3 | Two added tests, after ownership's edits to the file |
+| `Packages/StrandImport/.../MarkerCatalog.swift`, `LabMarkerCsvImport.swift` | 4-4a | First package of the step: 1-11 waits for its `scanSource` |
+
+`Strand/Data/BodyMeasurementResolver.swift` is **not** in this table: stage 4 does not edit it.
+Its one editor in this step is stage 1's work package 1-11 (§8.4).
 
 **Not edited by this stage:** `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`,
 the three Today views, `project.yml`, `Packages/WhoopStore/.../Database.swift`,
 `Packages/WhoopStore/.../BackupSettings.swift`, `Packages/WhoopStore/.../LabMarkerOwnership.swift`,
 `Strand/Data/LabBookRows.swift`, `Strand/Data/BodyMeasurementProvider.swift`,
-`Strand/Data/WeighInStore.swift` (ownership is the only editor of the last four; stage 4 only calls
-them), `Strand/Data/CutScorecardInputBuilder.swift`, `Strand/Data/ObservableDefaultsFlag.swift`,
+`Strand/Data/WeighInStore.swift` (stage 4 only calls the last four),
+`Strand/Data/BodyMeasurementResolver.swift` (stage 4 only calls its `series`),
+`Tools/test_body_measurement_single_resolver.py`, `Strand/Data/CutScorecardInputBuilder.swift`, `Strand/Data/ObservableDefaultsFlag.swift`,
 `CanonicalDay.swift`, `design/figma-plugin/code.js` and `manifest.json`,
 `StrandiOS/Scorecard/ScorecardDemo.swift`, anything under `android/`.
 
@@ -2007,9 +2048,12 @@ them), `Strand/Data/CutScorecardInputBuilder.swift`, `Strand/Data/ObservableDefa
   4-4a and 4-4b with their `swift test`, one package at a time, and the new files of 4-5 and 4-6
   written but not built. 4-4c waits for ownership's change to `LabMarkerStore.swift`.
 - Serialised on the single app build tree, as step 5 of the build order (after ownership, the stage
-  1 follow-up, stage 2 and stage 3): **4B first** (4-4a's unit table, 4-7), then **4A** (4-4c, 4-5,
-  4-6, 4-H), both written against `LabBookRows`; then 4-8. Each serialised commit runs `xcodegen`,
-  the `NOOPiOS` build, the `Strand` build, `StrandTests` and the gate script.
+  1 follow-up, stage 2 and stage 3): 4-4a first, since everything else needs it; then **4B** (4-7);
+  then stage 1's **1-11**, as its own small commit, now that `MarkerCatalog.scanSource` exists and
+  before any scan can be written; then **4A** (4-4c, 4-5, 4-6, 4-H), written against `LabBookRows`;
+  then 4-8. Each serialised commit runs `xcodegen`, the `NOOPiOS` build, the `Strand` build,
+  `StrandTests` and the gate script. The tests of `BodyRecordSingleNumberTests` that name V7 to V7f
+  go green only once both 1-11 and 4-5 are in.
 - 4-6 and 4-7 both edit `LabBookView.swift`, in different functions: 4-6's scope argument first,
   then 4-7's line.
 - Changes, in order, each behind its own flag: "fix: laboratory unit entry" (4-4a's unit table,
@@ -2039,9 +2083,9 @@ column says what changes if the owner decides otherwise.
 
 | # | Question | Recommendation, in force until overruled | If the owner says otherwise |
 |---|---|---|---|
-| O1 | Is a scan's total mass the weight for that day everywhere in the app? Decided by default (X11, owner decision list) | Yes. It is stored once, as a `weight` reading, and the resolver treats it like any other, subject to O2 (§8) | A separate `scan_total_mass` key would be a second number for one variable and would break R41; it would need a new ruling, a catalogue entry and a rewrite of §8 |
-| O2 | When a week has both a manual weigh-in and a scan, which one does the scorecard judge, and which is the current weight? Decided by default (X11) | The weigh-in outranks the scan within that week, for the weekly point and the current value (§8.4). In a week with no weigh-in the scan is used. One stored number either way | "The later instant wins, as for any two readings": delete §8.4, `withoutOutrankedScans`, its two call sites, state H8 and its string, the tests of §12.4 that name the rule, and faults F43 to F47; a scan at noon then outranks a morning weigh-in and can be the week's point |
-| O3 | On a day with both a morning weigh-in and a scan, which is the day's weight? Decided by default (X11) | The weigh-in, by O2: the day is in a week that has a weigh-in | As O2 |
+| O1 | Is a scan's total mass the weight for that day everywhere in the app? Decided by default (X11, owner decision list) | Yes. It is stored once, as a `weight` reading, and the resolver treats it like any other, subject to stage 1's ruling R44 (O2, §8) | A separate `scan_total_mass` key would be a second number for one variable and would break R41; it would need a new ruling, a catalogue entry and a rewrite of §8 |
+| O2 | When a week has both a manual weigh-in and a scan, which one does the scorecard judge, and which is the current weight? **This question is stage 1's** (its open question S21, ruling R44); it is listed here because a scan is what raises it | The weigh-in, within that week; in a week with no weigh-in the scan is used. One stored number either way (§8.4) | "The later instant wins, as for any two readings": stage 1 withdraws R44 and work package 1-11. Here: §8.4 shrinks to one sentence, `weighInOutranksDraft`, state H8 and its string go, the V7 variants and their tests are rewritten to the later-instant result, and faults F45 and F46 go |
+| O3 | On a day with both a morning weigh-in and a scan, which is the day's weight? Stage 1's, as O2 | The weigh-in: the day is in a week that has a weigh-in | As O2 |
 | O4 | Scan markers appear in Lab Book under "Imaging" and benchmarks under "Custom". Acceptable? Decided by default | Yes. A new category would hide the rows from any older build (D3) | A new category needs a list change in Lab Book and makes the rows invisible to an older build |
 | O5 | Should the in-app Coach see scan and benchmark values when "share Lab Book" is on? Decided by default | No. The roll-up skips them (§4.5), and stage 2's packet has no scan or benchmark section until the owner asks | Remove the one-line skip and its two tests; a packet section would be its own change with a version bump |
 | O6 | Should the comparison be computed from the figures as displayed, or from the stored values? | As displayed, so it matches a hand calculation from the screen | §7.3 step 3 changes and §13.3 is recomputed |
@@ -2049,11 +2093,11 @@ column says what changes if the owner decides otherwise.
 | O8 | Should the laboratory's resting-metabolic-rate estimate be used by the app's calorie figures? | No. It is shown in the scan and nowhere else | A separate change to the calorie model, with its own specification |
 | O9 | Should Lab Book show a blood result in the unit it was typed in, with the stored unit second? | Stored unit first, "Entered as" second. Making the typed unit primary is a display preference that can follow | L6 swaps its two lines |
 | O10 | Should the stricter number parsing of 4B (no `nan`, the device's decimal separator) apply even with its flag off? | Not yet: flag-off behaviour stays identical. Make it unconditional when 4B is accepted | `testFlagOffUsesTheLegacyTierAndPlainDoubleParsing` changes |
-| O11 | Is the benchmark list of §5.3 right (push-up variants, pull-ups, dead hang, plank, wall sit, grip), with custom benchmarks for anything else? Decided by default. The owner is also asked to confirm the list is a general one and should stay as it is | Yes | Entries are added to or removed from §5.3, §7.1 and the pinned literal; nothing else changes |
+| O11 | Are the two lists right: the scan fields of §5.2, a generic whole-body composition report, and the benchmarks of §5.3, a generic set of bodyweight and grip benchmarks, with custom entries for anything else? Decided by default. **The owner confirms both lists**, and confirms that each should stay the generic list it is | Yes | Entries are added to or removed from §5.2 or §5.3, §7.1, §7.7 and the pinned literal; nothing else changes |
 | O12 | Should the Lab Book editor's kg and lb, cm and in entry for weight and waist ship with 4B? Decided by default | Yes. Without it a weight typed in pounds in Lab Book is stored as kilograms (stage 1 specification, C3) and reaches the resolver. The same cm and in option is offered for `height` | Remove the `weight`, `waist` and `height` rows from the extended tier of §7.2 |
 | O13 | Two switches, or one? Decided by default | Two: laboratory units first, scans second, so the blood-panel fix can be accepted before the scan screens | One key gates both; §9.4, §10.8 and `BodyRecordFlagTests` shrink |
 | O14 | Photo timeline (4C) stays unbuilt until the owner asks. Decided by default | Confirmed: §17 is an outline only | 4C gets its own specification, design gate and go-aheads (§17) |
-| O15 | One combined layout for the Health tab's "More health" card, the Settings section and the scorecard screen, covering all stages, approved once, with the fixed row order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. Decided by default (X22) | Yes. Stage 4's row and card take their place from it (§10.1, §10.8) | The row and card move; only WP 4-H changes |
+| O15 | One combined layout for the Health tab's "More health" card, the Settings section and the scorecard screen, covering all stages, drawn by the orchestrator's designer and approved once, with one order shared by the Health rows and the Settings cards. Decided by default (X22) | Yes. Body record is the fourth entry of that order (§10.1, §10.8) | The row and card move; only WP 4-H changes |
 | O16 | Install stage 4 together with stage 3, after a fresh backup, with both flags off. Decided by default | Yes | Its own install |
 | O17 | The fixture's figures (§13) are invented and round, including the side difference in §13.2. The owner is asked to confirm that none of them is a figure of their own | They stay | Any value named is replaced by another round one and §13 is recomputed |
 
@@ -2067,7 +2111,7 @@ column says what changes if the owner decides otherwise.
 | Network path | **No** |
 | Backup whitelist key | **No** |
 | Signing, bundle id, App Group | **No** |
-| A change to the resolver's rule (§8.4) | Yes: a new ruling in the stage 1 specification. In force by default (O2) |
+| A change to the resolver's rule (§8.4) | Not asked by this stage. It is stage 1's ruling R44, in force by default (stage 1's S21), built by stage 1's work package 1-11 |
 | Installing on the phone | Yes, as always, asked at G8, after a fresh backup and after B1, together with stage 3 |
 | Switching either flag on by default | Yes, at acceptance |
 | 4C | Yes, in full: see §17 |
@@ -2123,16 +2167,21 @@ What that specification would have to settle:
 - **Whether some scan methods print measures this list lacks.** The catalogue is not a gate: any
   further figure can be a custom marker.
 - **Ownership's final code.** `LabBookRows`, `LabMarkerUnion`, `upsertOwnerLabMarkers`,
-  `deleteLabMarkerAndCopies` and the rewritten `reprojectCells` are taken from the ownership
-  specification, not from code, which does not exist yet. If a signature differs when it merges,
-  §9 follows the merged code and the rules stay as written here.
+  `deleteLabMarkerAndCopies`, and the in-transaction steps `ownerUpsert`, `deleteWithCopies`,
+  `LabBookDayCell` and the all-id `reprojectCells`, are taken from the ownership specification, not
+  from code, which does not exist yet. If a signature differs when it merges, §9 follows the merged
+  code and the rules stay ownership's.
 - **The scaffolding's exact shapes.** The name and element type of the demo-provider list, and the
   final signatures of `ObservableDefaultsFlag` and `CanonicalDay`, are the orchestrator's. §9.4 and
   §7.8 state what stage 4 relies on.
-- **The ruling number for §8.4** in the stage 1 specification, and whether stage 1's own text
-  already states the rule when this stage is built.
-- **Whether every reader of "the latest weight" goes through the resolver's `series`.** §8.4 relies
-  on stage 1's flag-on audit (R41). A reader that picks the newest `weight` row itself would show a
+- **The final shape of stage 1's ruling R44**, which was being rewritten while this document was:
+  the exact signature of `withoutOutrankedScans`, the name of the constant for the weigh-in source
+  that `weighInOutranksDraft` filters by, and how the resolver's `series` takes its as-of day.
+  §8.4 states what stage 4 needs from each and follows the ruling's text as merged. If the ruling
+  leaves no reachable constant for the weigh-in source, that is raised with the orchestrator; stage
+  4 does not spell the literal.
+- **Whether every reader of "the latest weight" goes through the resolver's `series`.** The ruling
+  relies on stage 1's flag-on audit (R41). A reader that picks the newest `weight` row itself would show a
   scan's total in a week with a weigh-in; `Tools/test_body_measurement_single_resolver.py` is the
   guard, and it was not re-run for this document.
 
@@ -2147,7 +2196,9 @@ the store function, the tests and `Strand/Data/` logic do not wait for either.
 
 ## 20. Reconciliation (11 November 2026)
 
-What the cross-stage check changed in this file, per conflict id.
+What the cross-stage check changed in this file, per conflict id. This table records the first
+pass; where the second pass below reverses a row (X11, X17, X22, the shared-file order, P11), the
+second pass is what the document now says.
 
 | Id | What changed here |
 |---|---|
@@ -2171,9 +2222,38 @@ Shared scaffolding this stage expects from the orchestrator's step 0, before any
 
 | Scaffolding | What stage 4 does with it |
 |---|---|
-| The demo registry line in `StrandiOS/App/StrandiOSApp.swift` (an ordered list of demo providers) | Adds one element, `BodyRecordDemo.screen(named:)`, after intake and before events (WP 4-H) |
+| The demo registry in `StrandiOS/App/StrandiOSApp.swift` | Adds one element, `BodyRecordDemo.screen(named:)` (WP 4-H) |
 | The plugin commands `importS2` to `importS6` and the stage-named design folders | Uses `importS4` and works only inside `design/round-s4-body-record/` |
 | `ObservableDefaultsFlag` | Two static instances on `BodyRecordSettings` (§9.4) |
-| `CanonicalDay` | Validates a draft's day (§7.8) and gives the week of §8.4 |
+| `CanonicalDay` | Validates a draft's day (§7.8) |
 | `ChargeTypicalBand` | Not used by stage 4 |
 | The comment block of fork-only backup keys above the Swift whitelist | Not edited: stage 4 adds no backup key (§9.5) |
+
+### Second pass
+
+Applied later on 11 November 2026, from the independent re-check of the first pass and the
+orchestrator's rulings on it. Each row is one item that names this file.
+
+| Item | What changed here |
+|---|---|
+| X11, ruling (a): the weigh-in-outranks-scan rule has one home | §8.4 no longer specifies the rule. It points to ruling R44 of the stage 1 specification (the function `withoutOutrankedScans` in `BodyMeasurementResolver.swift` with its two callers), implemented by stage 1's work package 1-11 inside this stage's serialised step, after 4-4a declares `MarkerCatalog.scanSource`. Removed from stage 4: the function and the `weighInSource` constant, their §5.1 row, the resolver edit and the week-mark edit of WP 4-5, the source scan `test_outranking_rule_has_two_callers`, the three tests of the rule's internals (non-canonical day, order kept, waist), the line-number edit to `Tools/test_body_measurement_single_resolver.py`, old faults F43 to F47, drift row P11 and the go-ahead row of §16. `BodyMeasurementResolver.swift` left the shared-file table: stage 4 does not edit it |
+| X11, what stage 4 keeps | State H8 and its string, now decided by one presenter function, `BodyRecordPresenter.weighInOutranksDraft`, which asks the resolver's `series` and has no rule of its own (§8.4, §5.1, §10.2); the with-scan tests of `BodyRecordSingleNumberTests`, asserting only what the resolver returns; variants V7 to V7e |
+| Ruling (a): a scan imported by CSV is not outranked and competes by instant | Stated in §8.4. V7d rewritten to be a CSV-imported scan beside a manual weigh-in; its test is `testCsvImportedScanIsNotOutrankedAndCompetesByInstant` |
+| Ruling (a): rows after the as-of day never suppress | Stated in §8.4. New variant V7f and `testAWeighInAfterTheAsOfDayDoesNotSuppressTheScan`. The first pass's implicit opposite (no as-of day) is gone with the function |
+| Faults | F48 and F49 became F43 and F44. New F45 to F47 break this stage's own part (the H8 function and the scan source). Breaks of the rule itself are stage 1's fault list |
+| X2, ruling (g): `LabMarkerStore` building blocks | §9.2 names ownership's module-internal steps: `replaceLabMarkers` calls `deleteWithCopies` per id, `ownerUpsert`, then one `reprojectCells` over the union of the touched `LabBookDayCell` sets, and writes no SQL of its own. WP 4-4c adds the one function and no helper. The numbered steps stay as a description of what the calls do. §18 lists the step names among what is taken from the ownership specification |
+| X17, ruling (i): `AICoach.swift` order | Stage 4 is the fourth editor: Lab Book ownership, stage 2's extraction, stage 3's one-line supplement exclusion, then this stage's skip (§4.5, §14 prerequisites, WP 4-5, shared-file table) |
+| Ruling (c): shared-file order includes stage 3 | The shared-file table of §14 states the one order (Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage 6, packet v2) once and stage 4's position in it, fourth, for every file. Per-file lists of other stages are gone. Stage 1's 1-11 is shown as a row of the work-package table and in the serialised order (4-4a, 4B, 1-11, 4A, 4-8) |
+| X22, ruling (d): Settings and Health order | §10.1, §10.8 and O15 say Body record is the fourth entry of the one order shared by the Health rows and the Settings cards, with the combined frame set as the authority. The first pass's six-entry list is removed |
+| X6, ruling (h): demo registry | This stage states its own file (`BodyRecordDemo.swift`), its own registry element and its own reserved prefixes, and nothing about where other stages' elements sit (§5.1, §12.10, WP 4-H, the scaffolding table) |
+| Privacy, ruling (k) | §5.2 and §5.3 say what each list is: a generic whole-body composition report and a generic set of bodyweight and grip benchmarks. One line in each, and O11, say the owner confirms the lists |
+| Rulings (b), (e), (f), (j) | Do not touch this stage: it reads no protein floor, has no events or packet text, and does not use `ChargeTypicalBand` |
+
+Left open by this pass, because the other text was being edited at the same time:
+
+- The stage 1 specification still described R44 through an as-of parameter on `series` and named
+  no constant for the weigh-in source when this pass was written. §8.4 is written to hold under
+  either shape and §18 records the three points to check against the merged ruling.
+- The demo prefixes are the five the cross-stage check reserved for this stage (X6). If the
+  registry reserves exactly one prefix per stage, the four other families move under `bodyrecord-`
+  and only the table of §12.10 changes.
