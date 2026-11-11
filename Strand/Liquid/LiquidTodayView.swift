@@ -1288,9 +1288,13 @@ struct LiquidTodayView: View {
             // it is the catalogue page, as it was; flag on it leads to a correction.
             let correction = BodyMeasurementCorrection.route(for: .liquidTodayWeightTile,
                                                              policy: scorecardFlag.displayPolicy)
+            // Two keys, not one: the catalogue page a tap pushes follows the route, the sparkline
+            // does not. Flag off both are "weight", the one key this tile passed before.
+            let keys = LiquidWeightTileKeys(route: correction)
             let (val, cap) = weightTile(bodyWeight)
             ktile(String(localized: "Weight"), icon: keyMetricIcon(metric), val, "", StrandPalette.metricAmber, nil,
-                  key: correction.metricKey, caption: cap, opensWeighIn: Self.presentsWeighIn(correction))
+                  key: keys.navigationKey, sparklineKey: keys.sparklineKey, caption: cap,
+                  opensWeighIn: Self.presentsWeighIn(correction))
         case .calories:
             // #616: imported-first value (imported ?: activeKcalEst) + route the tap to the matching
             // detail source, so the number, its sparkline and the chart it opens all agree.
@@ -1329,8 +1333,8 @@ struct LiquidTodayView: View {
     }
 
     private func ktile(_ label: String, icon: String, _ value: String, _ unit: String, _ tint: Color, _ frac: Double?,
-                       key: String? = nil, detailMetric: MetricDescriptor? = nil, caption: String? = nil,
-                       opensWeighIn: Bool = false) -> some View {
+                       key: String? = nil, sparklineKey: String? = nil, detailMetric: MetricDescriptor? = nil,
+                       caption: String? = nil, opensWeighIn: Bool = false) -> some View {
         let displayValue = Self.tileDisplayValue(value, unit: unit)
         let tile = VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -1367,7 +1371,9 @@ struct LiquidTodayView: View {
             // windowed series keeps a clear placeholder of the same height so every tile in a detailed row
             // stays equal-height with its bars aligned.
             if keyMetricsDetailed {
-                let spark = key.map { windowedSpark($0) } ?? []
+                // `sparklineKey` is set only where the series key and the navigation key differ (the
+                // weight tile); every other tile draws the series of its one `key`, as before.
+                let spark = (sparklineKey ?? key).map { windowedSpark($0) } ?? []
                 if spark.count >= 2 {
                     Sparkline(values: spark,
                               gradient: Gradient(colors: [tint.opacity(0.5), tint]))
@@ -1701,6 +1707,22 @@ struct LiquidTodayView: View {
         guard let carried = sources.min(by: { $0.day < $1.day }) else { return nil }
         return TodayView.carriedCaption(priorDayKey: carried.day,
                                         todayKey: displayDay?.day ?? selectedDayKey)
+    }
+}
+
+/// The two keys of the Liquid Today weight tile. `ktile` used one `key` for both the catalogue
+/// page a tap pushes and the series its detailed-mode sparkline draws, so a route that is not a
+/// catalogue page (the weigh-in sheet, flag on) took the sparkline away.
+struct LiquidWeightTileKeys: Equatable {
+    /// The catalogue key the tile pushes: `route.metricKey`. Nil for every other route.
+    let navigationKey: String?
+    /// The key `ktile` hands to `TodayDayModel.windowedSpark(_:windowDays:)`, and the key
+    /// `TodayDayModel` banks the weight series under in `kSparks`: "weight", whatever the route.
+    let sparklineKey: String
+
+    init(route: BodyMeasurementCorrectionRoute) {
+        navigationKey = route.metricKey
+        sparklineKey = "weight"
     }
 }
 
