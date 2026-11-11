@@ -6,7 +6,7 @@
 #   bash Tools/personal/cut_scorecard_oracle.sh --write   replace the literal with the oracle's output
 #
 # The oracle is the block between the ORACLE-SHARED markers of CutScorecardOracleTests.swift, compiled
-# with the three sources the engine needs and nothing else: no package, no XCTest, no store. Scratch
+# with the four sources the engine needs and nothing else: no package, no XCTest, no store. Scratch
 # files stay under the ignored build/ directory.
 #
 # This executes Swift only. It says nothing about the Kotlin twin, which compares against the same
@@ -40,7 +40,8 @@ mkdir -p "$WORK"
 } > "$WORK/main.swift"
 grep -q '^// ORACLE-SHARED-END$' "$WORK/main.swift" || fail "the ORACLE-SHARED markers were not found in $SHARED"
 
-swiftc -O "$SOURCES/CutScorecard.swift" "$SOURCES/WeeklyDigest.swift" "$SOURCES/ComparisonEngine.swift" \
+swiftc -O "$SOURCES/CutScorecard.swift" "$SOURCES/CanonicalDay.swift" "$SOURCES/WeeklyDigest.swift" \
+    "$SOURCES/ComparisonEngine.swift" \
     "$WORK/main.swift" -o "$WORK/t"
 "$WORK/t" > "$WORK/actual.txt"
 
