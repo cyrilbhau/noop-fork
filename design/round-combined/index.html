@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP round combined · the shared surfaces of stages 1 to 6</title>
+<link rel="stylesheet" href="../system/noop.css">
+<link rel="stylesheet" href="../round6-scorecard/scorecard.css">
+<link rel="stylesheet" href="combined.css">
+</head>
+<body>
+<div class="controls"><button id="replay">Replay load</button><span>Round combined · Health card, Settings, scorecard and Your cards for stages 1 to 6 · synthetic data only</span></div>
+<p class="legend"><b>Every number here is invented.</b> "Fixture Person" is the one fictional subject of all six stage specifications (stage 1 §13; rulings addendum A7): a cut from Mon 6 Jan 2031, target 94.0 kg, weighed on Wednesdays, protein floor 100 g. Each frame is that fixture on a stated day (Wed 5 Feb 2031 unless its note says otherwise), run through the design models (<code>../round6-scorecard/model.js</code> and <code>model.js</code>) and worded with the specifications' strings. This is the one layout for the surfaces every stage shares: the order is Scorecard, Coach packet, Intake, Body record, Events, Niggle log, Recovery context, Timeline. Signal states are as round 6 approved them: <b style="color:var(--recovery)">met</b>, <b style="color:var(--rec-mid)">not met</b>, <b style="color:#8A8A93">unknown</b>. Grey text set in the lighter tertiary colour above a tile or a row is an annotation for the reviewer, not app copy. See <code>README.md</code> for the frame list, the decisions being asked and every proposed string.</p>
+<div id="boards"></div>
+<script src="../system/noop.js"></script>
+<script src="../round6-scorecard/model.js"></script>
+<script src="model.js"></script>
+<script src="r6-presenter.js"></script>
+<script src="frames.js"></script>
+<script src="combined.js"></script>
+</body>
+</html>
