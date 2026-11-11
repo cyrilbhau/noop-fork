@@ -14,9 +14,9 @@ This file contains no personal measurement, target, date, medication or injury d
 an example belongs to the fictional "Fixture Person" of §13, who is the Fixture Person of stage 1
 §13. No private file is an input to this specification.
 
-Reconciled with the cross-stage check on 11 November 2026; §17 lists what changed. This change is
-**first in the integration order** (step 1 of the serialised build order): stage 2 and stage 4 are
-written against what it leaves behind (§6.3).
+Reconciled with the cross-stage check on 11 November 2026, in two passes; §17 lists what changed in
+each. This change is **first in the integration order** (step 1 of the serialised build order):
+stage 2 and stage 4 are written against what it leaves behind (§6.3).
 
 ## 1. Goal and scope
 
@@ -48,6 +48,10 @@ through one path.
 - A "delete all Lab Book readings" control, and recovery of readings lost before this change (§15).
 - Android. No Kotlin is written (R43). §12.7 records the drift this creates.
 - Any change to the scorecard, the resolver's precedence, the marker catalogue or the backup format.
+  In particular the rule by which a manual weigh-in outranks a body scan is not specified,
+  implemented or tested here. It has one home: [stage 1](stage-1.md) §18, ruling R44.
+- Any Settings card or Health tab row. This change adds neither, so it has no position in the
+  Settings and Health order.
 
 ## 2. Re-check of "what exists"
 
@@ -134,7 +138,7 @@ the row was written removes it today.
 |---|---|---|---|---|---|
 | Lab Book readings, weigh-ins included | `labMarker` | Active id | **Yes** (`DeviceRegistryStore.swift:173`) | **Yes** in Lab Book and Coach; weight and waist only partly (stage 1 union) | **The owner's. Fixed by this change** |
 | In-app lift log: exercises, programmes, programme items, sessions, sets | `liftExercise`, `liftProgram`, `liftProgramItem`, `liftSession`, `liftSet` | Active id (`Strand/Screens/LiftLogView.swift:217`, `:388-396`; `Strand/Screens/LiftSessionView.swift:951`, `:969`) | **Yes** (`DeviceRegistryStore.swift:197`; pinned by `Packages/WhoopStore/Tests/WhoopStoreTests/LiftLogStoreTests.swift:537-542`) | **Yes** (`LiftLogView.swift:391` reads the active id only) | The owner's. Same defect, same remedy; its own change ("Lift Log ownership") using the mechanism of §6.1. Asked in §15 |
-| Imported lifting sessions (Hevy CSV, pasted text) | `liftSession`, `liftSet`, `workout` | Constant `lifting` (`Strand/Data/PersonalLiftingImport.swift:7`) | No. `lifting` is not a strap id | No | Already safe |
+| Imported lifting sessions (lifting-log CSV, pasted text) | `liftSession`, `liftSet`, `workout` | Constant `lifting` (`Strand/Data/PersonalLiftingImport.swift:7`) | No. `lifting` is not a strap id | No | Already safe |
 | Manual workouts and re-labelled detected bouts | `workout`, source `manual` | Active id (`Repository.swift:2995-3046`) | **Yes** | No: the Workouts list reads every registered WHOOP and the canonical id (`Repository.swift:2787`) but not an unregistered id, so "Forget" would hide what it had not deleted | The owner's. Own change; asked in §15 |
 | Sleep marks (bedtime and wake taps) | `UserDefaults` `sleepMarks` and `metricSeries` key `sleep_mark` | Active id for the series (`AppModel.swift:1911`, `Strand/Screens/SleepView.swift:3706`) | The series row: **yes**. The defaults list: no | Series: yes | Low value on its own; fold into the manual-workout change |
 | Native journal answers | `journal` | Constant `noop-journal` (`Repository.swift:2661`, `:2732-2745`) | No | No | Already safe |
@@ -169,7 +173,7 @@ did not follow it.
 | Removed | `BodyMeasurementProvider.unionedDeviceIds(store:activeDeviceId:)` | `Strand/Data/BodyMeasurementProvider.swift:225-232` |
 | New user-facing string | "Lab Book readings you entered are kept." | `Strand/Resources/Localizable.xcstrings` |
 | Rehearsal input | Environment variable `NOOP_REHEARSAL_DB` | Read only by `LabBookOwnershipRehearsalTests` |
-| Debug demo provider | `LabBookOwnershipDemo`, demo names `labbook-ownership` and `labbook-ownership-forgot` | New `StrandiOS/Scorecard/LabBookOwnershipDemo.swift` (§12.11) |
+| Debug demo provider | `LabBookOwnershipDemo`, reserved prefix `labbook-ownership`, demo names `labbook-ownership` and `labbook-ownership-forgot` | New `StrandiOS/Scorecard/LabBookOwnershipDemo.swift` (§12.11) |
 | Not created by any stage | `LabBookUnion`, `Strand/Data/LabBookUnion.swift` | Stage 4 reads through `LabBookRows` instead (§6.3) |
 
 No storage key, setting, flag, catalogue key, table, column or index is added.
@@ -264,6 +268,21 @@ extension WhoopStore {
 three steps through `@testable import WhoopStore` only where §12.2 says so; the app target cannot
 call them.
 
+Rules that hold for any caller composing the steps inside one transaction (LO-2 lands all of them;
+no later work package adds a helper beside them):
+
+- None of the three opens a transaction, and none calls another. The caller holds the `syncWrite`.
+- `ownerUpsert` and `deleteWithCopies` never write `metricSeries`. They only report `touched`.
+- `reprojectCells` is called once, last, over the union of every `touched` set the transaction
+  collected, so each cell is computed from the rows as they stand after every delete and upsert.
+  It reads rows under every device id (the all-id projection of §7.2) and takes no device id.
+- An id passed to `deleteWithCopies` that is not stored, or that an earlier call in the same
+  transaction already removed as a copy, returns an empty `deleted` and an empty `touched`. It is
+  not an error.
+- `ownerUpsert` with an empty list returns `(0, [])`. Two incoming rows with one identity are
+  applied in list order, so the later one's content is what is stored.
+- A throw from any step propagates; the caller's transaction rolls back and no cell has changed.
+
 ### 6.2 App target
 
 ```swift
@@ -285,8 +304,8 @@ call to `LabBookRows.marker`.
 
 ### 6.3 What later stages build on (cross-check X1, X2, X17)
 
-This change merges before stage 2's extraction in `AICoach.swift` and before any stage 4 code that
-reads or writes Lab Book rows. The following is the whole contract those stages are written against.
+This change merges before any other edit to `AICoach.swift` and before any stage 4 code that reads
+or writes Lab Book rows. The following is the whole contract those stages are written against.
 Stage 4's own design is in [stage 4](stage-4.md) §9; this section fixes only what it may assume and
 what it may not add.
 
@@ -306,22 +325,26 @@ what it may not add.
 - **Scan delete and replace.** Removing a stored row on the owner's behalf removes its copies under
   the rule of `deleteLabMarkerAndCopies` (§7.4), so a deleted scan cannot reappear from a copy under
   another id.
-- **`replaceLabMarkers(deleteIds:upsert:)`** is stage 4's function (work package 4-4c), added to
+- **`replaceLabMarkers(deleteIds:upsert:)`** is stage 4's function ([stage 4](stage-4.md) §9.2,
+  work package 4-4c), written by stage 4 on top of the steps of §6.1 and added to
   `LabMarkerStore.swift` after LO-2 has merged. Inside its single `syncWrite` it calls
-  `deleteWithCopies` for each id, `ownerUpsert` for the rows, and one `reprojectCells` over the union
-  of the touched cells (§6.1). It does not repeat the per-id `INSERT … ON CONFLICT` statement and
-  does not project per device id. This change adds no `replaceLabMarkers`.
+  `deleteWithCopies(db, id:)` for each id, `ownerUpsert(db, rows:)` for the rows, and one
+  `reprojectCells(db, cells:)` over the union of the two `touched` sets. It writes no statement of
+  its own, adds no helper, and does not project per device id. This change adds no
+  `replaceLabMarkers`.
 - **Coach roll-up.** After this change the roll-up reads `LabBookRows.category`
-  (`AICoach.swift:1283-1300`). Stage 2 captures its byte-identity baseline for the extraction after
-  this change is merged. Stage 4's skip of scan and benchmark keys is one line written against the
-  `LabBookRows` read.
+  (`AICoach.swift:1283-1300`). The order of edits to `AICoach.swift` is: this change (the roll-up
+  read), then stage 2's extraction, then stage 3's one-line supplement exclusion at the Journal
+  read, then stage 4's roll-up skip. This change is first. Stage 2 captures its byte-identity
+  baseline for the extraction after this change is merged, and each later edit is written against
+  the `LabBookRows` read.
 - **Fixture.** Stage 4's cross-id store tests use the device labels and rules of §13 (active,
   archived, unregistered and other-brand ids; copies collapse, conflicts are both listed).
 - **Source scan.** Test 68's allowlist (§12.4) is the list of files allowed to name a per-id or
   all-id Lab Book read. A stage that needs a new entry adds the file and its reason in its own
   change; it does not widen a pattern.
 
-One writer at a time edits `LabMarkerStore.swift`: LO-2, then 4-4c.
+One writer at a time edits `LabMarkerStore.swift`. LO-2 is the first.
 
 ## 7. Rules, decided
 
@@ -633,6 +656,10 @@ All-id reads and owner-scope writes:
     one `syncWrite`, `deleteWithCopies` of F7 then `ownerUpsert` of a new `ldl` row at T4 then one
     `reprojectCells` over both touched sets leaves no `ldl` cell on `2031-01-15` and one on
     `2031-01-29`; a throw after the delete leaves all ten rows and all six cells as they were)
+82. `testDeleteWithCopiesOfAnIdAlreadyRemovedAsACopyIsEmptyAndNotAnError` (through
+    `@testable import`: inside one `syncWrite`, `deleteWithCopies` of F7 then of F6 returns F6 and
+    F7's ids, then an empty `deleted` and an empty `touched`; neither step has changed a
+    `metricSeries` row before `reprojectCells` runs)
 
 Projection:
 
@@ -680,8 +707,8 @@ Projection:
     `adoptSerialIdentity` and does not iterate `deviceScopedTables` in either.
 71. `Tools/test_body_measurement_single_resolver.py` is updated by the Test author where it names the
     lines this change rewrites (`:66`, `:88`, `:265`, `:340-354`, `:434`); its assertions are kept.
-    The same holds for line references in `StrandTests/OneNumberPerVariableTests.swift`. Stage 4 adds
-    its own two tests to these files only after this change has merged.
+    The same holds for line references in `StrandTests/OneNumberPerVariableTests.swift`. A later
+    stage adds its own tests to these files only after this change has merged.
 81. No file under `Strand/` or `StrandiOS/` contains `LabBookUnion` or `unionedDeviceIds(`.
 
 Both Python files run in the unfiltered `tools-python` leg and in `Tools/personal/gate.sh`.
@@ -762,6 +789,8 @@ Each line is one deliberate break; a named test must fail. A break nothing catch
 | F27 | `deleteLabMarkerAndCopies` projects before the delete instead of after | 35, 80 |
 | F28 | Re-add a registry-built id list beside `LabBookRows` | 81, 54 |
 | F29 | Coach roll-up drops or reorders a line for a single-id install | 79 |
+| F30 | `deleteWithCopies` or `ownerUpsert` projects inside the step | 82 |
+| F31 | `deleteWithCopies` throws for an id that is no longer stored | 82, 37 |
 
 ### 12.9 Privacy scan
 
@@ -801,25 +830,27 @@ Run by the Verifier on the Mac, with no simulator and no device. Nothing it prod
 
 Synthetic data only. Run by the Verifier in the serialised step, not by the specification's author.
 
-The debug block of `StrandiOS/App/StrandiOSApp.swift` resolves a demo name through one ordered list
-of demo providers, landed once by the orchestrator's shared scaffolding commit before any stage
-(cross-check X6). This change adds:
+The debug block of `StrandiOS/App/StrandiOSApp.swift` resolves a demo name through one ordered
+registry of demo providers. The orchestrator's step 0 adds the registry, before any stage. This
+change has its own demo file, one registry element and its own reserved prefix:
 
 - one new file, `StrandiOS/Scorecard/LabBookOwnershipDemo.swift`, wholly inside `#if DEBUG`:
 
   ```swift
   enum LabBookOwnershipDemo {
-      /// The view for a demo name this provider owns, else nil. Same shape as
-      /// `ScorecardDemo.screen(named:)` (`StrandiOS/Scorecard/ScorecardDemo.swift:33`).
+      /// The view for a demo name this provider owns, else nil. The shape is the registry's
+      /// element shape as step 0 lands it.
       static func screen(named name: String) -> AnyView?
   }
   ```
 
-- one element for it in the registry list, placed straight after the scorecard provider (this change
-  is first in integration order). The orchestrator applies that one-line edit.
+- one element for it in the registry. Its element follows the scorecard's, which opens the list,
+  because this change is first in the integration order. The orchestrator applies that one-line
+  edit (LO-3h).
 
-`ScorecardDemo.swift` is not edited. The provider answers exactly two names, both carrying the
-reserved prefix `labbook-ownership`, and returns nil for every other name:
+This change edits no other demo file. The provider answers exactly two names, both carrying the
+reserved prefix `labbook-ownership`, and returns nil for every other name. No other provider may
+answer a name with that prefix:
 
 | Name | Shows |
 |---|---|
@@ -916,33 +947,39 @@ Repair variants, each starting from the ten rows with correctly projected cells:
 | LO-6 | Reviewers: correctness, contract, **data safety** | None |
 
 Files only this change edits (cross-check shared-file list): `DeviceRegistryStore.swift`,
-`Strand/Data/Repository.swift` (the repair call), `Strand/Screens/DevicesView.swift`,
-`Strand/Data/WeighInStore.swift` and `Strand/Data/BodyMeasurementProvider.swift`. Stage 4 only calls
-the last two, and is written after `unionedDeviceIds` is gone. `DeviceRegistryStore.swift` is
-re-checked by hand after any upstream merge: the comment at `:167-173` and the list must keep
-`labMarker` out of the strap loops.
+`Strand/Data/Repository.swift` (the repair call) and `Strand/Screens/DevicesView.swift`.
+`DeviceRegistryStore.swift` is re-checked by hand after any upstream merge: the comment at
+`:167-173` and the list must keep `labMarker` out of the strap loops.
 
-Shared files this change edits, and its place in each file's order:
+Shared files this change edits. There is one order for every shared file: Lab Book ownership,
+stage 2, stage 3, stage 4, stage 5, stage 6, then packet v2. This change's position is the same in
+each file below: **first**. Which later stages edit a file, and what they change, is stated in
+their own specifications; whoever comes next writes against the file as this change leaves it.
 
-| File | Order | This change's edit |
+| File | This change's position | This change's edit |
 |---|---|---|
-| `Strand/Resources/Localizable.xcstrings` | 1b, 2, 3, 4, 5, 6; one Localiser at a time, never two branches at once | One key (LO-4) |
-| `StrandiOS/App/StrandiOSApp.swift` (debug block) | Scaffolding first, then one element per stage in integration order | One registry element (LO-3h) |
-| `Strand/AI/AICoach.swift` | 1b (roll-up read), then stage 2 (extraction, byte-identity baseline captured after 1b), then stage 4 (roll-up skip) | The roll-up read at `:1283-1300` only |
-| `Packages/WhoopStore/Sources/WhoopStore/LabMarkerStore.swift` | 1b (LO-2), then stage 4's 4-4c | §6.1 and §7.2 |
-| `Strand/Screens/LabBookView.swift` | 1b (load, save, CSV import, delete), then stage 4's 4-6 (CSV scope argument), then 4-7 (Entered-as line) | The four call sites of §4.1 |
-| `StrandTests/OneNumberPerVariableTests.swift`, `Tools/test_body_measurement_single_resolver.py` | 1b (line references, cross-id cases re-checked), then stage 4 adds its two tests | §12.4 item 71, §12.6 |
+| `Strand/Resources/Localizable.xcstrings` | First; one Localiser at a time, never two branches at once | One key (LO-4) |
+| `StrandiOS/App/StrandiOSApp.swift` (debug block) | First after step 0's registry | One registry element (LO-3h) |
+| `Strand/AI/AICoach.swift` | First (§6.3) | The roll-up read at `:1283-1300` only |
+| `Packages/WhoopStore/Sources/WhoopStore/LabMarkerStore.swift` | First (LO-2); one writer at a time | §6.1 and §7.2 |
+| `Strand/Screens/LabBookView.swift` | First | The four call sites of §4.1: load, save, CSV import, delete |
+| `Strand/Data/BodyMeasurementProvider.swift` | First | `labBookRows` delegates to `LabBookRows.marker`; `unionedDeviceIds` removed |
+| `Strand/Data/WeighInStore.swift` | First | §7.4 |
+| `StrandTests/OneNumberPerVariableTests.swift`, `Tools/test_body_measurement_single_resolver.py` | First | Line references; cross-id cases re-checked (§12.4 item 71, §12.6) |
 
-Files this change reads and does not edit: `Strand/Screens/MarkerEditorView.swift` (stage 4's 4-7
-edits it after this change merges), `StrandiOS/Scorecard/ScorecardDemo.swift`,
-`StrandiOS/Scorecard/WeighInHistoryView.swift` (stage 4 only; after this change its list holds rows
-under every id).
+`Strand/Data/BodyMeasurementResolver.swift` is not edited by this change.
+
+Files this change reads and does not edit: `Strand/Screens/MarkerEditorView.swift`,
+`StrandiOS/Scorecard/ScorecardDemo.swift`, `StrandiOS/Scorecard/WeighInHistoryView.swift` (after
+this change its list holds rows under every id) and `Strand/Data/BodyMeasurementResolver.swift`.
 
 Shared hotspots it does **not** edit: `Strand/Screens/DashboardCards.swift`,
 `Strand/Data/TodayCardReadout.swift`, `Strand/Screens/SettingsView.swift`, the three Today views,
 `StrandiOS/Redesign/RedesignHealthView.swift`, `StrandiOS/Redesign/RedesignRoute.swift`,
 `StrandiOS/Scorecard/ScorecardView.swift`, `Packages/StrandImport` `MarkerCatalog`, `project.yml`,
 `Database.swift`, `BackupSettings.swift`, `BackupSettingsTests.swift`, `design/figma-plugin/`.
+It adds no Settings card and no Health tab row, so it has no position in the Settings and Health
+order and nothing in the combined frame set.
 
 Parallel and serial (cross-check build order):
 
@@ -954,8 +991,8 @@ Parallel and serial (cross-check build order):
   build, `StrandTests`, the gate script): LO-2's store edits, LO-3, the rewritten stage 1 tests of
   §12.6, the rehearsal on the backup copy, then LO-3h and LO-4 last. It goes first because it is a
   data-safety fix and stage 4 is blocked on it.
-- After it merges: stage 2's extraction in `AICoach.swift` (baseline captured then), and stage 4
-  against `LabBookRows` (§6.3).
+- After it merges: the later edits to `AICoach.swift` in the order of §6.3 (stage 2's baseline is
+  captured then), and stage 4 against `LabBookRows` and the steps of §6.1.
 - It must not run in parallel with any other change to `WeighInStore.swift`,
   `BodyMeasurementProvider.swift`, `LabMarkerStore.swift` or `AICoach.swift`.
 - G1: there is no frame and no design round; this change uses no plugin command and no design
@@ -1026,14 +1063,14 @@ Applied from the cross-stage check. One line per conflict that names this change
 | X1 | New §6.3: `LabBookRows` is the only Lab Book union; stage 4 creates no `LabBookUnion`, reads through `LabBookRows.category` / `.marker`, checks occupancy across every id through `LabBookRows.stored`, and removes copies as `deleteLabMarkerAndCopies` does. §5 names `LabBookUnion` as not created; test 81 and fault F28 guard it; §14 places this change first |
 | X2 | §6.1 adds the module-internal in-transaction steps `LabBookDayCell`, `ownerUpsert`, `deleteWithCopies` and the now-internal all-id `reprojectCells`, so stage 4's `replaceLabMarkers` (4-4c, after LO-2) composes them instead of a per-id statement; test 80 and fault F27 added; `LabMarkerStore.swift` order is LO-2 then 4-4c |
 | X6 | §12.11 and §14: the two demo names move out of `ScorecardDemo.screen(named:)` into a new provider file `LabBookOwnershipDemo.swift` plus one element in the orchestrator's demo registry (LO-3h); `ScorecardDemo.swift` is no longer edited; prefix `labbook-ownership` |
-| X17 | §6.3 and §14: `AICoach.swift` order is this change, then stage 2's extraction with its baseline captured afterwards, then stage 4's skip; test 79 and fault F29 pin the single-id roll-up text |
+| X17 | §6.3 and §14: this change is first on `AICoach.swift`, with stage 2's baseline captured afterwards (the full order was extended in the second pass); test 79 and fault F29 pin the single-id roll-up text |
 | X20 (fixture, by instruction) | §13 re-based onto stage 1's Fixture Person: weekly weights 100.0, 99.2, 98.4, 97.6 kg at 07:00 UTC; the constructed second reading of 2031-01-22 moved an hour earlier (T3a) so each day's latest reading is stage 1's value; projection cells and repair variants recomputed |
 
-Shared-file order adopted in §14: `Localizable.xcstrings` (1b first), `LabBookView.swift` (1b, 4-6,
-4-7), `MarkerEditorView.swift` (read only here), `WeighInStore.swift` and
-`BodyMeasurementProvider.swift` (1b the only editor), `OneNumberPerVariableTests.swift` and
-`Tools/test_body_measurement_single_resolver.py` (1b, then stage 4), `DeviceRegistryStore.swift`,
-`Repository.swift` and `DevicesView.swift` (1b only).
+Shared-file order adopted in §14: this change is first on `Localizable.xcstrings`,
+`LabBookView.swift`, `WeighInStore.swift`, `BodyMeasurementProvider.swift`,
+`OneNumberPerVariableTests.swift` and `Tools/test_body_measurement_single_resolver.py`;
+`MarkerEditorView.swift` is read only here; `DeviceRegistryStore.swift`, `Repository.swift` and
+`DevicesView.swift` are edited by this change only.
 
 Owner decisions adopted as the design in force (§15): Q9 (strap deletes stop removing Lab Book
 readings, no migration, fresh backup first), Q5 (the sentence), Q7 (conflicting readings both
@@ -1042,10 +1079,8 @@ listed), Q1 and Q2 (lift log, then manual workouts, as follow-up changes).
 Android (R43): no instruction to write or run Kotlin remains; §12.7 states the drift in one
 paragraph.
 
-Privacy: the header sentence that described opening a private file is removed. Recorded as a process
-breach: an ignored private file was opened while this specification was first drafted; nothing from
-it is in this document and no private file is an input to it. One phrase in §4.4 that referred to
-the owner's circumstances was replaced by a neutral one.
+Privacy: no private file is an input to this document. One phrase in §4.4 that referred to the
+owner's circumstances was replaced by a neutral one.
 
 Shared scaffolding this change expects from the orchestrator's step 0:
 
@@ -1057,3 +1092,21 @@ Shared scaffolding this change expects from the orchestrator's step 0:
 | `CanonicalDay` | Not used. No day key is computed here; a row's `day` is stored by its writer, and `isCopy` ignores it (§7.1) |
 | `ChargeTypicalBand` | Not used |
 | The fork-only backup keys comment above the Swift whitelist | Not used. No backup key is added (§9); this change has no line in it |
+
+### Second pass
+
+Applied from the independent re-check and the orchestrator's rulings (a) to (k) of the same day.
+One line per item that touches this change.
+
+| Item | What changed in this file |
+|---|---|
+| Ruling (a), re-check X11 | The weigh-in-outranks-scan rule is not specified here at all. §1 names it out of scope and points to stage 1 §18 R44. §14 no longer claims `BodyMeasurementProvider.swift` and `WeighInStore.swift` as files only this change edits; both moved to the shared-file table with this change first. `BodyMeasurementResolver.swift` is stated as not edited |
+| Ruling (c) | §14's shared-file table states the one order once (Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage 6, packet v2) and this change's position in each file, first, and nothing about the later stages' edits. Mentions of other stages' work packages on `LabBookView.swift`, `MarkerEditorView.swift`, `WeighInHistoryView.swift` and the two test files were removed |
+| Ruling (d) | §1 and §14 state that this change adds no Settings card and no Health tab row and so has no position in that order |
+| Ruling (g), re-check X2 | §6.1 gains the composition rules for `ownerUpsert`, `deleteWithCopies` and the all-id `reprojectCells` (no nested transaction, no projection inside a step, one projection last over the union, an already-removed id is not an error, rollback on a throw), with test 82 and faults F30 and F31. §6.3 says `replaceLabMarkers` is stage 4's, written on top of the three steps after LO-2, with no statement and no helper of its own |
+| Ruling (h), re-check X6 | §5 and §12.11 state this change's demo file, its one registry element and its reserved prefix `labbook-ownership`; the registry itself is step 0's. The element follows the scorecard's. The doc comment no longer points at another stage's demo file |
+| Ruling (i), re-check X17 and "stage 3 became an editor" | §6.3: the `AICoach.swift` order is this change, stage 2's extraction, stage 3's one-line supplement exclusion, stage 4. §14 states this change's position, first |
+| Ruling (k), privacy | §4.4 says "Imported lifting sessions (lifting-log CSV, pasted text)" with no product name. The sentence in this section that recorded a private file being opened is removed |
+
+Rulings (b), (e), (f) and (j) touch nothing in this change: it has no protein floor, no events, no
+packet section and no baseline band.
