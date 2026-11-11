@@ -1,0 +1,100 @@
+/* Round S2 · Coach packet (Stage 2). Local styles only. Loaded after design/system/noop.css and round 6's
+   scorecard.css, whose components and local tokens (--t3a, .nrow, .gh, .gf, .skb, .yc, .sbar, the AX5 scale)
+   this round reuses unchanged. Neither file is edited. No new colour value is introduced here. */
+
+/* Status bar: the frame's clock is the packet's clock (packet.js writes data-t into it). */
+
+/* List row of the Health tab's "More" card: mirrors NoopListRow (icon, title, footnote detail, chevron). */
+.lr{display:flex;align-items:center;gap:12px;padding:11px 0}
+.lr .icon{background:rgba(255,255,255,.08)}
+.lr .t{font-size:16px;font-weight:500;line-height:21px}
+.lr .d{font-size:13px;color:var(--t2);line-height:18px;margin-top:1px}
+.lr .chev{font-size:17px}
+
+/* Scorecard toolbar with two trailing items; the title stays centred. */
+.navbar.three{display:grid;grid-template-columns:1fr auto 1fr}
+.navbar.three .end{justify-self:end}
+
+/* ---------- the packet sheet ---------- */
+.psheet{top:54px;bottom:0;padding:8px 16px 30px;display:flex;flex-direction:column}
+.psheet > *{flex:none}
+.prange{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px}
+.prange .k{font-size:15px;color:var(--t2)}
+.prange .seg{width:252px}
+.psec{background:rgba(118,118,128,.18);border-radius:16px;padding:4px 14px;margin-top:12px}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px;font-size:16px;font-weight:500;line-height:21px}
+.srow span{flex:1;min-width:0}
+.scap{font-size:12px;line-height:16px;color:var(--t2);padding:0 0 8px}
+.pmeta{display:flex;align-items:flex-start;gap:6px;font-size:13px;line-height:18px;color:var(--t2);margin-top:12px}
+.pmeta i{display:grid;place-items:center;flex:none;height:18px;font-style:normal}
+.pmeta.ok{color:var(--t1)}
+.pmeta.dimmed{opacity:.38}
+.pcap{font-size:13px;line-height:18px;color:var(--t2);margin-top:2px}
+
+/* The preview: the exact text, in the monospaced token (StrandFont.mono). It is a scroll viewport, not a card
+   of its own: packet.js keeps only the lines and characters that fit, as the screen would show them. */
+.pv{margin-top:10px;border-radius:14px;background:rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.05);padding:10px 12px;overflow:hidden;
+  font:400 11px/15px ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;color:var(--t1);letter-spacing:0}
+.psheet .pv{flex:1 1 0;min-height:0}
+.pl{white-space:pre;min-height:15px}
+.pl.in{padding-left:2ch}
+.pv.wrap .pl{white-space:pre-wrap;overflow-wrap:anywhere}
+.pv.dimmed{opacity:.38}
+.pv.fixed{height:420px}
+.pv.full{overflow:visible;background:none;border:0;padding:0;margin-top:14px}
+
+.pact{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.pact.sidebyside{flex-direction:row-reverse}
+.pact.sidebyside .btn{flex:1}
+.pact.sidebyside .btn.primary{flex:1.5}
+
+/* Blocked and unavailable: a plain statement where the preview would be. No red, no warning mark. */
+.pmsg{flex:1 1 0 !important;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;
+  margin-top:14px;padding:22px 18px;border-radius:14px;background:rgba(118,118,128,.14);color:var(--t2)}
+.pmsg .mt{font-size:16px;line-height:22px;color:var(--t1);max-width:300px}
+
+/* Option O3: the five sections as toggling chips. */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pchip{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 13px;border-radius:999px;background:rgba(118,118,128,.18);font-size:14px;font-weight:500;color:var(--t2)}
+.pchip.on{background:rgba(255,255,255,.16);color:var(--t1)}
+.pchip i{display:grid;place-items:center;font-style:normal}
+
+/* The system share sheet, drawn for position only. */
+/* The sheet beneath is dimmed by opacity, as round 6 dims: an overlay would hide its text from the export. */
+.psheet.under{opacity:.34}
+.shsheet{padding:8px 16px 34px}
+.shhead{display:flex;align-items:center;gap:12px}
+.shhead .icon{background:rgba(118,118,128,.3);color:var(--t1)}
+.shhead .t{font:500 13px/18px ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden}
+.shhead .d{font-size:12px;line-height:16px;color:var(--t2);margin-top:1px}
+.shhead .ibtn{width:30px;height:30px}
+.shapps{display:flex;gap:16px;margin:20px 0 18px}
+.shapp{width:66px;text-align:center;font-size:11px;line-height:14px;color:var(--t1)}
+.shapp i{display:grid;place-items:center;width:60px;height:60px;border-radius:15px;background:rgba(118,118,128,.3);margin:0 auto 7px;font-style:normal}
+.shsheet .nrow svg{color:var(--t2)}
+
+/* Shortcuts results */
+.fmsg{font-size:15px;line-height:21px}
+.card.quiet{background:none;border-style:dashed;border-color:rgba(255,255,255,.14)}
+
+/* The complete text (group R): a wide frame, nothing clipped. */
+.screen.text{padding:24px 28px 28px}
+
+/* ---------- largest accessibility size (AX5): round 6's scale, extended to this round's pieces ---------- */
+.ax .lt{font-size:44px;line-height:50px}
+.ax .lr{align-items:flex-start;gap:14px;padding:16px 0}
+.ax .lr .icon{width:48px;height:48px;border-radius:14px}.ax .lr .icon svg{width:28px;height:28px}
+.ax .lr .t{font-size:32px;line-height:38px}.ax .lr .d{font-size:26px;line-height:32px}.ax .lr .chev{font-size:30px;margin-top:4px}
+.ax .gh{font-size:26px;line-height:32px}.ax .gf{font-size:26px;line-height:32px}
+.ax .nrow .toggle{margin-left:auto}
+/* The sheet runs in the page's flow at this size and the whole sheet scrolls. */
+.screen.flow > .sheet.psheet{position:relative;top:auto;bottom:auto;display:block;padding-bottom:40px}
+.ax .prange{display:block}.ax .prange .k{display:block;font-size:28px;line-height:34px}
+.ax .prange .seg{width:auto;margin-top:8px}.ax .seg span{font-size:24px;line-height:30px;padding:12px 0}
+.ax .psec{padding:6px 16px}
+.ax .srow{font-size:32px;line-height:38px;min-height:74px;padding:8px 0}
+.ax .scap,.ax .pmeta,.ax .pcap{font-size:26px;line-height:32px}
+.ax .pmeta i{height:32px}.ax .pmeta svg{width:28px;height:28px}
+.ax .psheet .pv{height:330px}
+.ax .pmsg{padding:30px 18px}.ax .pmsg .mt{font-size:30px;line-height:37px;max-width:none}.ax .pmsg svg{width:48px;height:48px}
+.ax .btn svg{width:30px;height:30px;flex:none}
