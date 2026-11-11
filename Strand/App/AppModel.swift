@@ -262,6 +262,10 @@ final class AppModel: ObservableObject {
         self.repo = Repository(deviceId: deviceId)
         self.coach = AICoachEngine(repo: repo)
         self.intelligence = IntelligenceEngine(repo: repo, profile: profile, deviceId: deviceId)
+        // Ruling R41: the Coach context states the same weight and waist as every other surface. The
+        // provider is the one the intelligence engine just created; with the scorecard flag off the
+        // Coach reads only its policy and its text is unchanged.
+        self.coach.bodyMeasurements = BodyMeasurementProvider.live(repository: repo, profile: profile)
         // Route the engine's per-day scoring diagnostic into the SAME shareable strap log every other
         // subsystem writes to (PII-scrubbed by `live.append(log:)`), so a bug report ships proof of what
         // was computed per day. `live` is captured strongly (created just above) , the engine outlives the
