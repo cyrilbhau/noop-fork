@@ -40,6 +40,7 @@ struct CoachPacketAssembler {
     private let effortScale: () -> EffortScale
     private let identifiers: () -> [String]
     private let storeReadable: () -> Bool
+    private let intake: IntakeProvider? // Stage 3: the protein days' funnel; nil is the live one
 
     /// `storeReadable` false: the assembly is `.unavailable` and nothing is read. The app passes
     /// whether its device registry could be opened, because without it the privacy scan would not
@@ -50,7 +51,9 @@ struct CoachPacketAssembler {
          timeZone: @escaping () -> TimeZone = { TimeZone.current },
          effortScale: @escaping () -> EffortScale,
          identifiers: @escaping () -> [String],
-         storeReadable: @escaping () -> Bool = { true }) {
+         storeReadable: @escaping () -> Bool = { true },
+         intake: IntakeProvider? = nil) { // Stage 3: nil is IntakeProvider.live(repository:)
+        self.intake = intake // Stage 3
         self.repository = repository
         self.provider = provider
         self.scorecardSettings = scorecardSettings
@@ -116,7 +119,9 @@ struct CoachPacketAssembler {
         var hasWeeklyPoint = false
         if scorecardEnabled {
             let evaluation = await CutScorecardInputBuilder(repository: repository, provider: provider,
-                                                            settings: scorecardSettings, timeZone: { zone })
+                                                            settings: scorecardSettings,
+                                                            intake: intake ?? .live(repository: repository), // Stage 3
+                                                            timeZone: { zone })
                 .evaluation(today: today)
             let phase = evaluation.input.phase.map {
                 CoachPacketPhase(name: $0.name, startDay: $0.startDay, targetWeightKg: $0.targetWeightKg,

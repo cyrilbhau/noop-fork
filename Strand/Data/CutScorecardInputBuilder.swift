@@ -13,19 +13,19 @@ typealias CutScorecardEvaluation = (input: CutScorecardInput, result: CutScoreca
 /// The builder reads no Lab Book row and no Apple Health value by itself, and it writes nothing.
 @MainActor
 struct CutScorecardInputBuilder {
-    private static let nutritionSource = "nutrition-csv"
-    private static let proteinKey = "protein_g"
-
     private let repository: Repository
     private let provider: BodyMeasurementProvider
     private let settings: CutScorecardSettings
+    // Stage 3: protein days come from the intake funnel, never from the store directly (§9.4).
+    private let intake: IntakeProvider
     private let timeZone: () -> TimeZone
 
     init(repository: Repository, provider: BodyMeasurementProvider, settings: CutScorecardSettings,
-         timeZone: @escaping () -> TimeZone = { TimeZone.current }) {
+         intake: IntakeProvider, timeZone: @escaping () -> TimeZone = { TimeZone.current }) {
         self.repository = repository
         self.provider = provider
         self.settings = settings
+        self.intake = intake
         self.timeZone = timeZone
     }
 
@@ -72,10 +72,12 @@ struct CutScorecardInputBuilder {
         let zone = timeZone()
 
         let lifts = await liftObservations(activeDeviceId: activeDeviceId, zone: zone)
-        let protein = await repository.series(key: Self.proteinKey, source: Self.nutritionSource)
+        // Stage 3: the intake provider's list. With the intake flag off it is the nutrition-csv
+        // series, value for value what was read here before.
+        await intake.refresh()
+        let protein = intake.proteinDays()
         return CutScorecardInput(
-            weights: weights, waists: waists, lifts: lifts,
-            proteinDays: protein.map { CutScorecardProteinDay(day: $0.day, grams: $0.value) },
+            weights: weights, waists: waists, lifts: lifts, proteinDays: protein,
             phase: phase, parameters: parameters, today: today)
     }
 
