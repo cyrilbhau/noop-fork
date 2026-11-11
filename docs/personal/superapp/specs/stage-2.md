@@ -10,6 +10,11 @@ that commit. Paths are relative to the repository root. Nothing was built or run
 it is a reading of the code. The example in §7.9 was produced by a scratch script that implements
 §7, not by Swift (see §18).
 
+Reconciled on 11 November 2026 with the cross-stage check of all seven specifications; §19 lists
+what changed and what this stage expects from the shared scaffolding commit (build-order step 0).
+Where another stage or the scaffolding edits a file before this stage does, a `path:line` here is
+still as of the commit above, and the anchor that counts is the named declaration.
+
 This file contains no personal measurement, target, date, medication or injury detail. Every number
 in an example belongs to the synthetic "Fixture Person" of §13.
 
@@ -41,7 +46,9 @@ labelled format, so the owner pastes it into Claude and retypes nothing.
   paste or share.
 - Sending the packet to the in-app Coach provider, and any change to what the in-app Coach is told.
 - Writing the packet to a file or a cloud folder (backlog).
-- Intake and events content. Their sections are absent until stages 3 and 5 exist (§7.2).
+- Intake and events content. Version 1 has neither section. Both arrive together in one follow-up
+  change, packet v2, after stages 3 and 5 have merged (§7.12).
+- Scan markers, benchmarks and niggles. They stay out of the packet until the owner asks for them.
 - Lab Book markers other than weight and waist, the profile (age, sex, height), the journal, stress,
   SpO₂, skin temperature and respiration. None is in format version 1.
 - A Today card, a widget, a notification, a Siri phrase.
@@ -77,13 +84,13 @@ labelled format, so the owner pastes it into Claude and retypes nothing.
 | C3 | The packet shows recovery, strain and sleep | The in-app line says `charge`, `effort` and `rest` (`AICoach.swift:1622-1623`, `:1681-1683`), and prints strain on the stored 0 to 100 axis whatever display scale the owner chose (`Strand/Data/Units.swift:351-366`) | One formatter, two styles: labels, day separator and strain factor are parameters (§6.1). The packet prints the labels and the strain scale the app shows (ruling R41) |
 | C4 | Four intents (`CONTEXT.md:84`) | Five on iPhone: `ExportWorkoutRouteIntent` returns a file with `ReturnsValue` and `openAppWhenRun = false` (`ExportWorkoutRouteIntent.swift:62-103`). A separate macOS file declares two (`Strand/System/NOOPAppIntents.swift:26-59`) | The packet intent follows the route-export precedent and lives in its own iPhone-only file. `NOOPAppIntents.swift` is not edited |
 | C5 | "apart from copying a single reply" (`CONTEXT.md:96`); risk 9 names the clipboard (`CONTEXT.md:195`) | That copy writes `UIPasteboard.general.string` with no options (`CoachView.swift:690-695`), next to a `ShareLink` (`:699`). A second writer, `PlatformPasteboard.copy`, does the same (`Strand/System/Platform.swift:29-38`, used at `Strand/Screens/SettingsView.swift:3414`). No code in the tree uses `localOnly` or an expiry | The packet gets its own writer (§9). The two existing writers are not changed; they are reported in §15 P10 |
-| C6 | The stage 1 specification says "Stage 2 replaces it with the resolver's value" of the Coach's Lab Book roll-up (`specs/stage-1.md:94`) | Stage 1 already did it under ruling R41 (`AICoach.swift:1273-1309`) | Stage 2 does not touch `onDeviceSignalsBlock` |
-| C7 | "against the personal baseline", as if there were one (`ROADMAP.md:290`) | Three exist: the recovery engine's, resolved once per refresh over a 21-day window (`Repository.swift:190`, `ChargeBaselines.swift:31`); the classic Health screen's mean of every earlier day (`Strand/Screens/HealthView.swift:633-637`); the Coach chips' 30-row mean (`Packages/StrandAnalytics/Sources/StrandAnalytics/CoachSuggestions.swift:99-103`) | The packet reads `Repository.chargeBaselines` only, with the band the Recovery detail screen draws (`StrandiOS/Redesign/ScoreDetailData.swift:156-160`) |
+| C6 | The stage 1 specification says "Stage 2 replaces it with the resolver's value" of the Coach's Lab Book roll-up (`specs/stage-1.md:94`) | Stage 1 already did it under ruling R41 (`AICoach.swift:1273-1309`) | Stage 2 does not touch `onDeviceSignalsBlock`. The Lab Book ownership change edits that block's roll-up read, and lands first (§14.3) |
+| C7 | "against the personal baseline", as if there were one (`ROADMAP.md:290`) | Three exist: the recovery engine's, resolved once per refresh over a 21-day window (`Repository.swift:190`, `ChargeBaselines.swift:31`); the classic Health screen's mean of every earlier day (`Strand/Screens/HealthView.swift:633-637`); the Coach chips' 30-row mean (`Packages/StrandAnalytics/Sources/StrandAnalytics/CoachSuggestions.swift:99-103`) | The packet reads `Repository.chargeBaselines` only, and takes the typical range from `ChargeTypicalBand.range` (`Strand/Data/ChargeTypicalBand.swift`), the one function the Recovery detail screen draws its band from once the shared scaffolding has moved it out of `StrandiOS/Redesign/ScoreDetailData.swift:156-160` |
 | C8 | "steps per day with the source named" (`ROADMAP.md:291`) | Three precedences: the shared resolution used by the detail and the rolling tile, measured strap, then phone, then strap estimate (`RollingStepsAverage.swift:44-58`); Today, the same order from its own fields (`Strand/Liquid/LiquidTodayView.swift:3610-3611`, `Strand/Data/TodayCardReadout.swift:231-240`); the widget, Health first, then the estimate (`StrandiOS/Widgets/WidgetPublish.swift:130-160`). The in-app Coach's average reads a fourth thing, `DailyMetric.steps` alone (`AICoach.swift:1641`) | The packet reads `Repository.resolvedSteps` only. The differences are pre-existing and are not repaired here (§15 P10) |
 | C9 | The Coach context is assumed to be English | Its body-measurement line takes the source name from a localised string (`AICoach.swift:1322`; `Strand/Data/CutScorecardPresenter.swift:542-548`) | The packet does not reuse that line. It prints the same resolved value with fixed English source tokens, and a test ties the two numbers together (§12.3) |
 | C10 | WP 2-5 lists "pasteboard" with no platform; the work-package table has no owner for the assembler or the app-target tests (`ROADMAP.md:306-315`) | `UIPasteboard` options exist on iOS only. Shared sources compile for macOS as well | The writer is an iPhone-only file behind a protocol declared in shared code (§9). §14 assigns the missing owners |
 | C11 | The in-app workouts block is not mentioned by the design rule | It prints distance in the owner's unit system and takes the day from the device zone with its own formatter (`AICoach.swift:1653-1667`, `:1742-1747`) | It is left untouched and is not shared. The packet's workout lines are metric and have their own template (§7.7) |
-| C12 | The packet "includes the stage 1 result" | The evaluation the screens show is private to the screen model, including the substitution of an upcoming phase (`Strand/Data/CutScorecardModel.swift:196-213`). A second caller would have to repeat it | The function moves to `CutScorecardInputBuilder` so the screen and the packet call one evaluation (§8.2) |
+| C12 | The packet "includes the stage 1 result" | The evaluation the screens show is private to the screen model, including the substitution of an upcoming phase (`Strand/Data/CutScorecardModel.swift:196-213`). A second caller would have to repeat it | The function moves to `CutScorecardInputBuilder` so the screen and the packet call one evaluation (§8.2). This move is the first of four serialised edits to the model and the builder (§14.3) |
 | C13 | The roadmap says stages 1 and 2 are sequential and end in a pull request (`ROADMAP.md:23-27`) | Later instructions run the stages at once on separate branches, locally | §14.3 lists what may run beside other stages and what must be serialised |
 
 ## 4. Every reader and writer
@@ -97,7 +104,7 @@ Stage 2 stores nothing except its own settings (§9.3). It adds one new **reader
 | Weekly weigh-in points, rate, projection, signals, rules, verdict | `CutScorecardModel.load` (`CutScorecardModel.swift:141-181`) for the card, the Health row and the screen | None (computed) | `CutScorecardInputBuilder.evaluation(today:)` (§8.2), the function the screen model calls after this stage |
 | Recovery, strain, sleep, stages, efficiency, HRV, resting heart rate per day | The three Today views, the detail screens, Trends, the Coach (`AICoach.swift:1608-1626`), widgets | The scoring pass and the importers | `Repository.days` (`Repository.swift:184`), rendered by `CoachDayFormat` (§6.1) |
 | Strain display scale | Every Effort readout through `UnitFormatter.effortDisplay` (`Units.swift:364-366`) | Settings (`effort.scale`, `Units.swift:98`) | `UnitPrefs.resolveEffortScale` (`Units.swift:158-160`) and `UnitFormatter.effortScaleFactor` (`Units.swift:354`), passed to `CoachDayFormat` as the strain factor |
-| HRV and resting-heart-rate baseline | The Recovery detail (`ScoreDetailData.swift:149-166`), calibration counts (`LiquidTodayView.swift:3217-3218`, `Strand/Screens/TodayView.swift:865`, `:1161-1162`, `Strand/Screens/CoupledView.swift:62-63`, `:551`) | `Repository.refresh` (`Repository.swift:1004`, `:1037`) | `Repository.chargeBaselines` with `Baselines.sigma` (`Packages/StrandAnalytics/Sources/StrandAnalytics/Baselines.swift:602-604`) and `BaselineState.usable` (`Baselines.swift:69`) |
+| HRV and resting-heart-rate baseline | The Recovery detail (`ScoreDetailData.swift:149-166`), calibration counts (`LiquidTodayView.swift:3217-3218`, `Strand/Screens/TodayView.swift:865`, `:1161-1162`, `Strand/Screens/CoupledView.swift:62-63`, `:551`) | `Repository.refresh` (`Repository.swift:1004`, `:1037`) | `Repository.chargeBaselines` for the centre, status and night count, and `ChargeTypicalBand.range(_:)` (`Strand/Data/ChargeTypicalBand.swift`) for the typical range. The packet never calls `Baselines.sigma` and never reads `BaselineState.usable` itself: the range is nil exactly when the baseline is not usable |
 | Steps per day and their source | See C8 | Health import, the strap pipeline, the estimate engine | `Repository.resolvedSteps(from:to:)` (`RollingStepsAverage.swift:46-58`) |
 | Workout summaries | Workouts screens, the Strain detail, the Coach (`AICoach.swift:1651`) | Strap, Health import, lifting imports, activity files | `Repository.workoutRows(days:)` (`Repository.swift:2774`) with `WorkoutSource.classify` (`WorkoutSource.swift:25`) |
 | The general pasteboard | Nothing reads it | `CoachView.swift:690-695`; `PlatformPasteboard.copy` (`Platform.swift:29-38`) | New writer `SystemCoachPacketPasteboard` (§9); the two existing writers are unchanged |
@@ -116,12 +123,15 @@ Swift output it mirrors does not change by a byte, so this stage creates no drif
 | Settings | `CoachPacketSettings` | `Strand/Data/CoachPacketSettings.swift` |
 | Assembler | `CoachPacketAssembler`, `CoachPacketDocument`, `CoachPacketOutcome` | `Strand/Data/CoachPacketAssembler.swift` |
 | Sheet model, presenter, copy plan, pasteboard protocol | `CoachPacketModel`, `CoachPacketPresenter`, `CoachPacketCopyPlan`, `CoachPacketPasteboardWriting` | `Strand/Data/CoachPacketModel.swift`, `Strand/Data/CoachPacketPresenter.swift` |
-| Flag observer | `CoachPacketFlag` (the shape of `CutScorecardFlag`, `CutScorecardModel.swift:18-63`) | `Strand/Data/CoachPacketModel.swift` |
+| Flag observer | `CoachPacketSettings.flag`, one static `ObservableDefaultsFlag(key: CoachPacketSettings.enabledKey)`. The class comes from the shared scaffolding (`Strand/Data/ObservableDefaultsFlag.swift`); this stage declares no flag type of its own | `Strand/Data/CoachPacketSettings.swift` |
 | Sheet | `CoachPacketSheet` | `StrandiOS/CoachPacket/CoachPacketSheet.swift` |
 | Pasteboard writer | `SystemCoachPacketPasteboard` | `StrandiOS/CoachPacket/CoachPacketPasteboard.swift` |
 | Share sheet wrapper | `CoachPacketShareSheet` | `StrandiOS/CoachPacket/CoachPacketShareSheet.swift` |
 | Shortcuts action | `GetCoachPacketIntent`, `CoachPacketIntentError` | `StrandiOS/System/CoachPacketIntent.swift` |
-| Debug demo | `CoachPacketDemo` | `StrandiOS/CoachPacket/CoachPacketDemo.swift` |
+| Debug demo | `CoachPacketDemo`; demo names carry the prefix `packet-` and no other | `StrandiOS/CoachPacket/CoachPacketDemo.swift` |
+| Design round | `design/round-s2-coach-packet/`; plugin command `importS2`; export `s2-frames.json` | Named by stage, as every stage's round is |
+| Typical range | `ChargeTypicalBand.range(_:)`, from the shared scaffolding; called, not declared, by this stage | `Strand/Data/ChargeTypicalBand.swift` |
+| Day keys | `CanonicalDay`, from the shared scaffolding; called, not declared, by this stage | `Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift` |
 | Scorecard evaluation funnel | `CutScorecardInputBuilder.evaluation(today:)` | `Strand/Data/CutScorecardInputBuilder.swift` |
 | Feature flag | `noop.coachPacketEnabled`, Bool, default `false` | `CoachPacketSettings.enabledKey` |
 | Range | `coachPacket.rangeDays`, Int, default 14; allowed 7, 14, 28 | `CoachPacketSettings.rangeDaysKey` |
@@ -216,7 +226,7 @@ public enum CoachPacketSection: String, CaseIterable, Equatable, Sendable {
     case recoverySleep = "recovery-sleep"
     case trends
     case activity
-    // Version 1 has no case for intake or events. They are added with their stages (§7.2).
+    // Version 1 has no case for intake or events. Packet v2 adds both together (§7.12).
 
     /// Whether the section is on when the owner has never chosen. True for all five.
     public var isOnByDefault: Bool { get }
@@ -247,10 +257,9 @@ public enum CoachPacketScorecard: Equatable, Sendable {
 
 public struct CoachPacketBaseline: Equatable, Sendable {
     public let center: Double
-    public let sigma: Double
+    public let typical: ClosedRange<Double>?   // ChargeTypicalBand.range; nil: baseline not usable
     public let status: String            // BaselineStatus.rawValue
     public let nights: Int               // BaselineState.nValid
-    public let usable: Bool              // BaselineState.usable
 }
 
 public enum CoachPacketStepSource: String, Equatable, Sendable {
@@ -304,7 +313,8 @@ public enum CoachPacket {
     /// The size the packet must stay under, in UTF-8 bytes: 8000 + 220 × rangeDays.
     public static func byteBudget(rangeDays: Int) -> Int
     /// Every calendar day from `start` to `end` inclusive, ascending; empty when either key is
-    /// invalid or `end` is before `start`. Day keys follow stage 1 ruling R5.
+    /// invalid or `end` is before `start`. A key is valid exactly when `CanonicalDay.number` is
+    /// not nil (stage 1 ruling R5); the keys come from `CanonicalDay.key`.
     public static func dayKeys(from start: String, to end: String) -> [String]
     /// One line of free text: control characters and line breaks become spaces, runs of spaces
     /// collapse, the ends are trimmed, `"` becomes `'`, and the result is cut at a character
@@ -314,6 +324,11 @@ public enum CoachPacket {
     public static func privacyViolations(in text: String, identifiers: [String]) -> [String]
 }
 ```
+
+The renderer has no day parser, no day arithmetic and no week rule of its own. `dayKeys` and every
+validity check below go through `CanonicalDay.number(_:)` and `CanonicalDay.key(_:)`, the shared
+helper pinned by test to `CutScorecard.weekStart(containing:)`. "The baseline is usable" means
+`typical != nil` everywhere in §7.6; there is no second flag that could disagree with it.
 
 `DailyMetric` and `CutScorecardResult` are `Equatable` already. If `DailyMetric` cannot be marked
 `Sendable` from this package, `CoachPacketInput` drops `Sendable`; nothing here depends on it.
@@ -325,7 +340,8 @@ Input handling, so that `render` is total:
 - A row, step day, workout or body reading whose day is outside the range or invalid is ignored
   (body readings are never filtered by range: they are current values).
 - Two `days` rows for one day: the last in the array wins. Two step days for one day: the last wins.
-- Any non-finite or non-positive weight, waist, baseline centre or sigma makes that item absent.
+- Any non-finite or non-positive weight, waist or baseline centre makes that item absent. A
+  baseline whose typical range has a non-finite bound is treated as not usable.
   A non-finite or negative step count, duration, energy or distance is absent. A heart rate outside
   1…300 is absent. `startMinuteOfDay` outside 0…1439 prints `--:--`.
 
@@ -371,8 +387,10 @@ missing: "—" means NOT MEASURED, never zero
 
 `generatedAt` is local time with its UTC offset and no zone name (§15 P4). `not-recorded-by-app` is a
 constant in version 1. It is how the packet says that intake and events are absent because the app
-does not hold them, which is different from nothing eaten and nothing happening. When stage 3 or 5
-adds a section, the name leaves this line, the section gains a case, and the version becomes 2.
+does not hold them, which is different from nothing eaten and nothing happening. Version 1 ships
+with this line as written, whether or not stages 3 and 5 are installed. Packet v2 (§7.12) adds both
+sections in one change: both names leave this line, both sections gain a case, and the version
+becomes 2, once.
 
 **Version rule.** Any change that alters the bytes for some input raises `formatVersion`. The first
 line and the last line carry it.
@@ -400,6 +418,12 @@ Otherwise, in this order:
 | rate | `rate: <losing\|gaining\|flat> <abs(lossKgPerWeek)> kg/week (<abs(percentPerWeek)> %/week of <referenceWeightKg> kg); fitted over <pointsUsed> weigh-ins, weeks <firstWeekStart>..<lastWeekStart>`. `losing` when the quantized loss is above 0, `gaining` below, `flat` at 0. With no rate: `rate: not available (<rateUnavailable>)` |
 | projection | `projected`: `projection: <targetDay> (estimate), <weeksRemaining> weeks, <remainingKg> kg remaining`. Any other status: `projection: none (<status>)`, then `; <remainingKg> kg remaining` when set |
 | rejections | Only when any count is above 0: `ignored-readings: <total> (nonFinite a, nonPositive b, invalidDay c, future d)` |
+
+The protein floor is a whole number of grams. It has one home, the stored rules, and both of its
+editors (stage 1's rules sheet and stage 3's intake settings) accept whole grams only, each with its
+own test. `Int(x.rounded())` therefore prints the stored number unchanged, and the packet, the
+protein card, the ring and the widget cannot show two different whole numbers for one floor. Stage 2
+owns neither editor; its part is `testWholeGramFloorPrintsUnchanged` (§12.1).
 
 "Which rules were unknown" is therefore stated once per rule, on its own line, and "which rules the
 verdict could not take into account" once, in `could-not-check`. The packet prints the owner's
@@ -455,12 +479,15 @@ RHR: <baseline clause>; <range clause>[; <last-7 clause>][; <outside clause>]
 
 | Clause | Template |
 |---|---|
-| baseline, usable | `baseline <B> <unit> (typical <lo> to <hi>, <status>, <nights> nights)` with `B = round(center)`, `lo = round(center − sigma)`, `hi = round(center + sigma)` |
+| baseline, usable | `baseline <B> <unit> (typical <lo> to <hi>, <status>, <nights> nights)` with `B = round(center)`, `lo = round(typical.lowerBound)`, `hi = round(typical.upperBound)` |
 | baseline, not usable | `baseline not established (<status>, <nights> nights)` |
 | baseline, nil | `baseline not available` |
 | range | `range mean <M> <unit> over <k> nights` and, with a usable baseline, ` (<signed M − B> vs baseline)`. With no value in the range: `range mean — over 0 nights` |
 | last 7 | Only when the range is longer than 7 days and has at least one value in its last seven calendar days: `last 7 days mean <M7> <unit> over <k7> nights` and, with a usable baseline, ` (<signed M7 − B> vs baseline)` |
-| outside | Only with a usable baseline and at least one value: `outside typical: <a> below, <b> above`, counting values below `center − sigma` and above `center + sigma`, unrounded |
+| outside | Only with a usable baseline and at least one value: `outside typical: <a> below, <b> above`, counting values below `typical.lowerBound` and above `typical.upperBound`, unrounded |
+
+"Usable" is `typical != nil`. The range printed here is the range the Recovery detail screen
+draws, because both come from `ChargeTypicalBand.range` (§8.4 step 5, §12.3).
 
 Units are `ms` for HRV (`avgHrv`) and `bpm` for RHR (`restingHr`). The differences are differences
 of the printed integers, so the line's arithmetic can be checked by eye. The section gives numbers
@@ -508,7 +535,9 @@ end of NOOP-COACH-PACKET v1
 
 ### 7.9 Complete example
 
-The full fixture of §13 with every section on. This is golden file G1.
+The full fixture of §13 with every section on. This is golden file G1. Its weigh-ins, phase, rules
+and lift sessions are those of the one Fixture Person all stages share (stage 1 §13), read on
+Sunday 2031-03-16, in the week after the last weigh-in.
 
 ```
 NOOP-COACH-PACKET v1
@@ -522,30 +551,30 @@ missing: "—" means NOT MEASURED, never zero
 
 == SCORECARD ==
 phase: "Fixture cut" (cut), started 2031-01-06, target 94.0 kg, band 0.40 to 1.20 %/week
-judged-week: 2031-03-10
-verdict: holdSteady; reason noChangeRuleFired; rule none; calorie-change none; overridden none; could-not-check liftsDropping
-rule liftsHoldingWaistShrinking: unknown (liftSignalUnknown), 0 of 1 weeks
-rule liftsDropping: unknown (liftSignalUnknown), 0 of 2 weeks
-rule slowLoss: notFired, 0 of 3 weeks
-signal waist: met (shrinking); now 91.0 cm; reference 92.5 cm in week 2031-02-17; change -1.5 cm
-signal lifts: unknown (noLiftData); days 2031-03-08..2031-03-14
-signal protein: unknown (noProteinData); 0 of 5 days at or above floor; 0 days logged; floor 150 g
-signal rate-band: met (withinBand); 0.41 %/week; band 0.40 to 1.20 %/week
-rate: losing 0.40 kg/week (0.41 %/week of 97.4 kg); fitted over 4 weigh-ins, weeks 2031-02-17..2031-03-10
-projection: 2031-05-13 (estimate), 8.5 weeks, 3.4 kg remaining
+judged-week: 2031-03-03
+verdict: reduceCarbs; reason ruleFired; rule slowLoss; calorie-change -250 kcal; overridden none; could-not-check none
+rule liftsHoldingWaistShrinking: notFired, 0 of 1 weeks
+rule liftsDropping: notFired, 0 of 3 weeks
+rule slowLoss: fired, 5 of 3 weeks
+signal waist: notMet (notShrinking); now 97.0 cm; reference 97.0 cm in week 2031-02-17; change +0.0 cm
+signal lifts: met (holding); 2 exercises in common: 0 dropped, 0 climbed, 2 held; days 2031-02-26..2031-03-04
+signal protein: unknown (noProteinData); 0 of 5 days at or above floor; 0 days logged; floor 100 g
+signal rate-band: notMet (belowBand); 0.10 %/week; band 0.40 to 1.20 %/week
+rate: losing 0.10 kg/week (0.10 %/week of 97.3 kg); fitted over 5 weigh-ins, weeks 2031-02-03..2031-03-03
+projection: 2031-10-08 (estimate), 31.0 weeks, 3.1 kg remaining
 
 == WEIGH-INS ==
-current weight: 97.4 kg (lab-book, 2031-03-15)
-current waist: 91.0 cm (lab-book, 2031-03-15)
+current weight: 97.1 kg (lab-book, 2031-03-05)
+current waist: 97.0 cm (lab-book, 2031-03-05)
 weekly, weeks start Monday, the latest reading of a week represents it, last 8 of 10 weeks:
-  2031-01-20: weight 100.6 kg (2031-01-25), waist 93.5 cm (2031-01-25), change -0.6 kg
-  2031-01-27: weight 100.0 kg (2031-02-01), waist 93.0 cm (2031-02-01), change -0.6 kg
-  2031-02-03: weight 99.4 kg (2031-02-08), waist 92.5 cm (2031-02-08), change -0.6 kg
-  2031-02-10: weight —, waist —, change —
-  2031-02-17: weight 98.6 kg (2031-02-22), waist 92.5 cm (2031-02-22), change —
-  2031-02-24: weight 98.2 kg (2031-03-01), waist 92.0 cm (2031-03-01), change -0.4 kg
-  2031-03-03: weight 97.8 kg (2031-03-08), waist 91.5 cm (2031-03-08), change -0.4 kg
-  2031-03-10: weight 97.4 kg (2031-03-15), waist 91.0 cm (2031-03-15), change -0.4 kg
+  2031-01-20: weight 98.4 kg (2031-01-22), waist 99.0 cm (2031-01-22), change -0.8 kg
+  2031-01-27: weight 97.6 kg (2031-01-29), waist 98.5 cm (2031-01-29), change -0.8 kg
+  2031-02-03: weight 97.5 kg (2031-02-05), waist 98.0 cm (2031-02-05), change -0.1 kg
+  2031-02-10: weight 97.4 kg (2031-02-12), waist 97.5 cm (2031-02-12), change -0.1 kg
+  2031-02-17: weight 97.3 kg (2031-02-19), waist 97.0 cm (2031-02-19), change -0.1 kg
+  2031-02-24: weight 97.2 kg (2031-02-26), waist 97.0 cm (2031-02-26), change -0.1 kg
+  2031-03-03: weight 97.1 kg (2031-03-05), waist 97.0 cm (2031-03-05), change -0.1 kg
+  2031-03-10: weight —, waist —, change —
 
 == RECOVERY AND SLEEP ==
 per day, oldest first: recovery (0-100), strain (0-21 scale), sleep (h), deep/REM/light (h), eff (%), HRV (ms), RHR (bpm)
@@ -590,9 +619,9 @@ steps average: 9306 over 12 of 13 full days (apple-health 10, strap-estimate 2)
 workouts in range, oldest first, summaries only:
   2031-03-03 18:10 strength, 62 min, avg HR 108 bpm, 380 kcal [lift-log]
   2031-03-05 07:05 cycling, 45 min, avg HR 132 bpm, 410 kcal, 18.40 km [apple-health]
-  2031-03-08 18:20 strength, 58 min, avg HR —, — kcal [lift-log]
+  2031-03-08 09:30 hiking, 95 min, avg HR —, — kcal [manual]
   2031-03-10 06:50 walking, 40 min, avg HR 96 bpm, 170 kcal, 3.60 km [detected]
-  2031-03-12 18:05 strength, 65 min, avg HR 110 bpm, 400 kcal [lift-log]
+  2031-03-12 18:05 rowing, 30 min, avg HR 128 bpm, 300 kcal [whoop]
 
 == NOTES ==
 measured: weight and waist as entered, heart rate, HRV and resting heart rate from the strap, steps marked apple-health or strap.
@@ -611,6 +640,10 @@ It is 6,221 UTF-8 bytes.
 weekly rows stop at 8, workouts at 20, and every other line has a fixed widest form. A typical
 14-day packet is a little over 6 kB. The renderer never truncates to meet the budget; a test builds
 the widest input and asserts the bound (§12.1).
+
+The formula above is version 1's and does not change in this stage. Packet v2 adds a fixed
+allowance for the events section and a per-day width for the intake section (§7.12), so that the
+bound still holds by construction.
 
 ### 7.11 Privacy scan
 
@@ -635,11 +668,69 @@ tokens from closed enums and never a raw `source` string. The scan is the check 
 when a free-text field (a phase name, a sport name) or a later section carries something it should
 not.
 
+### 7.12 Grammar for later sections, and packet v2
+
+Stage 2 owns the packet grammar. A section added by any later change follows every rule below, and
+the stage that supplies the section's content supplies body rows only.
+
+| # | Rule |
+|---|---|
+| G-1 | A section has one heading line, `== NAME ==`, in upper-case ASCII, printed by `CoachPacket.render`. Its id is a `CoachPacketSection` case with a lower-case, hyphenated raw value. No other heading style exists: no parenthesised subtitle on the heading, no `- ` bullets |
+| G-2 | Body rows are indented by two spaces, one row per line, oldest first. Lead lines that describe the rows are not indented, as in version 1 |
+| G-3 | Every string the owner typed or imported passes through `CoachPacket.sanitize` before it is printed: one line, quotes replaced, at most 48 UTF-8 bytes. Collapsing whitespace alone is not enough |
+| G-4 | Every section is bounded. A per-day section prints at most one row per calendar day of the range, each row with a fixed widest form, and adds that width to the per-day term of the budget. A list section has a row limit and, when more rows exist, a first row `  (<m> earlier <things> in range not shown)`; it adds a fixed allowance to the budget |
+| G-5 | The range is 7, 14 or 28 days. Goldens for a new section are written over a 14-day and a 28-day range |
+| G-6 | A missing value is `—`. An empty list is said in words on one line. For events the words are `none listed`: hidden private events may exist, and the packet neither reveals nor denies them |
+| G-7 | The function that supplies a section is pure, total, English, and returns `[String]` body rows that already satisfy G-2 to G-4 and G-6. It prints no heading and no blank line |
+| G-8 | The privacy scan of §7.11 runs over the whole text, later sections included, and fails closed. A row that carries an email address or a path blocks the packet; the supplying stage's tests include such a row, so the owner learns it from the blocked state and not from a paste |
+| G-9 | Section switches live in `coachPacket.sections` and nowhere else. A choice that is a fact about another feature stays in that feature's settings and is shown in the packet sheet as a read-only caption. The one such choice today is stage 5's `personalEvents.packetIncludesSensitive` |
+| G-10 | One change, one version bump. The first line and the last line carry the new version, the goldens are regenerated once, and §16 is revised once |
+
+**Packet v2.** One follow-up change, made after stages 3 and 5 have merged (build-order step 8).
+It is not part of stage 2's work packages, and stage 2 ships version 1 unchanged. It does all of
+this together:
+
+- Adds `CoachPacketSection.intake` (`"intake"`) and `.events` (`"events"`), both on by default. The
+  fixed order becomes header, scorecard, weigh-ins, intake, recovery and sleep, trends, activity,
+  events, notes.
+- Sets `formatVersion` to 2 and the header's line to `not-recorded-by-app: none`. A section whose
+  feature is switched off in the app prints its heading and one line,
+  `not available: <intake|events> is switched off in the app`, as the scorecard section does.
+- **Events.** Heading `== EVENTS ==`. The rows are the return value of stage 5's packet function
+  (stage 5 §7.5), which follows G-2 to G-7: two-space rows, the note through `CoachPacket.sanitize`,
+  a row limit with the "earlier … not shown" row, and `none listed` when nothing may be shown. Stage 5
+  owns the row limit; it may not exceed 12. `CoachPacket.eventsByteAllowance` is 2,000 bytes, which
+  covers the heading, the blank line and 12 rows of the widest form (two day keys, a 48-byte name
+  and a 48-byte note, about 135 bytes each). The assembler passes the store's events and
+  `includeSensitive:` from stage 5's own key. The packet sheet shows that choice as a read-only
+  caption under the Events switch, with the number of private events left out, and no control.
+- **Intake.** Heading `== INTAKE ==`. One row for every calendar day of the range, read through
+  stage 3's `IntakeProvider.series()` and never from the store:
+  `  <day>: protein <P g|—>, energy <K kcal|—>[ [<source>]]`, with the source a token from a closed
+  enum declared in `CoachPacket.swift`, never a stored source id. The widest row is 70 bytes, so the
+  per-day term rises from 220 to 290.
+- The budget becomes `8000 + 290 × rangeDays + 2000` bytes, with a widest-input test for each range.
+- Regenerates G1 and G2 as version 2, adds a section-off golden for each new section, and adds
+  goldens over 14 and 28 days for both.
+- Revises both blocks of §16 once, and the owner pastes them once.
+- Adds the two switch labels and the caption to §11 and to the String Catalog, as the only catalogue
+  writer at that moment.
+
+Until packet v2 lands, stage 5's packet function and stage 3's provider are tested and have no
+caller in the packet. Scan markers, benchmarks and niggles are not part of packet v2.
+
 ## 8. App-side logic
 
 ### 8.1 The extraction in `AICoach.swift`
 
-Only `Strand/AI/AICoach.swift:1607-1645` and `:1679-1740` change:
+Three changes are made to `Strand/AI/AICoach.swift` in a fixed order across the workstream: the Lab
+Book ownership change edits the roll-up read (`:1283-1300`) first, this extraction second, and
+stage 4's one-line skip in the roll-up third. This stage's regions are the ones below. The recorded
+texts of §12.2 and the frozen copy of §12.1 are captured from the tree **after** the ownership change
+has merged, so the baseline they prove identity against is the code this stage actually edits.
+
+Only `Strand/AI/AICoach.swift:1607-1645` and `:1679-1740` change (the line numbers are those before
+the ownership change; the regions are `buildContext()` and the day-line helpers):
 
 - `dayLine(_:)` becomes `CoachDayFormat.dayLine(d, style: .coachContext)`. It stays an internal
   method, so `AICoachSleepContextTests` compiles and passes unedited.
@@ -665,8 +756,22 @@ func evaluation(today: String) async -> CutScorecardEvaluation
 ```
 
 `CutScorecardModel` calls it where it called its private copy. The packet calls the same function.
-`CutScorecardEvaluation` (`CutScorecardModel.swift:11`) moves beside the builder. The phase the
-packet prints is `evaluation.input.phase`, the phase that was judged.
+`CutScorecardEvaluation` (`CutScorecardModel.swift:11`), the type alias
+`(input: CutScorecardInput, result: CutScorecardResult)`, moves beside the builder with its
+definition unchanged. The phase the packet prints is `evaluation.input.phase`, the phase that was
+judged. The model's injectable `evaluate:` closure and its tests keep their signature.
+
+This move is the first of four serialised edits to these two files, each one small commit:
+
+1. Stage 2: the move described here.
+2. Stage 3: the builder's protein read goes through `IntakeProvider`, and the builder's initialiser
+   gains that argument. Stage 3 also updates the one place `CoachPacketAssembler` constructs the
+   builder (§8.4 step 3).
+3. Stage 5: an `events` field in the presentation context that `CutScorecardModel.load()` fills.
+4. Stage 6: one stored `evaluation` property on `CutScorecardModel`, set in `load()` from the value
+   this funnel returned, so its timeline never evaluates a second time.
+
+None of the later three changes what `evaluation(today:)` returns for the packet.
 
 ### 8.3 `CoachPacketSettings`
 
@@ -677,6 +782,8 @@ final class CoachPacketSettings {
     static let sectionsKey = "coachPacket.sections"
     static let allowedRanges = [7, 14, 28]
     static let defaultRangeDays = 14
+    /// The one observable copy of the flag. Views observe this; nothing declares another.
+    @MainActor static let flag = ObservableDefaultsFlag(key: enabledKey)
 
     init(defaults: UserDefaults = .standard)
     var isEnabled: Bool { get set }
@@ -686,7 +793,10 @@ final class CoachPacketSettings {
 }
 ```
 
-Reading never writes.
+Reading never writes. `ObservableDefaultsFlag` is the shared class from the scaffolding commit: the
+body of `CutScorecardFlag` (`CutScorecardModel.swift:18-63`) with the key as a parameter. Its
+published `isEnabled` follows every write to the key, whoever makes it. `CutScorecardFlag` is not
+changed by this stage.
 
 ### 8.4 `CoachPacketAssembler`
 
@@ -727,10 +837,15 @@ Order of work in `input()`:
    before it.
 2. `await provider.refresh()` (`BodyMeasurementProvider.swift:174`), then read
    `provider.current(.weight, consumer: .display)` and the same for waist; drop `profileDefault`.
-3. With the scorecard flag on: `CutScorecardInputBuilder.evaluation(today:)`. Off: `.switchedOff`.
+3. With the scorecard flag on:
+   `CutScorecardInputBuilder(repository:provider:settings:timeZone:).evaluation(today:)`, built from
+   the assembler's own repository, provider, scorecard settings and captured zone. This is the
+   assembler's only construction of the builder. Off: `.switchedOff`, and no builder is made.
 4. `repository.days`, filtered to the range.
 5. `repository.chargeBaselines`: for HRV and resting heart rate, `center = state.baseline`,
-   `sigma = Baselines.sigma(state)`, `status`, `nValid`, `usable`.
+   `typical = ChargeTypicalBand.range(state)`, `status`, `nValid`. The assembler does not call
+   `Baselines.sigma` and computes no band of its own, so the packet's range and the Recovery detail
+   screen's range are one computation.
 6. `repository.resolvedSteps(from:to:)`. A point is `strapEstimate` when its `sourceKey` is
    `steps_est`, `appleHealth` when its `source` is `Repository.appleHealthSource`, else `strap`.
 7. `repository.workoutRows(days: rangeDays + 1)`, each mapped through `WorkoutSource.classify`, with
@@ -857,9 +972,18 @@ enum CoachPacketIntentError: Error, CustomLocalizedStringResourceConvertible {
 
 ## 10. Screens and states
 
-Frames are designed at G1 in `design/round7-coach-packet/`, built on `design/system/noop.css` and
-`noop.js`, served by `design/tools/serve.py`, exported as `r7-frames.json`, and imported by a new
-plugin command `import7` beside `import6` (`design/figma-plugin/manifest.json:22-30`). Each state
+Frames are designed at G1 in `design/round-s2-coach-packet/`, built on `design/system/noop.css` and
+`noop.js`, served by `design/tools/serve.py`, exported as `s2-frames.json`, and imported by the
+plugin command `importS2`. The orchestrator adds `importS2` to `importS6` and the five stage-named
+folders in the shared scaffolding commit, before any designer starts; this stage's designer edits
+only files inside `design/round-s2-coach-packet/` and never `design/figma-plugin/code.js` or
+`manifest.json`.
+
+Three surfaces are shared by every stage: the Health tab's "More health" card, the Settings section
+and the scorecard screen. Each has one combined frame covering all stages, approved once by the
+owner, with the fixed order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. This
+stage's row, card and toolbar item take the places that frame gives them (§10.1, §10.3). No view
+code for those three surfaces is written before the combined frames are approved. Each state
 below needs a frame at the default text size and at the largest accessibility size
 (`StrandiOS/App/StrandiOSApp.swift:247`). Tokens: `StrandFont.mono` for the preview
 (`Packages/StrandDesign/Sources/StrandDesign/Typography.swift:94`, `:112`), existing palette and
@@ -871,8 +995,8 @@ Present only while `noop.coachPacketEnabled` is on.
 
 | Entry | Where | Behaviour |
 |---|---|---|
-| Health tab row "Coach packet" | Beneath the Scorecard row in the "More health" card (`StrandiOS/Redesign/RedesignHealthView.swift:474-482`) | Opens the sheet |
-| Scorecard screen | A second toolbar item beside the weigh-in button (`StrandiOS/Scorecard/ScorecardView.swift:77-82`) | Opens the sheet |
+| Health tab row "Coach packet" | The last of the stage rows in the "More health" card (`StrandiOS/Redesign/RedesignHealthView.swift:474-482`), in the fixed order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. When this stage merges only the Scorecard row exists, so the row goes directly beneath it; each later stage inserts its row above this one | Opens the sheet |
+| Scorecard screen | A second toolbar item beside the weigh-in button (`StrandiOS/Scorecard/ScorecardView.swift:77-82`), placed as the combined scorecard frame shows. This is the first of four serialised edits to that file (stage 3's protein caption, stage 5's event note and stage 6's two link rows follow) | Opens the sheet |
 
 Both present the sheet with `.sheet`, so `RedesignRoute.swift` is not edited. With the flag off
 neither exists and both screens are exactly as they are today. A Today card is not built (§15 P1).
@@ -907,9 +1031,13 @@ local-only item.
 
 ### 10.3 Settings
 
-A card "Coach packet" directly after the Scorecard card (`Strand/Screens/SettingsView.swift:466`,
-`:1860`): one switch, "Coach packet", with the blurb in §11. Off by default. No reminder, no
-notification.
+A card "Coach packet": one switch, "Coach packet", with the blurb in §11. Off by default. No
+reminder, no notification. Its place is the one the combined Settings frame gives it: last of the
+stage cards, in the fixed order of §10. When this stage merges only the Scorecard card exists
+(`Strand/Screens/SettingsView.swift:466`, `:1860`), so the card goes directly after it; the cards of
+stages 3 to 6 are inserted above it as they merge. The switch binds to `CoachPacketSettings.flag`
+for reading and writes through `CoachPacketSettings.isEnabled`. `SettingsView.swift` is shared with
+macOS, so the `Strand` scheme is built after the edit.
 
 ### 10.4 Shortcuts action states
 
@@ -979,8 +1107,11 @@ edited.
 - `testAveragesOfNoRowsPrintDashesWithTheirUnits`
 - `testGeneratedSpreadMatchesTheFrozenLegacyFormatter` (500 seeded random rows and row lists)
 
-The "frozen legacy" is a private copy, in the test file, of `AICoach.swift:1679-1740` as it stands at
-`0b89b814`, taking a `DailyMetric`. It is the oracle for byte identity and is never edited.
+The "frozen legacy" is a private copy, in the test file, of the day-line and averages helpers of
+`AICoach.swift` (`:1679-1740` at `0b89b814`) as they stand once the Lab Book ownership change has
+merged and before this stage's extraction, taking a `DailyMetric`. The ownership change does not
+edit those helpers, so the copy can be written from `0b89b814` now and is compared with the tree
+again when the extraction starts. It is the oracle for byte identity and is never edited.
 
 `CoachPacketTests.swift` with `CoachPacketGolden.swift` and `CoachPacketFixture.swift`
 
@@ -994,6 +1125,9 @@ The "frozen legacy" is a private copy, in the test file, of `AICoach.swift:1679-
 - `testRangeAcrossAMonthBoundaryListsEveryDay`
 - `testRangeAcrossAYearBoundaryListsEveryDay`
 - `testRangeAcrossTheEndOfFebruaryInALeapYear`
+- `testDayKeysAcceptExactlyWhatCanonicalDayAccepts` (padded, impossible, short and out-of-range keys:
+  `dayKeys` is empty exactly when `CanonicalDay.number` is nil for either end)
+- `testDayKeysAreTheKeysCanonicalDayGives`
 - `testSevenDayRangeOmitsTheLastSevenClause`
 - `testTwentyEightDayRangeStaysOrdered`
 - `testInvalidRangePrintsHeaderAndNotesOnly`
@@ -1007,6 +1141,8 @@ The "frozen legacy" is a private copy, in the test file, of `AICoach.swift:1679-
 - `testCouldNotCheckListsTheUnevaluatedRules`
 - `testOverriddenRulesAreListed`
 - `testEachSignalPrintsOnlyTheClausesItHas`
+- `testWholeGramFloorPrintsUnchanged` (floors of 1, 100 and 250 print as `floor 1 g`, `floor 100 g`,
+  `floor 250 g`)
 - `testGainingAndFlatRatesAreWorded`
 - `testRateUnavailablePrintsItsReason`
 - `testEachProjectionStatusPrints`
@@ -1015,7 +1151,9 @@ The "frozen legacy" is a private copy, in the test file, of `AICoach.swift:1679-
 - `testMissedWeekPrintsDashesAndTheNextChangeIsADash`
 - `testCurrentValueFromTheProfileHasNoDay`
 - `testAbsentCurrentWaistPrintsADash`
-- `testBaselineNotUsablePrintsItsStatus`
+- `testBaselineNotUsablePrintsItsStatus` (`typical == nil`)
+- `testBaselineWithANonFiniteBoundIsNotUsable`
+- `testTypicalBoundsPrintedAreTheRoundedBoundsGiven`
 - `testBaselineNilPrintsNotAvailable`
 - `testOutsideTypicalCountsUseTheUnroundedBand`
 - `testDifferencesAreDifferencesOfThePrintedIntegers`
@@ -1053,8 +1191,11 @@ The "frozen legacy" is a private copy, in the test file, of `AICoach.swift:1679-
 
 ### 12.2 Byte identity of the in-app Coach context — `StrandTests/CoachContextByteIdentityTests.swift`
 
-Written and run **before** the extraction. These tests pass on the untouched code; that is their
-purpose, and the commit message says so. They must still pass after it.
+Written and run **before** the extraction and **after** the Lab Book ownership change has merged,
+which edits another region of the same file. The recorded texts are captured from that tree. These
+tests pass on the code as it then stands; that is their purpose, and the commit message says so.
+They must still pass after the extraction, and stage 4's later one-line skip in the roll-up must
+leave them passing too.
 
 - `testBuildContextForTheFixtureEqualsTheRecordedText`: a repository whose `days` is the fixture
   (`Repository.days` is settable, `Repository.swift:184`); the expected literal is the output of the
@@ -1086,7 +1227,8 @@ purpose, and the commit message says so. They must still pass after it.
 - `testStepsAreClassifiedByKeyAndSource`
 - `testWorkoutsTakeTheirLocalDayAndMinuteInTheGivenZone`
 - `testWorkoutSourcesComeFromTheClassifier`
-- `testBaselinesCarryTheSigmaTheRecoveryScreenUses`
+- `testBaselinesCarryTheRangeChargeTypicalBandGives`
+- `testAnUnusableBaselineHasNoTypicalRange`
 - `testUnsetProfileWeightIsNotPrinted`
 - `testAPlantedDeviceIdentifierBlocksThePacket`
 - `testAssemblyWritesNothing` (defaults and the store are byte-identical before and after)
@@ -1098,7 +1240,10 @@ purpose, and the commit message says so. They must still pass after it.
 - `testPacketScorecardEqualsTheScreenModelsEvaluation` (both come from `evaluation(today:)`)
 - `testPacketWeeklyPointsEqualTheScorecardWeeks`
 - `testPacketStepsEqualResolvedSteps`
-- `testPacketBaselineBandEqualsTheRecoveryFactorBand`
+- `testPacketBaselineBandEqualsTheRecoveryFactorBand` (for one `BaselineState`, the bounds in the
+  packet input equal `ChargeTypicalBand.range` and equal the `typical` of the Recovery detail's
+  HRV and resting-heart-rate factors; and the two integers the packet prints are those bounds
+  rounded)
 - `testPacketStrainEqualsTheEffortDisplayOnEachScale`
 - `testPacketDayValuesEqualTheCoachContextValuesForTheSameRows`
 - `testPacketFollowsADeletedWeighIn`
@@ -1119,6 +1264,17 @@ purpose, and the commit message says so. They must still pass after it.
 
 `CoachPacketPresenterTests.swift`: one test per row of §11, plus `testSizeLineFormatsKilobytes`.
 
+Additions to `StrandTests/CutScorecardInputBuilderTests.swift`, new methods only, written before
+stage 3 touches the file:
+
+- `testEvaluationEqualsEvaluateOfTheBuiltInput`
+- `testEvaluationPassesAnUpcomingCutPhaseWhenNoneIsActive`
+- `testEvaluationCarriesTheInputThatWasJudged`
+
+`ObservableDefaultsFlag` is tested where it is declared, in the shared scaffolding commit. Stage 2
+adds no test of the class; `testFlagOffStaysIdleAndReadsNothing` and the flag-off captures of §12.5
+cover its use here.
+
 ### 12.4 Source scan — `Tools/test_coach_packet_single_formatter.py`
 
 In the Python suite that already asserts on product source.
@@ -1134,6 +1290,14 @@ In the Python suite that already asserts on product source.
   `TimeZone`.
 - `evaluateStored` no longer exists; `CutScorecardModel.swift` and `CoachPacketAssembler.swift` both
   call `evaluation(today:`.
+- `CoachPacketAssembler.swift` contains `ChargeTypicalBand.range(` and does not contain
+  `Baselines.sigma(`. Stage 6's tree-wide `test_typical_band_has_one_definition` then passes with
+  the assembler in the tree.
+- `CoachPacket.swift` contains `CanonicalDay.` and none of `parseYMD`, `julianDayNumber`,
+  `DateFormatter` or `Calendar`.
+- No file declares a type named `CoachPacketFlag`; `CoachPacketSettings.swift` contains
+  `ObservableDefaultsFlag(key:`.
+- `CoachPacketDemo.swift` answers only names beginning `packet-`.
 
 ### 12.5 Flag-off equivalence
 
@@ -1167,6 +1331,9 @@ finding.
 | Set `localOnly` false or change the lifetime | `testCopyPlanIsLocalOnlyAndExpiresInTenMinutes` |
 | Give the packet its own scorecard evaluation | `testPacketScorecardEqualsTheScreenModelsEvaluation`, the source scan |
 | Read steps from `DailyMetric.steps` | `testPacketStepsEqualResolvedSteps` |
+| Compute the band in the assembler from `Baselines.sigma` | the source scan; with a changed width, `testPacketBaselineBandEqualsTheRecoveryFactorBand` |
+| Accept a padded day key in `dayKeys` | `testDayKeysAcceptExactlyWhatCanonicalDayAccepts` |
+| Print the floor with a decimal | `testWholeGramFloorPrintsUnchanged`, G1 |
 | Ignore the display scale for strain | `testPacketStrainEqualsTheEffortDisplayOnEachScale` |
 | Leave the version out of the last line | `testFirstAndLastLinesCarryTheVersion` |
 
@@ -1178,8 +1345,9 @@ Kotlin twin mirrors, the Coach day line, in the Swift direction.
 
 ### 12.8 Simulator, device and rehearsal
 
-- **Simulator.** Every frame of §10 reproduced through `--demo-screen packet-<frame>` on synthetic
-  data, at the default and the largest text size, Reduce Motion on and off. Flows by tapping: switch
+- **Simulator.** Every frame of §10 reproduced through `--demo-screen packet-<frame>` on the
+  synthetic data of §13 (the demo seed is the shared Fixture Person: Wednesday weigh-ins, protein
+  floor 100 g), at the default and the largest text size, Reduce Motion on and off. Flows by tapping: switch
   each section, change the range, copy, share. After a copy, paste into another app in the
   simulator and compare bytes with the preview. After the lifetime has passed,
   `UIPasteboard.general.hasStrings` is false.
@@ -1196,9 +1364,14 @@ Kotlin twin mirrors, the Coach day line, in the Swift direction.
 
 ## 13. Fixture
 
-"Fixture Person" is fictional. Every value is round and invented. The dates are in 2031, as in
-stage 1. App-target tests that read steps or workouts through the repository use dates relative to
-the real clock instead (stage 1 ruling R31) and the same values.
+"Fixture Person" is fictional, and there is one Fixture Person across all stages: the person of
+stage 1 §13. The phase, the rules, the Wednesday weigh-ins, the Monday lift sessions and the protein
+days below are stage 1's, unchanged. Stage 2 adds only what stage 1's fixture does not hold: two
+weeks of daily rows, two baselines, steps and workout summaries, all invented and round. The dates
+are in 2031, as in stage 1. App-target tests that read steps or workouts through the repository use
+dates relative to the real clock instead (stage 1 ruling R31) and the same values. The debug demo
+(`CoachPacketDemo`) and every app-target fixture of this stage seed the same person; none uses a
+second series of weights or another protein floor.
 
 ### 13.1 Clock, range and settings
 
@@ -1224,27 +1397,38 @@ on; strain factor 0.21.
 | 2031-03-15 | 72 | 33 | 468 | 87 | 108 | 273 | 0.93 | 64 | 52 | |
 | 2031-03-16 | 67 | 6 | 450 | 81 | 102 | 267 | 0.92 | 61 | 53 | |
 
-Baselines: HRV centre 57.2, sigma 6.4, status `trusted`, 21 nights, usable. Resting heart rate centre
-54.1, sigma 2.2, `trusted`, 21 nights, usable.
+Baselines: HRV centre 57.2, typical range 50.8 to 63.6, status `trusted`, 21 nights. Resting heart
+rate centre 54.1, typical range 51.9 to 56.3, `trusted`, 21 nights.
 
 ### 13.3 Scorecard, body, steps and workouts
 
 The scorecard is a `CutScorecardResult` built by hand for the renderer, not the output of
-`evaluate`: the renderer prints whatever result it is given. Phase "Fixture cut", started
-2031-01-06, target 94.0 kg, band 0.40 to 1.20. Judged week 2031-03-10. Verdict `holdSteady`, reason
-`noChangeRuleFired`, no rule, no calorie change, nothing overridden, unevaluated `liftsDropping`.
-Rules: 1 unknown (`liftSignalUnknown`) 0 of 1; 2 unknown (`liftSignalUnknown`) 0 of 2; 3 `notFired`
-0 of 3. Waist signal met, `shrinking`, 91.0 against 92.5 in week 2031-02-17, change −1.5. Lift signal
-unknown, `noLiftData`, no counts, window 2031-03-08 to 2031-03-14. Protein signal unknown,
-`noProteinData`, 0 of 5, 0 logged, floor 150. Rate-band signal met, `withinBand`, 0.41, bounds as the
-phase. Rate: loss 0.40, 0.41 percent of 97.4, 4 points, weeks 2031-02-17 to 2031-03-10. Projection
-`projected`, 2031-05-13, 8.5 weeks, 3.4 kg. No rejections.
+`evaluate`: the renderer prints whatever result it is given. Its values are the ones stage 1's
+fixture gives when read on 2031-03-16, the Sunday of week 10, in which stage 1 has no weigh-in. If
+the Test author finds that `CutScorecard.evaluate` gives a different field for that day, the
+difference is reported and the orchestrator rules; the golden follows stage 1.
 
-Weeks, ten in all from 2031-01-06; the last eight are those printed in §7.9, with the week of
-2031-02-10 missed. Current weight 97.4 kg and waist 91.0 cm, both Lab Book, both dated 2031-03-15.
+Phase "Fixture cut", started 2031-01-06, target 94.0 kg, band 0.40 to 1.20. Parameters as stage 1
+§13.1, among them a protein floor of 100 g on at least 5 days, a slow-loss threshold of 0.4 kg over
+3 weeks and a lift-drop run of 3 weeks. Judged week 2031-03-03 (week 9, the latest with a
+weigh-in). Verdict `reduceCarbs`, reason `ruleFired`, rule `slowLoss`, calorie change −250, nothing
+overridden, nothing unevaluated. Rules: 1 `notFired` 0 of 1; 2 `notFired` 0 of 3; 3 `fired` 5 of 3
+(weeks 5 to 9 each lost 0.1 kg). Waist signal not met, `notShrinking`, 97.0 against 97.0 in week
+2031-02-17, change 0.0. Lift signal met, `holding`, two exercises in common, none dropped, none
+climbed, two held, window 2031-02-26 to 2031-03-04. Protein signal unknown, `noProteinData`, 0 of 5,
+0 logged, floor 100. Rate-band signal not met, `belowBand`, 0.103, bounds as the phase. Rate: loss
+0.100, 0.103 percent of 97.3, 5 points, span 4 weeks, weeks 2031-02-03 to 2031-03-03. Projection
+`projected`, 2031-10-08, 31.0 weeks, 3.1 kg. No rejections.
+
+Weeks, ten in all from 2031-01-06 to the week of 2031-03-10, which holds today and has no reading.
+The weekly weights are stage 1's: 100.0, 99.2, 98.4, 97.6, 97.5, 97.4, 97.3, 97.2, 97.1, none; the
+waists 100.0, 99.5, 99.0, 98.5, 98.0, 97.5, 97.0, 97.0, 97.0, none; each on the Wednesday. The last
+eight are those printed in §7.9. Current weight 97.1 kg and waist 97.0 cm, both Lab Book, both dated
+2031-03-05.
 
 Steps and workouts are exactly those printed in §7.9. 2031-03-07 has no step value. The two
-`strap-estimate` days are 2031-03-06 and 2031-03-13.
+`strap-estimate` days are 2031-03-06 and 2031-03-13. The one `lift-log` workout is stage 1's Monday
+session of 2031-03-03; stage 1 has no lift session in week 10, and this fixture adds none.
 
 **Golden G2, no data at all.** The same clock and range, every list empty, both baselines nil, no
 body reading, scorecard `evaluated` with no phase and the stage 1 result for no readings. Every day
@@ -1264,52 +1448,79 @@ A package edits only the files listed for it.
 
 | WP | Role | Files |
 |---|---|---|
-| 2-2 | Designer | `design/round7-coach-packet/*`; `design/figma-plugin/code.js`, `manifest.json` (command `import7`) |
-| 2-3 | Test author | `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/CoachDayFormatTests.swift`, `CoachPacketTests.swift`, `CoachPacketGolden.swift`, `CoachPacketFixture.swift`, `CoachPacketPrivacyTests.swift`; `StrandTests/CoachContextByteIdentityTests.swift`, `CoachPacketSettingsTests.swift`, `CoachPacketAssemblerTests.swift`, `CoachPacketSingleSourceTests.swift`, `CoachPacketModelTests.swift`, `CoachPacketPresenterTests.swift`; `Tools/test_coach_packet_single_formatter.py` |
-| 2-4a | Implementer A | New: `Packages/StrandAnalytics/Sources/StrandAnalytics/CoachDayFormat.swift`, `CoachPacket.swift`. Edited, extraction only: `Strand/AI/AICoach.swift` |
+| 2-2 | Designer | `design/round-s2-coach-packet/*` only. The plugin command `importS2` and the folder are created by the orchestrator in the shared scaffolding commit |
+| 2-3 | Test author | `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/CoachDayFormatTests.swift`, `CoachPacketTests.swift`, `CoachPacketGolden.swift`, `CoachPacketFixture.swift`, `CoachPacketPrivacyTests.swift`; `StrandTests/CoachContextByteIdentityTests.swift`, `CoachPacketSettingsTests.swift`, `CoachPacketAssemblerTests.swift`, `CoachPacketSingleSourceTests.swift`, `CoachPacketModelTests.swift`, `CoachPacketPresenterTests.swift`; new methods in `StrandTests/CutScorecardInputBuilderTests.swift` (§12.3), before stage 3 edits that file; `Tools/test_coach_packet_single_formatter.py` |
+| 2-4a | Implementer A | New: `Packages/StrandAnalytics/Sources/StrandAnalytics/CoachDayFormat.swift`, `CoachPacket.swift`. Edited, extraction only, after the Lab Book ownership change has merged: `Strand/AI/AICoach.swift` |
 | 2-4b | Implementer B | New: `Strand/Data/CoachPacketSettings.swift`, `CoachPacketAssembler.swift`, `CoachPacketModel.swift`, `CoachPacketPresenter.swift`. Edited, the move of §8.2 only: `Strand/Data/CutScorecardInputBuilder.swift`, `Strand/Data/CutScorecardModel.swift` |
-| 2-5 | Implementer C, after G1 and after 2-4a and 2-4b merge | New: `StrandiOS/CoachPacket/CoachPacketSheet.swift`, `CoachPacketPasteboard.swift`, `CoachPacketShareSheet.swift`, `CoachPacketDemo.swift`; `StrandiOS/System/CoachPacketIntent.swift`. Edited: `Strand/Screens/SettingsView.swift` (the card), `StrandiOS/Redesign/RedesignHealthView.swift` (the row), `StrandiOS/Scorecard/ScorecardView.swift` (the toolbar item), `StrandiOS/App/StrandiOSApp.swift` (one line of the debug block) |
-| 2-6 | Localiser | `Strand/Resources/Localizable.xcstrings` |
+| 2-5 | Implementer C, after G1 and after 2-4a and 2-4b merge | New: `StrandiOS/CoachPacket/CoachPacketSheet.swift`, `CoachPacketPasteboard.swift`, `CoachPacketShareSheet.swift`, `CoachPacketDemo.swift`; `StrandiOS/System/CoachPacketIntent.swift`. Edits no existing file |
+| 2-5h | Orchestrator, one small commit, after 2-5 and after the combined frames are approved | Edited: `Strand/Screens/SettingsView.swift` (the card), `StrandiOS/Redesign/RedesignHealthView.swift` (the row), `StrandiOS/Scorecard/ScorecardView.swift` (the toolbar item), `StrandiOS/App/StrandiOSApp.swift` (one element in the demo registry) |
+| 2-6 | Localiser, last step of the stage | `Strand/Resources/Localizable.xcstrings` |
 | 2-7 | Orchestrator, with the owner's approval of the wording | Nothing in the repository. The text is §16 |
 | 2-8 | Reviewers, Verifier | None; read-only |
 
-2-3, 2-4a and 2-2 start together. 2-4b starts with them and merges after 2-4a. The byte-identity
-tests of §12.2 are committed and run green before 2-4a touches `AICoach.swift`.
+2-2, 2-3 and the new files of 2-4a and 2-4b start together, now, with no app build: the design
+frames, every new test file, and the pure logic with its `swift test` (one package at a time in the
+worktree). 2-4b merges after 2-4a.
+
+On the single app build tree this stage is serialised step 3 of the build order, after the Lab Book
+ownership change (step 1) and stage 1's Today-view follow-up (step 2). Inside the step the order is:
+the byte-identity tests of §12.2, committed and green; the `AICoach.swift` extraction; the move of
+§8.2; the views; 2-5h; the Localiser. The assembler (2-4b) is written after the scaffolding has
+landed `ChargeTypicalBand`, which it calls.
 
 ### 14.1 Shared hotspots this stage edits
 
 | File | Edit | Size |
 |---|---|---|
-| `Strand/Resources/Localizable.xcstrings` | The strings of §11 | About thirty keys, sole writer 2-6 |
-| `Strand/Screens/SettingsView.swift` | One card and its mount, after the Scorecard card (`:466`, `:1860`) | About thirty lines |
-| `StrandiOS/App/StrandiOSApp.swift` debug block | `:623` becomes `ScorecardDemo.screen(named: name) ?? CoachPacketDemo.screen(named: name)` | One line |
-| `Strand/AI/AICoach.swift` | §8.1 | Two regions |
+| `Strand/Resources/Localizable.xcstrings` | The strings of §11 | About thirty keys, sole writer 2-6. One Localiser at a time across the workstream, in the order ownership, 2, 3, 4, 5, 6 |
+| `Strand/Screens/SettingsView.swift` | One card and its mount, placed by the combined Settings frame (§10.3) | About thirty lines, in 2-5h. Stage 2 is the first of five stages to add here (2, 3, 4, 5, 6) |
+| `StrandiOS/Redesign/RedesignHealthView.swift` | One row in the "More health" card (§10.1) | In 2-5h. Order of stages: 2, 4, 5, 6 |
+| `StrandiOS/Scorecard/ScorecardView.swift` | One toolbar item (§10.1) | In 2-5h. Order of stages: 2, 3, 5, 6 |
+| `StrandiOS/App/StrandiOSApp.swift` debug block | One element appended to the demo registry: `CoachPacketDemo.screen(named:)` | One line, in 2-5h. The registry itself, an ordered list of demo providers that replaces the single call at `:623`, is landed once by the scaffolding commit; no stage rewrites it |
+| `Strand/AI/AICoach.swift` | §8.1 | Two regions. Order: ownership (roll-up read), stage 2 (extraction), stage 4 (roll-up skip) |
+| `Strand/Data/CutScorecardModel.swift`, `Strand/Data/CutScorecardInputBuilder.swift` | §8.2 | The move only. Order: 2, then 3 (builder), 5 and 6 (model) |
+| `StrandTests/CutScorecardInputBuilderTests.swift` | New methods of §12.3 | Before stage 3's initialiser change |
+
+`CoachPacketDemo.screen(named:)` has the signature of `ScorecardDemo.screen(named:)`
+(`static func screen(named name: String) -> AnyView?`). It returns a view for a name beginning
+`packet-` and nil for every other name, so its place in the registry cannot shadow another stage's
+demo. The registry's order is scorecard, packet, intake, body record, events, stage 6.
 
 ### 14.2 Shared hotspots this stage does not edit
 
 `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, the three Today views,
 `Packages/StrandImport/.../MarkerCatalog.swift`, `project.yml`, the backup whitelist, `Database.swift`,
 `StrandiOS/System/NOOPAppIntents.swift`, `StrandiOS/Redesign/RedesignRoute.swift`, the widget payload
-types.
+types, `design/figma-plugin/code.js` and `manifest.json`, `StrandiOS/Redesign/ScoreDetailData.swift`
+(the scaffolding moves the typical range out of it; this stage only calls the result),
+`StrandiOS/Scorecard/ScorecardDemo.swift`.
 
 ### 14.3 Beside other stages
 
 May run in parallel with any other stage: 2-2, 2-3, all new files of 2-4a, 2-4b and 2-5.
 
-Must be serialised with other stages, by the orchestrator, in this order of risk:
+Must be serialised with other stages, by the orchestrator. The order for each file is fixed by the
+cross-stage check:
 
-1. `Localizable.xcstrings`: one Localiser at a time across all stages.
-2. `Strand/Data/CutScorecardInputBuilder.swift`: stage 3 is expected to change where protein days
-   come from (`CutScorecardInputBuilder.swift:13-14`, `:51`). The move of §8.2 lands first.
-3. `Strand/Screens/SettingsView.swift`, `StrandiOS/Redesign/RedesignHealthView.swift`,
-   `StrandiOS/Scorecard/ScorecardView.swift`: any stage adding a card, a Health row or a scorecard
-   toolbar item.
-4. The debug block's one line: each stage appends one `??` term. The orchestrator may prefer to land
-   a single registry line once for all stages.
-5. `Strand/AI/AICoach.swift`: any stage that adds to the Coach context waits for 2-4a.
+1. `Localizable.xcstrings`: one Localiser at a time, last step of each stage, in the order ownership,
+   2, 3, 4, 5, 6. Never two branches at once.
+2. `Strand/AI/AICoach.swift`: ownership, then this stage's extraction with its byte-identity baseline
+   captured after ownership, then stage 4's roll-up skip.
+3. `Strand/Data/CutScorecardInputBuilder.swift` and `CutScorecardModel.swift`: the move of §8.2
+   first; then stage 3's builder change, which also updates the assembler's construction of the
+   builder; then stage 5's context field; then stage 6's property.
+4. `Strand/Screens/SettingsView.swift` (2, 3, 4, 5, 6), `StrandiOS/Redesign/RedesignHealthView.swift`
+   (2, 4, 5, 6), `StrandiOS/Scorecard/ScorecardView.swift` (2, 3, 5, 6): after the combined frames
+   are approved, each stage's insertion is one small orchestrator commit, in that order.
+5. The demo registry in `StrandiOSApp.swift`: landed once by the scaffolding; each stage adds one
+   element in integration order.
+6. `design/figma-plugin/code.js` and `manifest.json`: one orchestrator commit for all five commands;
+   no designer edits them.
 
-A later stage that adds a packet section owns a version bump: a new `CoachPacketSection` case, a new
-input field, the removal of its name from `not-recorded-by-app`, new goldens and an update to §16.
+Later packet sections are not added stage by stage. Intake and events join together in packet v2
+(§7.12), which owns the one version bump, the new cases and input fields, the regenerated goldens
+and the one revision of §16. Stages 3 and 5 supply their provider and their row function and do not
+edit `CoachPacket.swift`, the assembler, the sheet or §16.
 
 ### 14.4 Android disposition (ruling R43)
 
@@ -1319,8 +1530,9 @@ Recorded in place of a Kotlin twin:
   counterpart is `AiCoach.buildContext` (`AiCoach.kt:405`), unchanged. **Drift created: none.**
 - `CoachPacket`, the assembler, the settings and the screens have no Kotlin counterpart. Android
   gains no packet. **Not updated, by the owner's decision.**
-- Stored-data contracts: no backup key, no marker-catalogue key, no migration, no stored value.
-  **Drift created: none.**
+- Stored-data contracts shared with Android: this stage changes none. It adds no backup key, no
+  marker-catalogue key, no migration and no stored value; its three settings are per-install
+  preferences outside the backup whitelist. **Drift created: none.**
 - New public declarations in `Packages/StrandAnalytics` carry the comment "No Kotlin twin, by the
   owner's decision (stage 2 specification §14.4)". Their effect on the parity ledger is in §18.
 
@@ -1342,16 +1554,24 @@ Work proceeds on each recommendation.
 | P10 | Reading the code found defects in the in-app Coach's text that this stage must leave alone: the comma after each day's colon (C2); its step average reading a different source from every screen (C8); and two clipboard writers with no local-only flag (C5). Fix them? | Not in this stage, whose acceptance is that the in-app Coach is unchanged. Record them for a separate change |
 | P11 | Should the packet work with the in-app Coach switched off and with no data consent given to a provider? | Yes. The consent is about sending data to a provider; the packet sends nothing |
 | P12 | The scorecard's protein signal can appear in the packet before stage 3, from an imported nutrition file, while the intake section is absent. Acceptable? | Yes. It is part of the scorecard result, and the line says what it counted |
-| P13 | Should Lab Book markers beyond weight and waist ever be in the packet? | Not in version 1. When stage 4 adds them they arrive as a section that is off by default |
+| P13 | Should Lab Book markers beyond weight and waist, scan markers, benchmarks or niggles ever be in the packet? | Not in version 1 and not in packet v2. They stay out until the owner asks; each would then arrive as a section that is off by default, under the grammar of §7.12 |
 | P14 | Should the packet's choices (range and sections) be in backups? | No. They are a per-install preference, and leaving them out keeps the backup contract untouched |
+| P15 | One answer covers P1, P2, P8 and P9: the packet opens from a Health row and the scorecard screen with no Today card; the copy is local-only and expires after ten minutes; the share sheet's own Copy is removed; the Shortcuts action needs an unlocked phone. Yes to all? | **Decided by default: yes to all.** If the owner wants a Today card, that is a separate change after stage 3's card work, because the Today files have one editor at a time. A different lifetime changes `CoachPacketCopyPlan.lifetimeSeconds` and one test. Keeping the system Copy removes one line and makes §10.2's "this iPhone only" wording untrue for that path, so the wording would change too. Allowing a locked phone changes the intent's policy and puts health text within reach of the lock screen |
+| P16 | Approve the two blocks of §16 for pasting, knowing they are revised once, when intake and events join in packet v2? | **Decided by default: yes.** The owner pastes version 1's text now and the revised text once, with packet v2. If the owner would rather paste once only, the paste waits for packet v2 and the end-to-end check of §12.8 moves with it; nothing in the app changes |
+| P17 | One combined layout for the Health tab's "More health" card, the Settings section and the scorecard screen covers every stage, with the order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. Approve it once, before any view code? | **Decided by default: yes, that order.** A different order moves this stage's row and card and changes no logic; the three view edits of 2-5h wait for the approval either way |
+| P18 | Packet v2 adds intake and events in one change, after stages 3 and 5, with both sections on by default and private events left out unless stage 5's own setting includes them. Acceptable? | **Decided by default: yes.** If the owner wants either section off by default, `isOnByDefault` changes for that case and one golden changes. If the owner wants a section sooner, it still costs a version bump and a re-paste of §16 each time |
+| P19 | Is the phone updated for this stage at the agreed milestone (after the packet, following a fresh backup), with the feature off until the owner switches it on? | **Decided by default: yes.** One install per accepted milestone, never one per stage in parallel |
+| P20 | The Fixture Person's round values (stage 1's weights, waists, 100 g floor; this stage's daily rows, steps and workouts) are invented. Does the owner confirm none of them is a real target or reading? | Assumed invented. If any matches, the value is changed in stage 1's fixture first and the golden of §7.9 follows |
 
 Needing the owner's go-ahead in the sense of the standing rules (migration, Health access, build
 target, entitlement, network path): **nothing**. Owner gates that remain: the design approval (G1),
-the wording of §16, and any install on the phone.
+the combined frames for the three shared surfaces, the wording of §16, and any install on the phone.
 
 ## 16. The Claude-side half
 
-Text for the owner to paste. Neither block contains anything personal.
+Text for the owner to paste. Neither block contains anything personal. Both describe format
+version 1. They are revised exactly once, by packet v2 (§7.12), when intake and events join; rule 1
+of the first block already tells the reader what to do with a higher version in the meantime.
 
 ### 16.1 For the training document: "Reading the packet"
 
@@ -1417,11 +1637,11 @@ The orchestrator cannot edit either document. The owner pastes both, and the end
 | D2 | One formatter with a style (labels, day separator, strain factor) | The only way to give the packet the app's words and scale while the Coach text stays byte-identical |
 | D3 | Byte identity is proved by a frozen copy of the old code and by recorded text | A golden alone cannot cover inputs it does not list |
 | D4 | The packet lists every calendar day; the Coach keeps its row windows | "Unmeasured days are marked" needs a line per day; byte identity needs the old windows |
-| D5 | Baseline is `Repository.chargeBaselines` with the Recovery screen's band | It is the baseline behind the score the owner sees |
+| D5 | Baseline is `Repository.chargeBaselines`, and the typical range is `ChargeTypicalBand.range`, the function the Recovery screen calls | It is the baseline behind the score the owner sees, and one computation of the range cannot disagree with itself |
 | D6 | Steps come from `Repository.resolvedSteps` | The one function the detail and the rolling tile already share |
 | D7 | The step average leaves out today | Today is partial and would drag the mean down |
 | D8 | Scorecard values print as enum raw values | English and stable whatever the interface language |
-| D9 | Intake and events are named in a header line and have no section | Absent, never zero, and the coach is told why |
+| D9 | Intake and events are named in a header line and have no section in version 1; both join in one later change | Absent, never zero, and the coach is told why. One change means one version number and one re-paste |
 | D10 | The privacy scan fails closed | A packet that might identify a device must not exist to be copied |
 | D11 | Copy uses the previewed text and does not assemble again | The owner approves what they saw |
 | D12 | The Shortcuts action returns text and does not write the pasteboard | A background pasteboard write is not dependable, and Shortcuts has its own copy action |
@@ -1429,13 +1649,30 @@ The orchestrator cannot edit either document. The owner pastes both, and the end
 | D14 | Settings are not backed up | No whitelist edit, so no drift from the Kotlin side |
 | D15 | Golden files are Swift literals | The test target has no resources and `Package.swift` stays unedited |
 | D16 | The size budget is a formula in the range and holds by construction | A fixed number would fail a 28-day packet or be too loose for a 7-day one |
+| D17 | The input carries the typical range, not a sigma | The renderer then prints the bounds it is given, and no second subtraction of a sigma exists anywhere |
+| D18 | The golden uses stage 1's Fixture Person, read in the week after a weigh-in | One person across all stages; a combined demo cannot show two weights for one day |
+| D19 | The three shared view edits are one orchestrator commit | Five stages insert into the same three files; one writer at a time keeps the approved order |
 
 ## 18. Not determined
 
 - **Whether the example in §7.9 equals what Swift prints, byte for byte.** It came from a scratch
-  script implementing §7 with C-style formatting and halves-away-from-zero rounding. If a golden
-  differs from the implementation in a rounding edge, the Test author reports it and the
-  orchestrator rules, as stage 1 did for its fixture rows.
+  script implementing §7 with C-style formatting and halves-away-from-zero rounding; its scorecard,
+  weigh-in and two workout lines were then rewritten by hand onto stage 1's Fixture Person, and the
+  byte count was measured again from this file. If a golden differs from the implementation in a
+  rounding edge, the Test author reports it and the orchestrator rules, as stage 1 did for its
+  fixture rows.
+- **Whether `CutScorecard.evaluate` returns exactly the hand-built result of §13.3** for stage 1's
+  fixture read on 2031-03-16, in particular rule 3's `consecutiveWeeks` of 5 and the lift signal's
+  counts. The renderer's golden does not depend on it; the fixture's claim to be stage 1's person
+  does.
+- **The exact declarations the scaffolding commit lands** for `ObservableDefaultsFlag` (its
+  initialiser's parameters and actor isolation), the demo registry (the element's form) and
+  `ChargeTypicalBand` (assumed `static func range(_ state: BaselineState?) -> ClosedRange<Double>?`,
+  the body of `ScoreDetailData.swift:156-160`). §19 lists what this stage assumes.
+- **The intake row of packet v2.** §7.12 gives the template in force; it is confirmed against
+  stage 3's `IntakeProvider.series()` as merged when packet v2 is written.
+- **Whether a note that looks like an email address or a path should block the whole packet** in
+  packet v2, or only drop the events section. §7.12 G-8 keeps the fail-closed rule.
 - **Whether `IntentAuthenticationPolicy.requiresAuthentication` behaves as described on the owner's
   iOS version**, and whether an intent that throws shows the localised message in Shortcuts. Read
   from the framework's interface, not run.
@@ -1460,3 +1697,43 @@ The orchestrator cannot edit either document. The owner pastes both, and the end
   after normalising the decimal separator.
 - **Android.** Nothing on the Kotlin side was read beyond the two files named, compiled or run.
 - **The Claude-side documents.** Their current wording was not seen; §16 is written to stand alone.
+
+## 19. Reconciliation (11 November 2026)
+
+Applied from the cross-stage check of the seven specifications. One line per conflict that names
+this stage.
+
+| Conflict | What changed in this file |
+|---|---|
+| X3 | §7.12 added: stage 2 owns the grammar (G-1 to G-10). A later section has a `== NAME ==` heading printed by the renderer, two-space rows, free text through `CoachPacket.sanitize`, a row limit with an "earlier not shown" row, and a budget allowance. The events section takes stage 5's rows, its `none listed` wording and its own sensitivity key, shown in the sheet as a read-only caption; the budget gains a fixed 2,000-byte events allowance in packet v2 |
+| X4 | Version 1 ships unchanged, with `not-recorded-by-app: intake, events`. The rule "the stage that adds a section owns the version bump" is removed from §7.2 and §14.3. Packet v2 is defined in §7.12 as one follow-up change after stages 3 and 5: both cases, one bump, one golden set, one revision of §16. Scan markers and niggles stay out (§1, P13) |
+| X5 | Design round renamed to `design/round-s2-coach-packet/`, command `importS2`, export `s2-frames.json` (§5, §10, §14). The designer no longer edits `code.js` or `manifest.json`; the orchestrator adds the command |
+| X6 | The debug line is no longer rewritten. Stage 2 adds `CoachPacketDemo.swift` and one element in the scaffolding's demo registry; demo names keep the prefix `packet-` and the demo returns nil for any other name (§5, §12.4, §14.1) |
+| X7 | The assembler takes the typical range from `ChargeTypicalBand.range` and never calls `Baselines.sigma`. `CoachPacketBaseline` carries `typical: ClosedRange<Double>?` in place of `sigma` and `usable` (§6.2, §7.6, §8.4). `testPacketBaselineBandEqualsTheRecoveryFactorBand` asserts the packet's range equals the Recovery detail range; a source-scan line and a fault were added (§12.3, §12.4, §12.6) |
+| X12 | §7.3 states the floor is whole grams, constrained at its two editors (stage 1's rules sheet, stage 3's intake settings), so `Int(x.rounded())` agrees with every other rounding. `testWholeGramFloorPrintsUnchanged` added. Stage 2 owns neither editor |
+| X17 | §8.1, §12.1, §12.2 and §14 fix the order on `AICoach.swift`: ownership, then this extraction, then stage 4. The byte-identity baseline and the frozen copy are taken after ownership has merged |
+| X18 | §8.2 and §14.3 fix the order on the scorecard model and builder: this stage's move first, then stage 3 (which also updates the assembler's one construction of the builder, named in §8.4 step 3), then stage 5, then stage 6's stored property. New methods for `evaluation(today:)` are added to `CutScorecardInputBuilderTests.swift` before stage 3 edits it |
+| X19 | `CoachPacketFlag` is removed; the flag observer is the static `CoachPacketSettings.flag`, an `ObservableDefaultsFlag` (§5, §8.3). `CoachPacket.dayKeys` keeps its signature and is specified entirely through `CanonicalDay`, with two tests and a source-scan line (§6.2, §12.1, §12.4) |
+| X20 | One Fixture Person. §13.3, the scorecard and weigh-in blocks of the golden in §7.9, and two workout lines are rebased onto stage 1's person: Wednesday weigh-ins from 2031-01-08, stage 1's weights and waists, protein floor 100 g, no weigh-in in week 10, Monday lift sessions. The demo seed and the app-target fixtures use the same person (§12.8, §13). The golden is still 6,221 bytes |
+| X22 | Owner decision, in force by default (P17): the Health row, the Settings card and the toolbar item take the places given by one combined frame per surface, order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. The three view edits moved from 2-5 to the orchestrator's commit 2-5h (§10, §10.1, §10.3, §14) |
+
+Owner decisions adopted as the design in force: P15 (entry points, clipboard lifetime, share sheet
+Copy, unlocked phone), P16 (the two blocks of §16, revised once), P17 (combined layout), P18 (packet
+v2), P19 (install milestone), and P20 (confirmation that the fixture values are invented).
+
+Privacy: this stage no longer has a protein floor of its own; the only floor in this file is the
+shared fixture's 100 g. No sentence in this file describes the owner's data, products, reports or dates.
+
+Android (ruling R43): this file orders no Kotlin work and no Kotlin test run. §14.4 states the
+drift, which is none for stored data.
+
+**Expected from the orchestrator's step 0 (shared scaffolding), before this stage's serialised step.**
+
+| Scaffolding | What this stage assumes |
+|---|---|
+| Demo registry line in `StrandiOS/App/StrandiOSApp.swift` | An ordered list of demo providers replacing the single `ScorecardDemo.screen(named:)` call at `:623`, each of the form `(String) -> AnyView?`, tried in order: scorecard, packet, intake, body record, events, stage 6. This stage adds one element |
+| Plugin commands and design folders | `importS2` to `importS6` in `design/figma-plugin/code.js` and `manifest.json`; the folder `design/round-s2-coach-packet/` exists; `importS2` reads `s2-frames.json` |
+| `ObservableDefaultsFlag` | `Strand/Data/ObservableDefaultsFlag.swift`: the body of `CutScorecardFlag` with the key as a parameter, constructible as `ObservableDefaultsFlag(key:)` over the standard defaults, publishing `isEnabled`, with its own tests |
+| `CanonicalDay` | `Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift` with `number(_:)`, `key(_:)`, `daysBetween(_:_:)` and `weekStart(_:)`, pinned by test to `CutScorecard.weekStart(containing:)`. `CoachPacket.swift` needs it at compile time, so the pure logic of 2-4a starts after it lands |
+| `ChargeTypicalBand` | `Strand/Data/ChargeTypicalBand.swift` with `static func range(_ state: BaselineState?) -> ClosedRange<Double>?`, extracted from `StrandiOS/Redesign/ScoreDetailData.swift:156-160`, which then calls it. The assembler (2-4b) calls it |
+| Fork-only backup keys comment | The comment block above the Swift whitelist in `BackupSettings.swift`. This stage adds no key to it and does not edit the file; its three settings stay outside the backup |
