@@ -135,6 +135,8 @@ struct ScorecardContent: View {
     let onHistory: () -> Void
     let onPhase: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Stage 3: the intake flag (§10.4). Off: the protein row is exactly stage 1's.
+    @ObservedObject private var intakeFlag = IntakeSettings.flag
 
     private var stacks: Bool { dynamicTypeSize.isAccessibilitySize }
 
@@ -414,7 +416,12 @@ struct ScorecardContent: View {
             VStack(spacing: 0) {
                 ForEach(Array(shown.signals.enumerated()), id: \.offset) { index, signal in
                     if index > 0 { FormKitDivider() }
-                    signalRow(signal)
+                    // Stage 3: the protein row (third of four) names its source and opens Intake.
+                    if index == 2, intakeFlag.isEnabled {
+                        ScorecardIntakeProteinRow { signalRow(signal) }
+                    } else {
+                        signalRow(signal)
+                    }
                 }
             }
         }

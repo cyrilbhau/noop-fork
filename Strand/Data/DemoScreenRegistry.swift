@@ -8,6 +8,8 @@ enum DemoScreenPrefixes {
     static let scorecard = ["scorecard-", "flow-", "weighin-", "history-", "phase-", "cards-"]
     /// Stage 2: the names `CoachPacketDemo.screen(named:)` answers.
     static let packet = ["packet-"]
+    /// Stage 3: the names `IntakeDemo.screen(named:)` answers.
+    static let intake = ["intake-"]
 }
 
 /// The ordered list `--demo-screen <name>` falls through to after the app's own switch. Generic
