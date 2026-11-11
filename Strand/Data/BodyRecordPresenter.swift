@@ -284,14 +284,16 @@ struct BodyScanEntry: Equatable {
         self.day = day
     }
 
-    /// H9: the scan's figures prefilled in the display unit.
-    init(editing scan: BodyScan, unitSystem: UnitSystem) {
+    /// H9: the scan's figures prefilled in the display unit, written with the separator the sheet
+    /// parses (`LabBookFormat` always writes "."; it has no grouping, so its one "." is the decimal).
+    init(editing scan: BodyScan, unitSystem: UnitSystem, decimalSeparator: Character = ".") {
         day = scan.day
         note = scan.note ?? ""
         for field in BodyScanField.all {
             guard let stored = scan.values[field.key] else { continue }
             let shown = BodyRecordPresenter.displayed(stored, field: field, unitSystem: unitSystem)
-            texts[field.key] = shown.text
+            texts[field.key] = decimalSeparator == "."
+                ? shown.text : shown.text.replacingOccurrences(of: ".", with: String(decimalSeparator))
             units[field.key] = shown.unit
         }
     }

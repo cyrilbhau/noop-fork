@@ -138,7 +138,9 @@ final class BodyScanSheetModel: ObservableObject {
         self.unitSystem = unitSystem
         self.decimalSeparator = decimalSeparator
         self.today = today
-        let first = editing.map { BodyScanEntry(editing: $0, unitSystem: unitSystem) }
+        let first = editing.map {
+            BodyScanEntry(editing: $0, unitSystem: unitSystem, decimalSeparator: decimalSeparator)
+        }
         prefilled = first
         entry = first ?? BodyScanEntry(day: today())
     }
