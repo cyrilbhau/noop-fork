@@ -10,8 +10,9 @@ that commit. Paths are relative to the repository root. Nothing was built or run
 it is a reading of the code. The example in §7.9 was produced by a scratch script that implements
 §7, not by Swift (see §18).
 
-Reconciled on 11 November 2026 with the cross-stage check of all seven specifications; §19 lists
-what changed and what this stage expects from the shared scaffolding commit (build-order step 0).
+Reconciled on 11 November 2026 with the cross-stage check of all seven specifications, in two
+passes; §19 lists what changed in each and what this stage expects from the shared scaffolding
+commit (build-order step 0).
 Where another stage or the scaffolding edits a file before this stage does, a `path:line` here is
 still as of the commit above, and the anchor that counts is the named declaration.
 
@@ -84,13 +85,13 @@ labelled format, so the owner pastes it into Claude and retypes nothing.
 | C3 | The packet shows recovery, strain and sleep | The in-app line says `charge`, `effort` and `rest` (`AICoach.swift:1622-1623`, `:1681-1683`), and prints strain on the stored 0 to 100 axis whatever display scale the owner chose (`Strand/Data/Units.swift:351-366`) | One formatter, two styles: labels, day separator and strain factor are parameters (§6.1). The packet prints the labels and the strain scale the app shows (ruling R41) |
 | C4 | Four intents (`CONTEXT.md:84`) | Five on iPhone: `ExportWorkoutRouteIntent` returns a file with `ReturnsValue` and `openAppWhenRun = false` (`ExportWorkoutRouteIntent.swift:62-103`). A separate macOS file declares two (`Strand/System/NOOPAppIntents.swift:26-59`) | The packet intent follows the route-export precedent and lives in its own iPhone-only file. `NOOPAppIntents.swift` is not edited |
 | C5 | "apart from copying a single reply" (`CONTEXT.md:96`); risk 9 names the clipboard (`CONTEXT.md:195`) | That copy writes `UIPasteboard.general.string` with no options (`CoachView.swift:690-695`), next to a `ShareLink` (`:699`). A second writer, `PlatformPasteboard.copy`, does the same (`Strand/System/Platform.swift:29-38`, used at `Strand/Screens/SettingsView.swift:3414`). No code in the tree uses `localOnly` or an expiry | The packet gets its own writer (§9). The two existing writers are not changed; they are reported in §15 P10 |
-| C6 | The stage 1 specification says "Stage 2 replaces it with the resolver's value" of the Coach's Lab Book roll-up (`specs/stage-1.md:94`) | Stage 1 already did it under ruling R41 (`AICoach.swift:1273-1309`) | Stage 2 does not touch `onDeviceSignalsBlock`. The Lab Book ownership change edits that block's roll-up read, and lands first (§14.3) |
+| C6 | The stage 1 specification says "Stage 2 replaces it with the resolver's value" of the Coach's Lab Book roll-up (`specs/stage-1.md:94`) | Stage 1 already did it under ruling R41 (`AICoach.swift:1273-1309`) | Stage 2 does not touch `onDeviceSignalsBlock`. Other changes edit that block in their own turns of the shared-file order, one before this stage's extraction and two after it (§8.1) |
 | C7 | "against the personal baseline", as if there were one (`ROADMAP.md:290`) | Three exist: the recovery engine's, resolved once per refresh over a 21-day window (`Repository.swift:190`, `ChargeBaselines.swift:31`); the classic Health screen's mean of every earlier day (`Strand/Screens/HealthView.swift:633-637`); the Coach chips' 30-row mean (`Packages/StrandAnalytics/Sources/StrandAnalytics/CoachSuggestions.swift:99-103`) | The packet reads `Repository.chargeBaselines` only, and takes the typical range from `ChargeTypicalBand.range` (`Strand/Data/ChargeTypicalBand.swift`), the one function the Recovery detail screen draws its band from once the shared scaffolding has moved it out of `StrandiOS/Redesign/ScoreDetailData.swift:156-160` |
 | C8 | "steps per day with the source named" (`ROADMAP.md:291`) | Three precedences: the shared resolution used by the detail and the rolling tile, measured strap, then phone, then strap estimate (`RollingStepsAverage.swift:44-58`); Today, the same order from its own fields (`Strand/Liquid/LiquidTodayView.swift:3610-3611`, `Strand/Data/TodayCardReadout.swift:231-240`); the widget, Health first, then the estimate (`StrandiOS/Widgets/WidgetPublish.swift:130-160`). The in-app Coach's average reads a fourth thing, `DailyMetric.steps` alone (`AICoach.swift:1641`) | The packet reads `Repository.resolvedSteps` only. The differences are pre-existing and are not repaired here (§15 P10) |
 | C9 | The Coach context is assumed to be English | Its body-measurement line takes the source name from a localised string (`AICoach.swift:1322`; `Strand/Data/CutScorecardPresenter.swift:542-548`) | The packet does not reuse that line. It prints the same resolved value with fixed English source tokens, and a test ties the two numbers together (§12.3) |
 | C10 | WP 2-5 lists "pasteboard" with no platform; the work-package table has no owner for the assembler or the app-target tests (`ROADMAP.md:306-315`) | `UIPasteboard` options exist on iOS only. Shared sources compile for macOS as well | The writer is an iPhone-only file behind a protocol declared in shared code (§9). §14 assigns the missing owners |
 | C11 | The in-app workouts block is not mentioned by the design rule | It prints distance in the owner's unit system and takes the day from the device zone with its own formatter (`AICoach.swift:1653-1667`, `:1742-1747`) | It is left untouched and is not shared. The packet's workout lines are metric and have their own template (§7.7) |
-| C12 | The packet "includes the stage 1 result" | The evaluation the screens show is private to the screen model, including the substitution of an upcoming phase (`Strand/Data/CutScorecardModel.swift:196-213`). A second caller would have to repeat it | The function moves to `CutScorecardInputBuilder` so the screen and the packet call one evaluation (§8.2). This move is the first of four serialised edits to the model and the builder (§14.3) |
+| C12 | The packet "includes the stage 1 result" | The evaluation the screens show is private to the screen model, including the substitution of an upcoming phase (`Strand/Data/CutScorecardModel.swift:196-213`). A second caller would have to repeat it | The function moves to `CutScorecardInputBuilder` so the screen and the packet call one evaluation (§8.2). The move is made in this stage's turn of the shared-file order (§14.1) |
 | C13 | The roadmap says stages 1 and 2 are sequential and end in a pull request (`ROADMAP.md:23-27`) | Later instructions run the stages at once on separate branches, locally | §14.3 lists what may run beside other stages and what must be serialised |
 
 ## 4. Every reader and writer
@@ -419,11 +420,14 @@ Otherwise, in this order:
 | projection | `projected`: `projection: <targetDay> (estimate), <weeksRemaining> weeks, <remainingKg> kg remaining`. Any other status: `projection: none (<status>)`, then `; <remainingKg> kg remaining` when set |
 | rejections | Only when any count is above 0: `ignored-readings: <total> (nonFinite a, nonPositive b, invalidDay c, future d)` |
 
-The protein floor is a whole number of grams. It has one home, the stored rules, and both of its
-editors (stage 1's rules sheet and stage 3's intake settings) accept whole grams only, each with its
-own test. `Int(x.rounded())` therefore prints the stored number unchanged, and the packet, the
-protein card, the ring and the widget cannot show two different whole numbers for one floor. Stage 2
-owns neither editor; its part is `testWholeGramFloorPrintsUnchanged` (§12.1).
+The protein floor is a whole number of grams, by one rule with one owner: stage 1 ruling R45
+(stage 1 §9.2). The floor is stored and edited in whole grams and `CutScorecardSettings.parameters`
+hands every reader a whole number. Stage 2 adds no rule, no editor and no rounding of its own. The
+floor the packet prints is the one inside the evaluation's protein signal, which the builder took
+from those parameters, so `Int(x.rounded())` prints that number unchanged and equals
+`CutScorecardSettings.proteinFloorWholeGrams`, the form every other surface prints. Stage 2's part
+is two tests: `testWholeGramFloorPrintsUnchanged` (§12.1) and
+`testPacketFloorEqualsTheSettingsWholeGramFloor` (§12.3).
 
 "Which rules were unknown" is therefore stated once per rule, on its own line, and "which rules the
 verdict could not take into account" once, in `could-not-check`. The packet prints the owner's
@@ -641,7 +645,7 @@ weekly rows stop at 8, workouts at 20, and every other line has a fixed widest f
 14-day packet is a little over 6 kB. The renderer never truncates to meet the budget; a test builds
 the widest input and asserts the bound (§12.1).
 
-The formula above is version 1's and does not change in this stage. Packet v2 adds a fixed
+The formula above is version 1's and does not change in this stage. Packet v2 adds stage 5's fixed
 allowance for the events section and a per-day width for the intake section (§7.12), so that the
 bound still holds by construction.
 
@@ -680,15 +684,68 @@ the stage that supplies the section's content supplies body rows only.
 | G-3 | Every string the owner typed or imported passes through `CoachPacket.sanitize` before it is printed: one line, quotes replaced, at most 48 UTF-8 bytes. Collapsing whitespace alone is not enough |
 | G-4 | Every section is bounded. A per-day section prints at most one row per calendar day of the range, each row with a fixed widest form, and adds that width to the per-day term of the budget. A list section has a row limit and, when more rows exist, a first row `  (<m> earlier <things> in range not shown)`; it adds a fixed allowance to the budget |
 | G-5 | The range is 7, 14 or 28 days. Goldens for a new section are written over a 14-day and a 28-day range |
-| G-6 | A missing value is `—`. An empty list is said in words on one line. For events the words are `none listed`: hidden private events may exist, and the packet neither reveals nor denies them |
+| G-6 | A missing value is `—`. An empty list is said in words on one line. For events the line is `events: none listed in range`: hidden private events may exist, and the packet neither reveals nor denies them, so no count of hidden events is printed anywhere |
 | G-7 | The function that supplies a section is pure, total, English, and returns `[String]` body rows that already satisfy G-2 to G-4 and G-6. It prints no heading and no blank line |
 | G-8 | The privacy scan of §7.11 runs over the whole text, later sections included, and fails closed. A row that carries an email address or a path blocks the packet; the supplying stage's tests include such a row, so the owner learns it from the blocked state and not from a paste |
-| G-9 | Section switches live in `coachPacket.sections` and nowhere else. A choice that is a fact about another feature stays in that feature's settings and is shown in the packet sheet as a read-only caption. The one such choice today is stage 5's `personalEvents.packetIncludesSensitive` |
+| G-9 | Section switches live in `coachPacket.sections` and nowhere else. A choice that is a fact about another feature stays in that feature's settings and is shown in the packet sheet as a read-only caption. The one such choice is stage 5's `personalEvents.packetIncludesSensitive`; its control and its first reader ship together, in packet v2 |
 | G-10 | One change, one version bump. The first line and the last line carry the new version, the goldens are regenerated once, and §16 is revised once |
 
-**Packet v2.** One follow-up change, made after stages 3 and 5 have merged (build-order step 8).
-It is not part of stage 2's work packages, and stage 2 ships version 1 unchanged. It does all of
-this together:
+**The events rows.** This is the grammar of the events section. Stage 5 §7.5 gives the same rows
+for the same events, and its function `PersonalEvents.packetLines` returns them.
+
+| Row | Form |
+|---|---|
+| Lead line, when at least one event is listed | `entered by the owner, whole local days, oldest first:` |
+| Nothing may be listed, or the range is invalid | The single row `events: none listed in range`, with no lead line |
+| More than the row limit are listed | `  (<m> earlier events in range not shown)` directly after the lead line; `m` counts listed events only |
+| An event | `  <dates>: <name>` or `  <dates>: <name>; note "<sanitize(note)>"` |
+| `<dates>` | `<start>` for one day, `<start>..<end>`, or `<start>..ongoing` for an event with no end. Stored days are printed whole, not clipped to the range |
+| `<name>` | The kind's raw value; for a custom kind, `custom "<sanitize(label)>"` |
+
+"Listed" means visible under the private-events choice and overlapping the range. The row limit is
+stage 5's `PersonalEvents.packetRowLimit`, 12, and the last twelve listed events are printed, oldest
+first. No row carries an id, a creation time, a sensitivity marker or a count of hidden events.
+
+Example rows, for stage 5's fixture events (stage 5 §13.1) as its goldens G-E1, G-E3 and G-E6 print
+them. Range 2031-03-13 to 2031-03-26, private events left out:
+
+```
+entered by the owner, whole local days, oldest first:
+  2031-03-10..2031-03-16: travel; note "Fixture trip"
+```
+
+The same range, private events included, adds one row at the end:
+
+```
+  2031-03-26: custom "Fixture change"; note "Fixture note"
+```
+
+Range 2031-05-08 to 2031-06-04, private events left out, then included:
+
+```
+events: none listed in range
+```
+
+```
+entered by the owner, whole local days, oldest first:
+  2031-05-19..ongoing: illness
+```
+
+Range 2031-02-27 to 2031-03-26 with fifteen one-day travel events on 2031-03-01 to 2031-03-15 begins:
+
+```
+entered by the owner, whole local days, oldest first:
+  (3 earlier events in range not shown)
+  2031-03-04: travel
+```
+
+and continues with one row a day to `  2031-03-15: travel`.
+
+**Packet v2.** One follow-up change, made after stages 3 and 5 have merged (build-order step 8). It
+is not part of stage 2's work packages (§14), and stage 2 ships version 1 unchanged. It is the last
+editor of every shared file it touches (§14.5). It does all of this together.
+
+*Format*
 
 - Adds `CoachPacketSection.intake` (`"intake"`) and `.events` (`"events"`), both on by default. The
   fixed order becomes header, scorecard, weigh-ins, intake, recovery and sleep, trends, activity,
@@ -696,38 +753,132 @@ this together:
 - Sets `formatVersion` to 2 and the header's line to `not-recorded-by-app: none`. A section whose
   feature is switched off in the app prints its heading and one line,
   `not available: <intake|events> is switched off in the app`, as the scorecard section does.
-- **Events.** Heading `== EVENTS ==`. The rows are the return value of stage 5's packet function
-  (stage 5 §7.5), which follows G-2 to G-7: two-space rows, the note through `CoachPacket.sanitize`,
-  a row limit with the "earlier … not shown" row, and `none listed` when nothing may be shown. Stage 5
-  owns the row limit; it may not exceed 12. `CoachPacket.eventsByteAllowance` is 2,000 bytes, which
-  covers the heading, the blank line and 12 rows of the widest form (two day keys, a 48-byte name
-  and a 48-byte note, about 135 bytes each). The assembler passes the store's events and
-  `includeSensitive:` from stage 5's own key. The packet sheet shows that choice as a read-only
-  caption under the Events switch, with the number of private events left out, and no control.
-- **Intake.** Heading `== INTAKE ==`. One row for every calendar day of the range, read through
-  stage 3's `IntakeProvider.series()` and never from the store:
+- **Events.** Heading `== EVENTS ==`, printed by the renderer, followed by the rows above. The
+  renderer prints the rows it is given and adds nothing to them.
+- **Intake.** Heading `== INTAKE ==`. One row for every calendar day of the range:
   `  <day>: protein <P g|—>, energy <K kcal|—>[ [<source>]]`, with the source a token from a closed
   enum declared in `CoachPacket.swift`, never a stored source id. The widest row is 70 bytes, so the
   per-day term rises from 220 to 290.
-- The budget becomes `8000 + 290 × rangeDays + 2000` bytes, with a widest-input test for each range.
-- Regenerates G1 and G2 as version 2, adds a section-off golden for each new section, and adds
-  goldens over 14 and 28 days for both.
-- Revises both blocks of §16 once, and the owner pastes them once.
-- Adds the two switch labels and the caption to §11 and to the String Catalog, as the only catalogue
-  writer at that moment.
+- The budget becomes `8000 + 290 × rangeDays + PersonalEvents.packetByteAllowance` bytes. The
+  allowance is stage 5's constant, 2,000 bytes, and the packet declares no second constant for it.
+  It covers the heading, the blank line, the lead line, the "earlier" row and 12 rows of the widest
+  form, 141 bytes each with the line break (stage 5 §7.5).
+
+*Input and assembler*
+
+```swift
+public enum CoachPacketEvents: Equatable, Sendable {
+    case switchedOff                 // the events feature is off in the app
+    case rows([String])              // exactly what PersonalEvents.packetLines returned
+}
+public enum CoachPacketIntakeSource: String, Equatable, Sendable   // closed; cases fixed with stage 3's merged sources
+public struct CoachPacketIntakeDay: Equatable, Sendable {
+    public let day: String
+    public let proteinGrams: Double?
+    public let energyKcal: Double?
+    public let source: CoachPacketIntakeSource?
+}
+public enum CoachPacketIntake: Equatable, Sendable {
+    case switchedOff                 // the intake feature is off in the app
+    case days([CoachPacketIntakeDay])
+}
+// CoachPacketInput gains, after `workouts`:
+//     public let intake: CoachPacketIntake
+//     public let events: CoachPacketEvents
+```
+
+- The renderer treats event rows as text it did not write: a row that is not the lead line, the
+  "none listed" row or a two-space row is dropped, and a row longer than 141 bytes is cut at a
+  character boundary. Stage 5's function never produces either; the rule keeps `render` total and
+  the budget true by construction.
+- The assembler's first step (§8.4 step 1) also captures, before the first suspension, whether each
+  of the two features is on and stage 5's `PersonalEventStore.packetIncludesSensitive`, read once
+  per assembly.
+- Events on: `PersonalEvents.packetLines(events: store.events, firstDay: rangeStart, lastDay: today,
+  includeSensitive: captured)`, called once, in the assembler and nowhere else in the app. The range
+  days are the ones step 1 fixed, so the events section and every other section cover one range.
+- Intake on: `IntakeProvider.series()`, filtered to the range. The assembler reads no intake store
+  and names no intake key (stage 3 §14.5). The provider is the one its initialiser has taken since
+  stage 3's commit (§8.4 step 3), the same one it passes to the builder.
+- `CoachPacketDocument` gains `privateEventsIncluded: Bool?`: the captured choice, nil when the
+  events feature is off or the Events section is switched off. It is the value the text was built
+  with.
+
+*The private-events choice*
+
+The setting is specified in one place, stage 5 §9.6: the key
+`personalEvents.packetIncludesSensitive`, default off, its two additions to the events store, its
+Settings switch and footnote, the sentence in the event sheet, its strings and its tests. This
+section specifies nothing about the setting itself; it says how the packet reads it. Stage 5's
+first milestone ships no part of it. Packet v2 builds every item of stage 5 §9.6 in the same change
+that adds the reader, so the owner never sees a control that does nothing:
+
+- The Settings switch, placed and mounted as stage 5 §9.6 and §10.7 say. This is packet v2's edit
+  to `Strand/Screens/SettingsView.swift`.
+- The one read: the assembler reads the store's property once per assembly, in its first step,
+  above.
+- A read-only caption in the packet sheet, under the Events section switch, with no control:
+  "Private events: left out" or "Private events: included", then "Change this in Settings." The
+  three strings are stage 5's (stage 5 §11). The caption gives no number: no count of private
+  events is produced outside the Events screen.
+
+The caption is worded from `CoachPacketDocument.privateEventsIncluded`, the value the previewed
+text was built with, and never from a second read of the setting. The Settings switch and the
+caption are therefore one stored Bool, and the caption cannot disagree with the text beneath it.
+The caption is absent when that value is nil. A change made in Settings reaches the sheet through
+the reload on return to the foreground and on reopening (§10.2).
+
+*Sheet, strings and the Claude-side text*
+
+- The sheet gains two section switches, "Intake" between "Weigh-ins" and "Recovery and sleep", and
+  "Events" last. With a feature off in the app its switch stays usable and the section says so, as
+  the scorecard's does.
+- §11 gains the two switch labels. The String Catalog gains those two and every string stage 5
+  §9.6 lists for the setting (the three caption strings, the Settings switch's label and footnote,
+  the event-sheet sentence), written by packet v2's Localiser as the only catalogue writer at that
+  moment.
+- Both blocks of §16 are revised once, and the owner pastes them once.
+
+*Tests*
+
+- Regenerates G1 and G2 as version 2; adds a section-off golden for each new section and goldens
+  over 14 and 28 days for both. The whole-packet events goldens place stage 5's rows for its
+  goldens G-E1 to G-E6 under `== EVENTS ==`.
+- `testWidestPossibleInputIsWithinTheBudgetForEachRange` is rewritten for the new formula, with
+  twelve widest event rows and a widest intake row for every day.
+- `testEventRowsArePrintedExactlyAsGiven`, `testAMalformedEventRowIsDroppedAndNothingTraps`.
+- `testIntakeAndEventsNeverAppearAsSections` is replaced by `testVersionTwoNamesNothingAsNotRecorded`
+  and by `testAFeatureSwitchedOffInTheAppSaysSoUnderItsHeading` for each of the two.
+- `testANoteThatLooksLikeAnEmailAddressBlocksThePacket` (G-8).
+- Assembler: `testEventRowsAreStageFivesRowsForTheSameEventsAndRange`,
+  `testPrivateEventsAreLeftOutUnlessTheSettingIncludesThem`,
+  `testTheDocumentCarriesThePrivateEventsChoiceTheTextWasBuiltWith`,
+  `testIntakeDaysEqualTheProvidersSeries`.
+- Presenter and model: `testPrivateEventsCaptionFollowsTheDocumentAndGivesNoCount`,
+  `testPrivateEventsCaptionIsAbsentWhenEventsAreOffOrTheSectionIsOff`.
+- Source scan: `packetLines(` has one production caller, `CoachPacketAssembler.swift`;
+  `CoachPacket.swift` declares no `eventsByteAllowance`; `packetIncludesSensitive` occurs outside
+  tests only in the events store, the Settings switch and the assembler, which is stage 5's scan
+  `test_packet_switch_has_one_writer_and_one_reader`.
+- Stage 5's tests for the setting (stage 5 §9.6) are added in the same change.
+- The byte-identity suite of §12.2 is run unchanged and stays green: packet v2 does not edit
+  `AICoach.swift`.
 
 Until packet v2 lands, stage 5's packet function and stage 3's provider are tested and have no
-caller in the packet. Scan markers, benchmarks and niggles are not part of packet v2.
+caller in the packet, and no private-events switch exists. Scan markers, benchmarks and niggles are
+not part of packet v2.
 
 ## 8. App-side logic
 
 ### 8.1 The extraction in `AICoach.swift`
 
-Three changes are made to `Strand/AI/AICoach.swift` in a fixed order across the workstream: the Lab
-Book ownership change edits the roll-up read (`:1283-1300`) first, this extraction second, and
-stage 4's one-line skip in the roll-up third. This stage's regions are the ones below. The recorded
-texts of §12.2 and the frozen copy of §12.1 are captured from the tree **after** the ownership change
-has merged, so the baseline they prove identity against is the code this stage actually edits.
+`Strand/AI/AICoach.swift` is edited in one fixed order across the workstream: Lab Book ownership,
+then this extraction, then stage 3's one-line supplement exclusion, then stage 4. This stage is
+second. Each of the other three edits lies inside `onDeviceSignalsBlock`, outside this stage's
+regions below. The recorded texts of §12.2 and the frozen copy of §12.1 are captured from the tree
+**after** the ownership change has merged, so the baseline they prove identity against is the code
+this stage actually edits. The suite of §12.2 is this stage's and is re-run unchanged after each of
+the two later edits.
 
 Only `Strand/AI/AICoach.swift:1607-1645` and `:1679-1740` change (the line numbers are those before
 the ownership change; the regions are `buildContext()` and the day-line helpers):
@@ -761,17 +912,10 @@ func evaluation(today: String) async -> CutScorecardEvaluation
 definition unchanged. The phase the packet prints is `evaluation.input.phase`, the phase that was
 judged. The model's injectable `evaluate:` closure and its tests keep their signature.
 
-This move is the first of four serialised edits to these two files, each one small commit:
-
-1. Stage 2: the move described here.
-2. Stage 3: the builder's protein read goes through `IntakeProvider`, and the builder's initialiser
-   gains that argument. Stage 3 also updates the one place `CoachPacketAssembler` constructs the
-   builder (§8.4 step 3).
-3. Stage 5: an `events` field in the presentation context that `CutScorecardModel.load()` fills.
-4. Stage 6: one stored `evaluation` property on `CutScorecardModel`, set in `load()` from the value
-   this funnel returned, so its timeline never evaluates a second time.
-
-None of the later three changes what `evaluation(today:)` returns for the packet.
+The move is made in this stage's turn of the shared-file order (§14.1): after stage 1's follow-up
+packages and before stage 3. Later stages edit the two files after it, each in its own turn and as
+its own specification says. None of those edits changes what `evaluation(today:)` returns for the
+packet, and each leaves `testPacketScorecardEqualsTheScreenModelsEvaluation` (§12.3) passing.
 
 ### 8.3 `CoachPacketSettings`
 
@@ -841,6 +985,9 @@ Order of work in `input()`:
    `CutScorecardInputBuilder(repository:provider:settings:timeZone:).evaluation(today:)`, built from
    the assembler's own repository, provider, scorecard settings and captured zone. This is the
    assembler's only construction of the builder. Off: `.switchedOff`, and no builder is made.
+   Stage 3's builder commit, in its own turn after this stage, adds one defaulted parameter to this
+   initialiser, `intake: IntakeProvider? = nil`, and one argument at this construction (stage 3
+   §9.4). The assembler reads no intake itself in version 1.
 4. `repository.days`, filtered to the range.
 5. `repository.chargeBaselines`: for HRV and resting heart rate, `center = state.baseline`,
    `typical = ChargeTypicalBand.range(state)`, `status`, `nValid`. The assembler does not call
@@ -980,10 +1127,11 @@ only files inside `design/round-s2-coach-packet/` and never `design/figma-plugin
 `manifest.json`.
 
 Three surfaces are shared by every stage: the Health tab's "More health" card, the Settings section
-and the scorecard screen. Each has one combined frame covering all stages, approved once by the
-owner, with the fixed order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. This
-stage's row, card and toolbar item take the places that frame gives them (§10.1, §10.3). No view
-code for those three surfaces is written before the combined frames are approved. Each state
+and the scorecard screen. The combined frame set drawn by the orchestrator's designer covers all
+stages, is approved once by the owner, and is the authority for their layout. It fixes one order,
+top to bottom, for the Settings cards and the Health rows, each present only while its own flag is
+on. The Coach packet is second in that order, directly after Scorecard (§10.1, §10.3). No view code
+for those three surfaces is written before the combined frames are approved. Each state
 below needs a frame at the default text size and at the largest accessibility size
 (`StrandiOS/App/StrandiOSApp.swift:247`). Tokens: `StrandFont.mono` for the preview
 (`Packages/StrandDesign/Sources/StrandDesign/Typography.swift:94`, `:112`), existing palette and
@@ -995,8 +1143,8 @@ Present only while `noop.coachPacketEnabled` is on.
 
 | Entry | Where | Behaviour |
 |---|---|---|
-| Health tab row "Coach packet" | The last of the stage rows in the "More health" card (`StrandiOS/Redesign/RedesignHealthView.swift:474-482`), in the fixed order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. When this stage merges only the Scorecard row exists, so the row goes directly beneath it; each later stage inserts its row above this one | Opens the sheet |
-| Scorecard screen | A second toolbar item beside the weigh-in button (`StrandiOS/Scorecard/ScorecardView.swift:77-82`), placed as the combined scorecard frame shows. This is the first of four serialised edits to that file (stage 3's protein caption, stage 5's event note and stage 6's two link rows follow) | Opens the sheet |
+| Health tab row "Coach packet" | In the "More health" card (`StrandiOS/Redesign/RedesignHealthView.swift:474-482`): second in the one order, directly beneath the Scorecard row. With the scorecard flag off and this flag on, it is the first of the stage rows | Opens the sheet |
+| Scorecard screen | A second toolbar item beside the weigh-in button (`StrandiOS/Scorecard/ScorecardView.swift:77-82`), placed as the combined scorecard frame shows | Opens the sheet |
 
 Both present the sheet with `.sheet`, so `RedesignRoute.swift` is not edited. With the flag off
 neither exists and both screens are exactly as they are today. A Today card is not built (§15 P1).
@@ -1032,10 +1180,8 @@ local-only item.
 ### 10.3 Settings
 
 A card "Coach packet": one switch, "Coach packet", with the blurb in §11. Off by default. No
-reminder, no notification. Its place is the one the combined Settings frame gives it: last of the
-stage cards, in the fixed order of §10. When this stage merges only the Scorecard card exists
-(`Strand/Screens/SettingsView.swift:466`, `:1860`), so the card goes directly after it; the cards of
-stages 3 to 6 are inserted above it as they merge. The switch binds to `CoachPacketSettings.flag`
+reminder, no notification. Its place is second in the one order of §10: directly after the
+Scorecard card (`Strand/Screens/SettingsView.swift:466`, `:1860`). The switch binds to `CoachPacketSettings.flag`
 for reading and writes through `CoachPacketSettings.isEnabled`. `SettingsView.swift` is shared with
 macOS, so the `Strand` scheme is built after the edit.
 
@@ -1142,7 +1288,8 @@ again when the extraction starts. It is the oracle for byte identity and is neve
 - `testOverriddenRulesAreListed`
 - `testEachSignalPrintsOnlyTheClausesItHas`
 - `testWholeGramFloorPrintsUnchanged` (floors of 1, 100 and 250 print as `floor 1 g`, `floor 100 g`,
-  `floor 250 g`)
+  `floor 250 g`; the renderer is given whole numbers, which is all the settings ever hand out under
+  stage 1 ruling R45)
 - `testGainingAndFlatRatesAreWorded`
 - `testRateUnavailablePrintsItsReason`
 - `testEachProjectionStatusPrints`
@@ -1194,8 +1341,10 @@ again when the extraction starts. It is the oracle for byte identity and is neve
 Written and run **before** the extraction and **after** the Lab Book ownership change has merged,
 which edits another region of the same file. The recorded texts are captured from that tree. These
 tests pass on the code as it then stands; that is their purpose, and the commit message says so.
-They must still pass after the extraction, and stage 4's later one-line skip in the roll-up must
-leave them passing too.
+They must still pass after the extraction. The suite is re-run unchanged after stage 3's line and
+after stage 4's edit, the two later edits to the file, and must stay green after each: its fixtures
+list no supplement question and hold no scan or benchmark marker, so neither edit changes a byte of
+the recorded texts.
 
 - `testBuildContextForTheFixtureEqualsTheRecordedText`: a repository whose `days` is the fixture
   (`Repository.days` is settable, `Repository.swift:184`); the expected literal is the output of the
@@ -1239,6 +1388,9 @@ leave them passing too.
 - `testPacketWeightAndWaistEqualTheProviderAndTheCoachContextNumber`
 - `testPacketScorecardEqualsTheScreenModelsEvaluation` (both come from `evaluation(today:)`)
 - `testPacketWeeklyPointsEqualTheScorecardWeeks`
+- `testPacketFloorEqualsTheSettingsWholeGramFloor` (for a stored floor of 100, and for a fraction
+  written straight into the stored rules string, the integer after `floor` in the packet equals
+  `CutScorecardSettings.proteinFloorWholeGrams`)
 - `testPacketStepsEqualResolvedSteps`
 - `testPacketBaselineBandEqualsTheRecoveryFactorBand` (for one `BaselineState`, the bounds in the
   packet input equal `ChargeTypicalBand.range` and equal the `typical` of the Recovery detail's
@@ -1334,6 +1486,7 @@ finding.
 | Compute the band in the assembler from `Baselines.sigma` | the source scan; with a changed width, `testPacketBaselineBandEqualsTheRecoveryFactorBand` |
 | Accept a padded day key in `dayKeys` | `testDayKeysAcceptExactlyWhatCanonicalDayAccepts` |
 | Print the floor with a decimal | `testWholeGramFloorPrintsUnchanged`, G1 |
+| Read the floor for the packet from the stored rules string instead of the evaluation | `testPacketFloorEqualsTheSettingsWholeGramFloor` |
 | Ignore the display scale for strain | `testPacketStrainEqualsTheEffortDisplayOnEachScale` |
 | Leave the version out of the last line | `testFirstAndLastLinesCarryTheVersion` |
 
@@ -1463,28 +1616,35 @@ frames, every new test file, and the pure logic with its `swift test` (one packa
 worktree). 2-4b merges after 2-4a.
 
 On the single app build tree this stage is serialised step 3 of the build order, after the Lab Book
-ownership change (step 1) and stage 1's Today-view follow-up (step 2). Inside the step the order is:
+ownership change (step 1) and stage 1's follow-up (step 2). Inside the step the order is:
 the byte-identity tests of §12.2, committed and green; the `AICoach.swift` extraction; the move of
 §8.2; the views; 2-5h; the Localiser. The assembler (2-4b) is written after the scaffolding has
 landed `ChargeTypicalBand`, which it calls.
 
 ### 14.1 Shared hotspots this stage edits
 
-| File | Edit | Size |
-|---|---|---|
-| `Strand/Resources/Localizable.xcstrings` | The strings of §11 | About thirty keys, sole writer 2-6. One Localiser at a time across the workstream, in the order ownership, 2, 3, 4, 5, 6 |
-| `Strand/Screens/SettingsView.swift` | One card and its mount, placed by the combined Settings frame (§10.3) | About thirty lines, in 2-5h. Stage 2 is the first of five stages to add here (2, 3, 4, 5, 6) |
-| `StrandiOS/Redesign/RedesignHealthView.swift` | One row in the "More health" card (§10.1) | In 2-5h. Order of stages: 2, 4, 5, 6 |
-| `StrandiOS/Scorecard/ScorecardView.swift` | One toolbar item (§10.1) | In 2-5h. Order of stages: 2, 3, 5, 6 |
-| `StrandiOS/App/StrandiOSApp.swift` debug block | One element appended to the demo registry: `CoachPacketDemo.screen(named:)` | One line, in 2-5h. The registry itself, an ordered list of demo providers that replaces the single call at `:623`, is landed once by the scaffolding commit; no stage rewrites it |
-| `Strand/AI/AICoach.swift` | §8.1 | Two regions. Order: ownership (roll-up read), stage 2 (extraction), stage 4 (roll-up skip) |
-| `Strand/Data/CutScorecardModel.swift`, `Strand/Data/CutScorecardInputBuilder.swift` | §8.2 | The move only. Order: 2, then 3 (builder), 5 and 6 (model) |
-| `StrandTests/CutScorecardInputBuilderTests.swift` | New methods of §12.3 | Before stage 3's initialiser change |
+There is one order for every shared file: Lab Book ownership, stage 2, stage 3, stage 4, stage 5,
+stage 6, then packet v2. A change that does not edit a file has no turn on it. Stage 2 is second:
+its edit to each file below is made after Lab Book ownership's, where ownership edits that file,
+and before every later stage's. Each edit is made on the single app build tree, by one writer at a
+time.
 
-`CoachPacketDemo.screen(named:)` has the signature of `ScorecardDemo.screen(named:)`
-(`static func screen(named name: String) -> AnyView?`). It returns a view for a name beginning
-`packet-` and nil for every other name, so its place in the registry cannot shadow another stage's
-demo. The registry's order is scorecard, packet, intake, body record, events, stage 6.
+| File | Stage 2's edit | Package | Stage 2's position |
+|---|---|---|---|
+| `Strand/Resources/Localizable.xcstrings` | The strings of §11, about thirty keys | 2-6, last step of the stage | Second |
+| `Strand/Screens/SettingsView.swift` | One card and its mount (§10.3), about thirty lines. Shared with macOS: build `Strand` after it | 2-5h | Second |
+| `StrandiOS/Redesign/RedesignHealthView.swift` | One row in the "More health" card (§10.1) | 2-5h | Second |
+| `StrandiOS/Scorecard/ScorecardView.swift` | One toolbar item (§10.1) | 2-5h | Second |
+| `StrandiOS/App/StrandiOSApp.swift`, debug block | One element in the demo registry: `CoachPacketDemo.screen(named:)` | 2-5h | Second |
+| `Strand/AI/AICoach.swift` | The extraction of §8.1, two regions | 2-4a | Second: after Lab Book ownership, before stage 3's line and stage 4's edit |
+| `Strand/Data/CutScorecardModel.swift`, `Strand/Data/CutScorecardInputBuilder.swift` | The move of §8.2 only | 2-4b | Second, and after stage 1's follow-up packages that run before this stage |
+| `StrandTests/CutScorecardInputBuilderTests.swift` | New methods of §12.3 | 2-3 | Second, and after stage 1's follow-up additions |
+
+**Debug demo.** This stage's demo file is `StrandiOS/CoachPacket/CoachPacketDemo.swift`, its
+reserved prefix is `packet-`, and it has one element in the registry the orchestrator's step 0
+adds. `CoachPacketDemo.screen(named:)` has the signature
+`static func screen(named name: String) -> AnyView?`. It returns a view for a name beginning
+`packet-` and nil for every other name.
 
 ### 14.2 Shared hotspots this stage does not edit
 
@@ -1493,34 +1653,38 @@ demo. The registry's order is scorecard, packet, intake, body record, events, st
 `StrandiOS/System/NOOPAppIntents.swift`, `StrandiOS/Redesign/RedesignRoute.swift`, the widget payload
 types, `design/figma-plugin/code.js` and `manifest.json`, `StrandiOS/Redesign/ScoreDetailData.swift`
 (the scaffolding moves the typical range out of it; this stage only calls the result),
-`StrandiOS/Scorecard/ScorecardDemo.swift`.
+`StrandiOS/Scorecard/ScorecardDemo.swift`, `Strand/Data/BodyMeasurementResolver.swift`,
+`Strand/Data/BodyMeasurementProvider.swift` and `Strand/Data/CutScorecardPresenter.swift`.
+
+The resolver's rule for a week that holds both a weigh-in and a scan is stage 1's (stage 1 §18,
+ruling R44). This stage does not specify it. The packet reads weight through the provider and the
+one evaluation (§4), so it prints whatever that rule yields, and
+`testPacketWeightAndWaistEqualTheProviderAndTheCoachContextNumber` and
+`testPacketWeeklyPointsEqualTheScorecardWeeks` (§12.3) hold before and after the rule lands.
 
 ### 14.3 Beside other stages
 
 May run in parallel with any other stage: 2-2, 2-3, all new files of 2-4a, 2-4b and 2-5.
 
-Must be serialised with other stages, by the orchestrator. The order for each file is fixed by the
-cross-stage check:
+Must be serialised with other stages, by the orchestrator, in the one order of §14.1: every edit in
+the table there. For `Strand/AI/AICoach.swift` the byte-identity baseline is captured after Lab Book
+ownership's edit and before this stage's (§8.1). For the three view files and the demo registry the
+edit is the single orchestrator commit 2-5h, made after the combined frames are approved. For
+`Localizable.xcstrings` the Localiser runs as the last step of the stage, and never while another
+branch's Localiser is writing.
 
-1. `Localizable.xcstrings`: one Localiser at a time, last step of each stage, in the order ownership,
-   2, 3, 4, 5, 6. Never two branches at once.
-2. `Strand/AI/AICoach.swift`: ownership, then this stage's extraction with its byte-identity baseline
-   captured after ownership, then stage 4's roll-up skip.
-3. `Strand/Data/CutScorecardInputBuilder.swift` and `CutScorecardModel.swift`: the move of §8.2
-   first; then stage 3's builder change, which also updates the assembler's construction of the
-   builder; then stage 5's context field; then stage 6's property.
-4. `Strand/Screens/SettingsView.swift` (2, 3, 4, 5, 6), `StrandiOS/Redesign/RedesignHealthView.swift`
-   (2, 4, 5, 6), `StrandiOS/Scorecard/ScorecardView.swift` (2, 3, 5, 6): after the combined frames
-   are approved, each stage's insertion is one small orchestrator commit, in that order.
-5. The demo registry in `StrandiOSApp.swift`: landed once by the scaffolding; each stage adds one
-   element in integration order.
-6. `design/figma-plugin/code.js` and `manifest.json`: one orchestrator commit for all five commands;
-   no designer edits them.
+`design/figma-plugin/code.js` and `manifest.json` are not edited by this stage at all: the
+orchestrator's step 0 adds the plugin command.
+
+Two files this stage creates are edited later by others, each in its own turn:
+`Strand/Data/CoachPacketAssembler.swift` by stage 3 (one parameter and one argument, §8.4 step 3)
+and then by packet v2; `CoachPacket.swift`, the sheet, the model and the presenter by packet v2
+only.
 
 Later packet sections are not added stage by stage. Intake and events join together in packet v2
-(§7.12), which owns the one version bump, the new cases and input fields, the regenerated goldens
-and the one revision of §16. Stages 3 and 5 supply their provider and their row function and do not
-edit `CoachPacket.swift`, the assembler, the sheet or §16.
+(§7.12, §14.5), which owns the one version bump, the new cases and input fields, the regenerated
+goldens and the one revision of §16. Stages 3 and 5 supply their provider and their row function
+and do not edit `CoachPacket.swift`, the sheet or §16.
 
 ### 14.4 Android disposition (ruling R43)
 
@@ -1535,6 +1699,26 @@ Recorded in place of a Kotlin twin:
   preferences outside the backup whitelist. **Drift created: none.**
 - New public declarations in `Packages/StrandAnalytics` carry the comment "No Kotlin twin, by the
   owner's decision (stage 2 specification §14.4)". Their effect on the parity ledger is in §18.
+
+### 14.5 Packet v2: work packages and files
+
+Packet v2 (§7.12) is a separate change at build-order step 8, after stages 3, 5 and 6. It is listed
+here because this specification defines it; none of it is stage 2's work. It is the last in the one
+order of §14.1 on every shared file below.
+
+| WP | Role | Files |
+|---|---|---|
+| V2-1 | Test author | New methods and regenerated goldens in `CoachPacketTests.swift`, `CoachPacketGolden.swift`, `CoachPacketFixture.swift`, `CoachPacketPrivacyTests.swift`, `CoachPacketAssemblerTests.swift`, `CoachPacketModelTests.swift`, `CoachPacketPresenterTests.swift`; new lines in `Tools/test_coach_packet_single_formatter.py`; the tests stage 5 §9.6 lists for the setting, in the files it names |
+| V2-2 | Implementer | `Packages/StrandAnalytics/Sources/StrandAnalytics/CoachPacket.swift` (cases, input types, the two sections, version, budget); `Strand/Data/CoachPacketAssembler.swift`, `CoachPacketModel.swift`, `CoachPacketPresenter.swift`; `StrandiOS/CoachPacket/CoachPacketSheet.swift` (two switches, the caption), `CoachPacketDemo.swift` (frames for the two sections and the caption, prefix `packet-`); the two additions to stage 5's events store and the sentence in its event sheet, exactly as stage 5 §9.6 gives them |
+| V2-h | Orchestrator, one small commit | `Strand/Screens/SettingsView.swift`: the private-events switch and its footnote, as stage 5 §10.7 specifies them. Build `Strand` after it |
+| V2-3 | Localiser, last | `Strand/Resources/Localizable.xcstrings`: two section labels and the strings of stage 5 §9.6 |
+| V2-4 | Orchestrator, with the owner | Nothing in the repository: the revised text of §16 |
+
+It edits no other shared file: not `AICoach.swift`, not the scorecard model or builder, not the
+Health view, the scorecard view, the route or the backup whitelist. The setting is declared once,
+in stage 5's store, and the packet declares no key or copy of it. Its design frames (the two switches, the caption, the
+Settings switch) are added to `design/round-s2-coach-packet/` and to the combined Settings frame
+before V2-2 writes view code.
 
 ## 15. Open questions for the owner
 
@@ -1558,8 +1742,8 @@ Work proceeds on each recommendation.
 | P14 | Should the packet's choices (range and sections) be in backups? | No. They are a per-install preference, and leaving them out keeps the backup contract untouched |
 | P15 | One answer covers P1, P2, P8 and P9: the packet opens from a Health row and the scorecard screen with no Today card; the copy is local-only and expires after ten minutes; the share sheet's own Copy is removed; the Shortcuts action needs an unlocked phone. Yes to all? | **Decided by default: yes to all.** If the owner wants a Today card, that is a separate change after stage 3's card work, because the Today files have one editor at a time. A different lifetime changes `CoachPacketCopyPlan.lifetimeSeconds` and one test. Keeping the system Copy removes one line and makes §10.2's "this iPhone only" wording untrue for that path, so the wording would change too. Allowing a locked phone changes the intent's policy and puts health text within reach of the lock screen |
 | P16 | Approve the two blocks of §16 for pasting, knowing they are revised once, when intake and events join in packet v2? | **Decided by default: yes.** The owner pastes version 1's text now and the revised text once, with packet v2. If the owner would rather paste once only, the paste waits for packet v2 and the end-to-end check of §12.8 moves with it; nothing in the app changes |
-| P17 | One combined layout for the Health tab's "More health" card, the Settings section and the scorecard screen covers every stage, with the order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. Approve it once, before any view code? | **Decided by default: yes, that order.** A different order moves this stage's row and card and changes no logic; the three view edits of 2-5h wait for the approval either way |
-| P18 | Packet v2 adds intake and events in one change, after stages 3 and 5, with both sections on by default and private events left out unless stage 5's own setting includes them. Acceptable? | **Decided by default: yes.** If the owner wants either section off by default, `isOnByDefault` changes for that case and one golden changes. If the owner wants a section sooner, it still costs a version bump and a re-paste of §16 each time |
+| P17 | One combined frame set for the Health tab's "More health" card, the Settings section and the scorecard screen covers every stage, with the Coach packet second, directly after Scorecard. Approve it once, before any view code? | **Decided by default: yes.** A different place moves this stage's row and card and changes no logic; the three view edits of 2-5h wait for the approval either way |
+| P18 | Packet v2 adds intake and events in one change, after stages 3 and 5, with both sections on by default and private events left out unless stage 5's own setting includes them. The switch for that setting arrives with packet v2 and not before, so it is never a control that does nothing. Acceptable? | **Decided by default: yes.** If the owner wants either section off by default, `isOnByDefault` changes for that case and one golden changes. If the owner wants a section sooner, it still costs a version bump and a re-paste of §16 each time |
 | P19 | Is the phone updated for this stage at the agreed milestone (after the packet, following a fresh backup), with the feature off until the owner switches it on? | **Decided by default: yes.** One install per accepted milestone, never one per stage in parallel |
 | P20 | The Fixture Person's round values (stage 1's weights, waists, 100 g floor; this stage's daily rows, steps and workouts) are invented. Does the owner confirm none of them is a real target or reading? | Assumed invented. If any matches, the value is changed in stage 1's fixture first and the golden of §7.9 follows |
 
@@ -1651,7 +1835,9 @@ The orchestrator cannot edit either document. The owner pastes both, and the end
 | D16 | The size budget is a formula in the range and holds by construction | A fixed number would fail a 28-day packet or be too loose for a 7-day one |
 | D17 | The input carries the typical range, not a sigma | The renderer then prints the bounds it is given, and no second subtraction of a sigma exists anywhere |
 | D18 | The golden uses stage 1's Fixture Person, read in the week after a weigh-in | One person across all stages; a combined demo cannot show two weights for one day |
-| D19 | The three shared view edits are one orchestrator commit | Five stages insert into the same three files; one writer at a time keeps the approved order |
+| D19 | The three shared view edits are one orchestrator commit | Several changes insert into the same three files; one writer at a time keeps the approved order |
+| D20 | In packet v2 the sheet's private-events caption is worded from the document, not from the setting | The caption and the text beneath it then come from one captured value and cannot disagree |
+| D21 | In packet v2 the events allowance is stage 5's constant | One declaration of one number |
 
 ## 18. Not determined
 
@@ -1669,8 +1855,11 @@ The orchestrator cannot edit either document. The owner pastes both, and the end
   initialiser's parameters and actor isolation), the demo registry (the element's form) and
   `ChargeTypicalBand` (assumed `static func range(_ state: BaselineState?) -> ClosedRange<Double>?`,
   the body of `ScoreDetailData.swift:156-160`). §19 lists what this stage assumes.
-- **The intake row of packet v2.** §7.12 gives the template in force; it is confirmed against
-  stage 3's `IntakeProvider.series()` as merged when packet v2 is written.
+- **The intake row of packet v2.** §7.12 gives the template in force; it and the cases of
+  `CoachPacketIntakeSource` are confirmed against stage 3's `IntakeProvider.series()` as merged
+  when packet v2 is written.
+- **The exact form of stage 5's store accessors** that packet v2 reads (`events`, and the
+  `packetIncludesSensitive` property packet v2 itself adds from stage 5 §9.6), as merged.
 - **Whether a note that looks like an email address or a path should block the whole packet** in
   packet v2, or only drop the events section. §7.12 G-8 keeps the fail-closed rule.
 - **Whether `IntentAuthenticationPolicy.requiresAuthentication` behaves as described on the owner's
@@ -1705,17 +1894,17 @@ this stage.
 
 | Conflict | What changed in this file |
 |---|---|
-| X3 | §7.12 added: stage 2 owns the grammar (G-1 to G-10). A later section has a `== NAME ==` heading printed by the renderer, two-space rows, free text through `CoachPacket.sanitize`, a row limit with an "earlier not shown" row, and a budget allowance. The events section takes stage 5's rows, its `none listed` wording and its own sensitivity key, shown in the sheet as a read-only caption; the budget gains a fixed 2,000-byte events allowance in packet v2 |
+| X3 | §7.12 added: stage 2 owns the grammar (G-1 to G-10). A later section has a `== NAME ==` heading printed by the renderer, two-space rows, free text through `CoachPacket.sanitize`, a row limit with an "earlier not shown" row, and a budget allowance. The events section takes stage 5's rows, its `none listed` wording and its own sensitivity key, shown in the sheet as a read-only caption; the budget gains a fixed 2,000-byte events allowance in packet v2. Refined in the second pass |
 | X4 | Version 1 ships unchanged, with `not-recorded-by-app: intake, events`. The rule "the stage that adds a section owns the version bump" is removed from §7.2 and §14.3. Packet v2 is defined in §7.12 as one follow-up change after stages 3 and 5: both cases, one bump, one golden set, one revision of §16. Scan markers and niggles stay out (§1, P13) |
 | X5 | Design round renamed to `design/round-s2-coach-packet/`, command `importS2`, export `s2-frames.json` (§5, §10, §14). The designer no longer edits `code.js` or `manifest.json`; the orchestrator adds the command |
 | X6 | The debug line is no longer rewritten. Stage 2 adds `CoachPacketDemo.swift` and one element in the scaffolding's demo registry; demo names keep the prefix `packet-` and the demo returns nil for any other name (§5, §12.4, §14.1) |
 | X7 | The assembler takes the typical range from `ChargeTypicalBand.range` and never calls `Baselines.sigma`. `CoachPacketBaseline` carries `typical: ClosedRange<Double>?` in place of `sigma` and `usable` (§6.2, §7.6, §8.4). `testPacketBaselineBandEqualsTheRecoveryFactorBand` asserts the packet's range equals the Recovery detail range; a source-scan line and a fault were added (§12.3, §12.4, §12.6) |
-| X12 | §7.3 states the floor is whole grams, constrained at its two editors (stage 1's rules sheet, stage 3's intake settings), so `Int(x.rounded())` agrees with every other rounding. `testWholeGramFloorPrintsUnchanged` added. Stage 2 owns neither editor |
-| X17 | §8.1, §12.1, §12.2 and §14 fix the order on `AICoach.swift`: ownership, then this extraction, then stage 4. The byte-identity baseline and the frozen copy are taken after ownership has merged |
-| X18 | §8.2 and §14.3 fix the order on the scorecard model and builder: this stage's move first, then stage 3 (which also updates the assembler's one construction of the builder, named in §8.4 step 3), then stage 5, then stage 6's stored property. New methods for `evaluation(today:)` are added to `CutScorecardInputBuilderTests.swift` before stage 3 edits it |
+| X12 | §7.3 states the floor is whole grams, so `Int(x.rounded())` agrees with every other rounding. `testWholeGramFloorPrintsUnchanged` added. Stage 2 owns no editor. The owner of the rule was settled in the second pass |
+| X17 | §8.1, §12.1, §12.2 and §14 fix this stage's place on `AICoach.swift`, after ownership. The byte-identity baseline and the frozen copy are taken after ownership has merged. The full order was settled in the second pass |
+| X18 | §8.2 and §14.1 fix this stage's place on the scorecard model and builder: its move comes before every later stage's edit, and stage 3 also updates the assembler's one construction of the builder (§8.4 step 3). New methods for `evaluation(today:)` are added to `CutScorecardInputBuilderTests.swift` before stage 3 edits it |
 | X19 | `CoachPacketFlag` is removed; the flag observer is the static `CoachPacketSettings.flag`, an `ObservableDefaultsFlag` (§5, §8.3). `CoachPacket.dayKeys` keeps its signature and is specified entirely through `CanonicalDay`, with two tests and a source-scan line (§6.2, §12.1, §12.4) |
 | X20 | One Fixture Person. §13.3, the scorecard and weigh-in blocks of the golden in §7.9, and two workout lines are rebased onto stage 1's person: Wednesday weigh-ins from 2031-01-08, stage 1's weights and waists, protein floor 100 g, no weigh-in in week 10, Monday lift sessions. The demo seed and the app-target fixtures use the same person (§12.8, §13). The golden is still 6,221 bytes |
-| X22 | Owner decision, in force by default (P17): the Health row, the Settings card and the toolbar item take the places given by one combined frame per surface, order Scorecard, Body record, Events, Timeline, Niggle log, Coach packet. The three view edits moved from 2-5 to the orchestrator's commit 2-5h (§10, §10.1, §10.3, §14) |
+| X22 | Owner decision, in force by default (P17): the Health row, the Settings card and the toolbar item take the places given by the combined frames. The three view edits moved from 2-5 to the orchestrator's commit 2-5h (§10, §10.1, §10.3, §14). The order itself was settled in the second pass |
 
 Owner decisions adopted as the design in force: P15 (entry points, clipboard lifetime, share sheet
 Copy, unlocked phone), P16 (the two blocks of §16, revised once), P17 (combined layout), P18 (packet
@@ -1731,9 +1920,28 @@ drift, which is none for stored data.
 
 | Scaffolding | What this stage assumes |
 |---|---|
-| Demo registry line in `StrandiOS/App/StrandiOSApp.swift` | An ordered list of demo providers replacing the single `ScorecardDemo.screen(named:)` call at `:623`, each of the form `(String) -> AnyView?`, tried in order: scorecard, packet, intake, body record, events, stage 6. This stage adds one element |
+| Demo registry line in `StrandiOS/App/StrandiOSApp.swift` | An ordered list of demo providers replacing the single `ScorecardDemo.screen(named:)` call at `:623`, each of the form `(String) -> AnyView?`, tried in order. This stage adds one element, for its own file and its own prefix `packet-` |
 | Plugin commands and design folders | `importS2` to `importS6` in `design/figma-plugin/code.js` and `manifest.json`; the folder `design/round-s2-coach-packet/` exists; `importS2` reads `s2-frames.json` |
 | `ObservableDefaultsFlag` | `Strand/Data/ObservableDefaultsFlag.swift`: the body of `CutScorecardFlag` with the key as a parameter, constructible as `ObservableDefaultsFlag(key:)` over the standard defaults, publishing `isEnabled`, with its own tests |
 | `CanonicalDay` | `Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift` with `number(_:)`, `key(_:)`, `daysBetween(_:_:)` and `weekStart(_:)`, pinned by test to `CutScorecard.weekStart(containing:)`. `CoachPacket.swift` needs it at compile time, so the pure logic of 2-4a starts after it lands |
 | `ChargeTypicalBand` | `Strand/Data/ChargeTypicalBand.swift` with `static func range(_ state: BaselineState?) -> ClosedRange<Double>?`, extracted from `StrandiOS/Redesign/ScoreDetailData.swift:156-160`, which then calls it. The assembler (2-4b) calls it |
 | Fork-only backup keys comment | The comment block above the Swift whitelist in `BackupSettings.swift`. This stage adds no key to it and does not edit the file; its three settings stay outside the backup |
+
+### Second pass
+
+Applied from the independent re-check of the first pass and from the orchestrator's rulings (a) to
+(k) that settle it. Where a row of the first-pass table above and a row below differ, the row below
+is in force.
+
+| Item | What changed in this file |
+|---|---|
+| Re-check X3; ruling (f) | §7.12 now gives the events rows completely: the lead line, the `events: none listed in range` row, the "earlier" row, the row form, dates and names, with example rows for stage 5's fixture events that are the rows of stage 5's goldens G-E1, G-E3 and G-E6. G-6 gives the exact "none listed" line. The sheet caption carries no count of private events and uses stage 5's three strings. `CoachPacket.eventsByteAllowance` is removed: the allowance is `PersonalEvents.packetByteAllowance`, and the widest row is 141 bytes with its line break |
+| New conflict (switch with no reader); ruling (e) | The private-events switch ships with packet v2. §7.12 specifies packet v2's part completely: every item of stage 5 §9.6 built in that change and specified only there, the one read in the assembler, the caption worded from the value the previewed text was built with (`CoachPacketDocument.privateEventsIncluded`), and the tests. G-9, P18 and §18 say the same. Decisions D20 and D21 |
+| Packet v2 made complete | §7.12 gains the input types, the assembler's reads, the renderer's rule for rows it did not write, the sheet's two switches and the test list. New §14.5 gives packet v2's work packages, files and its place, last, on each shared file |
+| Re-check X22; new conflict (Settings order); ruling (d) | The Coach packet is second, directly after Scorecard, in Settings and in the Health card. §10, §10.1, §10.3 and P17 state only that position and name the combined frame set as the authority. The sentence that put the card last, and every list of the other stages' places, is removed |
+| Re-check X17; new conflict (stage 3 as editor); rulings (c) and (i) | `AICoach.swift` order is Lab Book ownership, this extraction, stage 3's line, stage 4; this stage is second (§8.1, C6, §14.1). §12.2: the byte-identity suite is re-run unchanged after each of the two later edits. §8.4 step 3 notes the parameter stage 3's commit adds to the assembler's initialiser |
+| Ruling (c) | §14.1 states the one shared-file order once and, for each file, stage 2's position and nothing about any other stage's edit. §8.2, C12, §10.1 and §14.3 no longer list the later stages' edits. §14.3 names the two files of this stage that later changes edit |
+| Re-check X6; ruling (h) | §14.1 and the scaffolding table state this stage's demo file, its prefix `packet-` and its one registry element. The list of the registry's other providers is removed |
+| Re-check X12; new conflict (two floor rules); ruling (b) | §7.3: the whole-gram rule has one owner, stage 1 ruling R45; the sentence that gave each of two editors its own rule and test is removed. The packet prints the floor carried by the evaluation, which equals `CutScorecardSettings.proteinFloorWholeGrams`. `testPacketFloorEqualsTheSettingsWholeGramFloor` and a fault line added (§12.3, §12.6) |
+| New conflict (rule specified twice); ruling (a) | This stage does not specify the weigh-in and scan rule. §14.2 lists the resolver, the provider and the scorecard presenter as not edited and says which of this stage's tests hold across the rule's arrival |
+| Rulings (g), (j), (k) | Nothing to change. This file names no Lab Book store step, uses `ChargeTypicalBand` and never `Baselines.sigma` as a call, and carries no sentence the privacy ruling names. The re-check's low-concern note on the invented daily rows and step counts stays with the owner as P20 |
