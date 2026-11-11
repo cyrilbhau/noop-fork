@@ -283,6 +283,8 @@ struct LabBookView: View {
                 }
                 // Owner-scope upsert (ruling R42): a reading already stored under another strap id
                 // is updated where it is, so a re-import after the active strap changed cannot double.
+                // Where the instant holds two different readings, only the active id's is updated
+                // (ruling A10); the other stays listed as it was.
                 try await store.upsertOwnerLabMarkers(rows)
                 await repo.refresh()   // re-resolves the lab-book projection into Compare/Explore/Coach
                 await load()
@@ -482,7 +484,8 @@ struct LabBookView: View {
         guard !drafts.isEmpty, let store = await repo.storeHandle() else { return }
         // Owner-scope upsert: saving a reading that is already stored (same marker, instant and
         // source, under any strap id) updates it where it is. Drafts still carry the active id,
-        // which is where a new reading is written.
+        // which is where a new reading is written, and which names the row a save lands on when
+        // the instant holds two different readings (ruling A10: the other one is never changed).
         try? await store.upsertOwnerLabMarkers(drafts)
         await repo.refresh()   // re-resolves the lab-book projection into Compare/Explore/Coach
         await load()

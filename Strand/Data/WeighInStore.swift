@@ -32,8 +32,9 @@ enum WeighInError: Error, Equatable {
 ///
 /// Ruling R42 (labbook-ownership.md §7.4): the readings are the owner's under whichever strap id
 /// they were entered, and every id is listed. So an instant counts as taken when ANY device id
-/// holds it, and a reading stored twice (equal rows under two ids, listed once) is edited and
-/// deleted as one: its copies follow, each under its own id.
+/// holds it, and a reading stored twice (equal rows under two ids, listed once) is saved onto,
+/// edited and deleted as one: its copies follow, each under its own id. A different reading at the
+/// same instant under another id is another reading and no write here changes it (ruling A10).
 @MainActor
 final class WeighInStore {
     /// Accepted weight, in kilograms, inclusive (specification §10.3).
@@ -73,7 +74,9 @@ final class WeighInStore {
     ///
     /// A manual row of the marker already stored at that instant under the active id is the row the
     /// save lands on: its value and unit are replaced and every other column is written back as it
-    /// was (ruling R34). With no such row, a manual row of the marker at that instant under ANY other
+    /// was (ruling R34). Each stored copy of that row under another id takes the same value and unit
+    /// under its own id, in the same write, so the reading stays one line; a different reading at
+    /// that instant is not touched (ruling A10). With no such row, a manual row of the marker at that instant under ANY other
     /// device id, registered or not, any brand, refuses the whole weigh-in with `.instantOccupied`,
     /// before anything is written (ruling R36, widened by R42).
     @discardableResult
@@ -87,17 +90,18 @@ final class WeighInStore {
         let day = LocalDayWindows(timeZone: timeZone()).dayKey(for: takenAt)
         guard let store = await repository.storeHandle() else { throw WeighInError.storeUnavailable }
 
-        // Both rows are settled, and either refusal thrown, before the one write below.
-        var rows = [try await Self.rowToWrite(.weight, deviceId: deviceId, epoch: epoch,
-                                              day: day, value: weightKg, in: store)]
+        // Both markers are settled, and either refusal thrown, before the one write below. Each
+        // entry is the active id's row first, then the copies that follow it.
+        var writes = [try await Self.rowsToWrite(.weight, deviceId: deviceId, epoch: epoch,
+                                                 day: day, value: weightKg, in: store)]
         if let waistCm {
-            rows.append(try await Self.rowToWrite(.waist, deviceId: deviceId, epoch: epoch,
-                                                  day: day, value: waistCm, in: store))
+            writes.append(try await Self.rowsToWrite(.waist, deviceId: deviceId, epoch: epoch,
+                                                     day: day, value: waistCm, in: store))
         }
-        try await store.upsertLabMarkers(rows)
-        // Return what is stored, not what was offered.
+        try await store.upsertLabMarkers(writes.flatMap { $0 })
+        // Return what is stored, not what was offered: the active id's row of each marker.
         var stored: [LabMarkerRow] = []
-        for row in rows {
+        for row in writes.compactMap(\.first) {
             stored.append(try await Self.storedRow(matching: row, in: store))
         }
         await finishWrite()
@@ -266,23 +270,31 @@ final class WeighInStore {
                      valueText: nil, unit: unit(kind), source: manualSource, note: nil, referenceText: nil)
     }
 
-    /// What a save writes for `kind`: the manual row already stored at this instant under
-    /// `deviceId` with only its value and unit replaced, else a new row. Throws `.instantOccupied`
+    /// What a save writes for `kind`, the active id's row first: the manual row already stored at
+    /// this instant under `deviceId` with only its value and unit replaced, then each stored copy of
+    /// that row under another id with the same two columns replaced, under its own id and device id
+    /// (ruling A10: a save updates the row it lands on and that row's copies, and never a different
+    /// reading at the instant). With no row under `deviceId`, one new row. Throws `.instantOccupied`
     /// when there is no such row and ANY other device id, registered or not, holds a manual row of
     /// the marker at this instant (ruling R36, widened by R42). Reads only.
-    private static func rowToWrite(_ kind: BodyMeasurementKind, deviceId: String,
-                                   epoch: Int, day: String, value: Double,
-                                   in store: WhoopStore) async throws -> LabMarkerRow {
-        guard var existing = try await storedRow(deviceId: deviceId, kind: kind, epoch: epoch,
+    private static func rowsToWrite(_ kind: BodyMeasurementKind, deviceId: String,
+                                    epoch: Int, day: String, value: Double,
+                                    in store: WhoopStore) async throws -> [LabMarkerRow] {
+        let everyRow = try await LabBookRows.stored(marker: kind.markerKey, store: store)
+        guard let existing = try await storedRow(deviceId: deviceId, kind: kind, epoch: epoch,
                                                  source: manualSource, in: store) else {
-            let elsewhere = try await LabBookRows.stored(marker: kind.markerKey, store: store)
-                .filter { $0.takenAt == epoch && $0.source == manualSource }
+            let elsewhere = everyRow.filter { $0.takenAt == epoch && $0.source == manualSource }
             guard elsewhere.isEmpty else { throw WeighInError.instantOccupied }
-            return newRow(kind, deviceId: deviceId, epoch: epoch, day: day, value: value)
+            return [newRow(kind, deviceId: deviceId, epoch: epoch, day: day, value: value)]
         }
-        existing.value = value
-        existing.unit = unit(kind)
-        return existing
+        // `copies` is found against the row as stored, before its value is replaced.
+        let followers = LabMarkerUnion.copies(of: existing, in: everyRow).filter { $0.id != existing.id }
+        return ([existing] + followers).map { row in
+            var write = row
+            write.value = value
+            write.unit = unit(kind)
+            return write
+        }
     }
 
     /// The stored row at this natural key (device id, marker, instant, source), nil when it is free.
