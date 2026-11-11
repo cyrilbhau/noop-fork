@@ -14,7 +14,8 @@ This file contains no personal measurements. Every number in an example belongs 
 "Fixture Person" in §13 (the same invented person as stage 1's fixture), and every default was chosen
 for this document.
 
-Reconciled on 11 November 2026 with the cross-stage check; the changes are listed in §18. Where this
+Reconciled on 11 November 2026 with the cross-stage check, in two passes; the changes are listed in
+§18. Where this
 document and an older planning note disagree, this document is the design in force.
 
 **The stage is blocked on two owner answers** (Q1: which food app; Q4: may Health reads widen). All
@@ -49,6 +50,7 @@ without logging food twice.
   each with the time it was last read.
 - Path B: a quick-add sheet with per-entry edit and delete.
 - A protein card in Your Cards and an intake screen: ring to the floor, calories against a range.
+- A row in the Health tab's "More health" card that opens the intake screen (§10.9).
 - A daily supplement tick stored as a Journal answer.
 - An evening cutoff reminder, opt-in, that does not ring on top of the wind-down nudge.
 - A new widget kind for grams remaining, in four families.
@@ -143,16 +145,19 @@ No other reader or writer exists. Searched `Strand`, `StrandiOS`, `StrandiOSShar
 | `CutScorecard.swift:78`, `:703`, `:1084`, `:1217` | The parameter and its use and validation |
 | `CutScorecardSettings.swift:165-170`, `:222`, `:243` | The one stored copy, inside `cutScorecard.rules` |
 | `Strand/Data/CutScorecardModel.swift:702-723`, `:815`, `:856`; `CutScorecardPresenter.swift:1253`, `:1317-1318`, `:1360` | The rules sheet's "Daily floor" field |
-| New: `IntakeSettings.proteinFloorGrams` | A pass-through to `CutScorecardSettings.parameters.proteinFloorGrams`. It stores nothing of its own (§9.2) |
+| New: `IntakeSettings.proteinFloorGrams`, `setProteinFloorGrams(_:)` | A pass-through that gets and sets `CutScorecardSettings.parameters.proteinFloorGrams`. It stores nothing of its own (§9.2) |
 
-The floor keeps exactly one home. The intake screen's floor field and the rules sheet's field are two
-editors of one stored value, and §12.3 asserts it.
+The floor keeps exactly one home. The intake settings' floor field and the rules sheet's field are
+two editors of one stored value, written through one setter, and §12.3 asserts it.
 
-**The floor is whole grams.** Both editors accept only a whole number of grams (§9.2.1), so the card,
-the ring, the widget, the rules sheet and the coach packet all print the same integer whatever
-rounding each applies. This stage constrains its own editor (the intake settings field) and supplies
-the predicate; the rules sheet's field is stage 1's, constrained by the stage 1 follow-up that the
-cross-stage check orders (`stage-1.md` §10.5).
+**The floor is whole grams, and the rule is stage 1's.** Ruling R45 of the stage 1 specification
+(`stage-1.md` §9.2, "The protein floor: one home, whole grams, one printed form") owns the rule: the
+`parameters` getter and setter of `CutScorecardSettings` normalise the floor, one function,
+`CutScorecardSettings.isWholeGramProteinFloor`, decides what either editor may save, and every
+surface prints `CutScorecardSettings.proteinFloorWholeGrams`. This stage adds no rule, no predicate,
+no bound and no state of its own. Its field writes the same stored value through the same setter (§9.2.1), and its
+card, ring and widget print the same integer (§7.4). Stage 1's work package 1-10 lands that rule
+before stage 2, so this stage never sees a fractional floor.
 
 ### 4.3 Other facts the stage touches
 
@@ -164,6 +169,7 @@ cross-stage check orders (`stage-1.md` §10.5).
 | Wind-down schedule | Written only by `WindDownNudge` (`:199-240`), driven from `Strand/Screens/SmartAlarmView.swift:472-743` | Read only |
 | Widget payload | Writer `StrandiOS/Widgets/WidgetPublish.swift:47`, `:214-217`, `:248-255`; readers the widget views | One optional field; one new reader |
 | Today card list | `Strand/Data/TodayCardReadout.swift:116-121`, `:127-137`; `Strand/Screens/DashboardCards.swift:20-58` | One new case and one new defaulted parameter |
+| Health tab "More health" card | `StrandiOS/Redesign/RedesignHealthView.swift:472-482` (the scorecard row, mounted under its flag); the row view at `:526-537` | One row, mounted only while the intake flag is on (§10.9) |
 
 ## 5. Final names
 
@@ -189,7 +195,8 @@ cross-stage check orders (`stage-1.md` §10.5).
 | Series keys | `protein_g`, `calories_in` (both existing), `intake_read_at` (new) | §9.1 |
 | Notification ids | `intake-cutoff-wd1` … `intake-cutoff-wd7` | §7.6 |
 | Design round | `design/round-s3-intake/`; plugin command `importS3`; export `s3-frames.json` | The stage-named scheme every stage uses. The folder and the plugin command are created by the orchestrator's scaffolding commit; this stage's designer edits only inside the folder |
-| Demo names | prefix `intake-` | One element in the shared demo registry (§12.9) |
+| Demo names | reserved prefix `intake-` | One element in the demo registry, answered by `IntakeDemo` (§12.9) |
+| Health tab row | `HealthIntakeRow`, a private view | `StrandiOS/Redesign/RedesignHealthView.swift` (§10.9) |
 | Day-key rule | `CanonicalDay` (shared scaffolding, `Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift`) | Used for every day-key validity check and day arithmetic in this stage; no second implementation is written |
 | Coach exclusion | `IntakeSettings.coachVisible(_:defaults:)` | §10.6.1 |
 | Source scan | `Tools/test_intake_single_resolver.py` | §12.4 |
@@ -371,9 +378,6 @@ public struct IntakeEnergyProgress: Equatable, Sendable {
 }
 
 public enum IntakeProgress {
-    /// True when `grams` may be stored as the protein floor: finite, at least 1, at most
-    /// 100 000, and equal to its own rounded value (§9.2.1). The one whole-gram rule.
-    public static func isWholeGramFloor(_ grams: Double) -> Bool
     /// The one "is the floor met" predicate (§7.4).
     public static func meetsFloor(grams: Double, floorGrams: Double) -> Bool
     public static func protein(grams: Double?, floorGrams: Double?) -> IntakeProteinProgress
@@ -381,6 +385,9 @@ public enum IntakeProgress {
     public static func energy(kcal: Double?, targets: IntakeTargets, dayIsOpen: Bool) -> IntakeEnergyProgress
 }
 ```
+
+The pure package declares no rule about which floors may be stored. That rule is stage 1's (R45) and
+lives in `CutScorecardSettings`; `floorGrams` here is whatever the caller read through it.
 
 ## 7. Algorithm
 
@@ -484,11 +491,14 @@ is complete" and "this day counted toward the scorecard" cannot disagree.
 Rounding grams down and the floor up means the screen never shows "0 g remaining" before the floor
 is met, and `shownGrams + remainingGrams == shownFloorGrams` whenever the floor is a whole number.
 
-Because both editors store only whole grams (§9.2.1), `shownFloorGrams` equals the stored floor, and
-equals the `Int(x.rounded())` the coach packet prints and the value the rules sheet shows. The
-round-up rule above remains only as the defined behaviour for a fractional floor written before the
-constraint or by a restored backup; such a value is not rewritten on read (R30) and the settings
-field shows it marked until the owner saves a whole number.
+**The printed floor is stage 1's integer.** Every caller in the app passes
+`IntakeSettings.proteinFloorGrams`, which is `CutScorecardSettings.parameters.proteinFloorGrams` and
+is therefore already a whole number (stage 1 R45: the getter normalises, including a fractional
+floor stored before that ruling or restored from a backup). So `shownFloorGrams` equals
+`CutScorecardSettings.proteinFloorWholeGrams`, the integer the rules sheet, the scorecard's protein
+row and the coach packet print, and `testShownFloorIsTheScorecardsWholeGramFloor` (§12.3) asserts it
+for the card, the screen and the widget reading. The round-up above is only the pure function's
+defined behaviour for an argument that is not whole; no code in this stage passes one.
 
 **The ring completes at the floor and stays complete.** Past the floor the number keeps counting
 and a second line reads "+N g over your floor". There is no second lap, no colour change and no
@@ -739,8 +749,8 @@ This stage declares no flag class of its own.
 | `intake.entries.<yyyy-MM-dd>` | String | absent | That day's quick-add entries (§9.3) |
 
 The protein floor is **not** in this table. `IntakeSettings.proteinFloorGrams` reads
-`CutScorecardSettings.parameters.proteinFloorGrams`, and `setProteinFloorGrams(_:)` writes it,
-whatever the state of the scorecard flag. `IntakeSettings.targets(on day: String) -> IntakeTargets`
+`CutScorecardSettings.parameters.proteinFloorGrams`, and `setProteinFloorGrams(_:)` writes it
+through the same `parameters` setter the rules sheet uses, whatever the state of the scorecard flag. `IntakeSettings.targets(on day: String) -> IntakeTargets`
 combines that floor with `intake.targets`. It returns the same targets for every day: the parameter
 exists so a later dated override needs no change at any call site, and nothing reads it today.
 
@@ -786,12 +796,12 @@ final class IntakeSettings {
     /// The floor from the scorecard rules plus `storedTargets`. The same for every `day`.
     func targets(on day: String) -> IntakeTargets
 
+    /// `scorecard.parameters.proteinFloorGrams`: whole grams by stage 1 R45, or nil.
     var proteinFloorGrams: Double? { get }
-    /// Nil clears the floor. Any other value must satisfy `IntakeProgress.isWholeGramFloor`;
-    /// otherwise this returns false and writes nothing.
+    /// Nil clears the floor. Otherwise assigns `grams` to `scorecard.parameters.proteinFloorGrams`
+    /// through the `parameters` setter (stage 1 §9.2). Returns false and writes nothing when
+    /// `CutScorecardSettings.isWholeGramProteinFloor(grams)` is false. No other check is made.
     @discardableResult func setProteinFloorGrams(_ grams: Double?) -> Bool
-    /// True when a floor is stored and it is not a whole number of grams.
-    var proteinFloorNeedsWholeGrams: Bool { get }
 
     var zoneLog: [IntakeZoneSegment] { get set }
     var admittedHealthSources: Set<String>? { get set }  // nil: every source
@@ -820,12 +830,23 @@ final class IntakeSettings {
 Every getter reads the defaults at each access and caches nothing, so a restored backup is seen by
 the next read. No getter writes.
 
-**Whole grams.** `IntakeProgress.isWholeGramFloor(g)` is true when `g` is finite, `1 <= g <= 100000`
-and `g == g.rounded()`. The intake settings field is an integer field: a value with a fraction, a
-value below 1 or above 100 000 marks the field with "Enter whole grams" and nothing is saved. Clearing
-the field clears the floor. The rules sheet's "Daily floor" field applies the same predicate (stage 1
-follow-up). A floor stored before the constraint that is not whole is left as stored; the field
-shows it marked, `proteinFloorNeedsWholeGrams` is true, and the next valid save replaces it.
+**The floor field.** The whole-gram rule is stage 1's ruling R45 (`stage-1.md` §9.2 and §10.5) and is
+not restated here as a second rule. This stage's field is the second editor that ruling names, and it
+does exactly what the ruling says of both editors: a whole-number keypad; the entry is valid exactly
+when `CutScorecardSettings.isWholeGramProteinFloor` is true for it; an entry for which it is false
+marks the field ("Enter whole grams") and nothing is saved; the editor does not round what was
+typed; an empty field means no floor and is saved as nil. The range (1 to
+`CutScorecardSettings.proteinFloorMaximumGrams`) is stage 1's and is not written a second time in
+this stage's code. The setter writes through `CutScorecardSettings.parameters`, so the stored number
+is whatever stage 1's setter stores.
+
+A fractional floor stored before R45, or restored from an older backup, reads as the nearest whole
+gram through `CutScorecardSettings.parameters`; the field opens showing that whole number, as the
+rules sheet does, and the stored string becomes whole at the next save from either editor. This
+stage never sees a fraction, so it has no state, string or accessor for one. The one stored floor
+either editor would refuse is one above stage 1's maximum, which only a hand-edited settings string
+can hold; as stage 1 §9.2 says of both editors, the field then opens marked until a floor in range
+is typed.
 
 ### 9.3 Quick-add entries (Path B)
 
@@ -1018,7 +1039,8 @@ supplement answers are Journal rows and do too. The protein floor is already car
 Both keys are listed in the comment block for fork-only keys that the shared scaffolding commit puts
 above the Swift whitelist; this stage adds its two names to that block in the commit that adds the
 entries. `BackupSettings.swift` and `BackupSettingsTests.swift` have one writer at a time across
-stages, in stage order: this stage's two keys first, then stage 5's one, then stage 6's four.
+stages. This stage's entries are added in its place in the shared-file order (§14.3), in the
+orchestrator's commit 3-6h.
 
 Both values sit in clear text in the backup's `settings.json`: the calorie range and hard floor as
 numbers, and the supplement questions, which contain the supplement names the owner typed. The
@@ -1038,11 +1060,17 @@ edited** by this stage on either platform.
 ## 10. Screens and states
 
 Frames are designed at G1 in `design/round-s3-intake/`. Three surfaces this stage adds to are shared
-with other stages and are laid out once, in the combined frame set the cross-stage check orders
-(Health card, Settings, scorecard screen): the position of the Intake card in Settings (§10.5) and
-the protein row's caption on the scorecard screen (§10.4) are taken from that approved combined
-frame, not decided in this stage's round. This stage adds no row to the Health tab's "More health"
-card. This section fixes what each surface must be able to show. Every state needs a frame at the default text size and at `accessibility5`.
+with other stages and are laid out once, in the combined frame set drawn by the orchestrator's
+designer (Health card, Settings, scorecard screen). That frame set is the authority for them: the
+Intake card in Settings (§10.5), the Intake row in the Health tab (§10.9) and the protein row's
+caption on the scorecard screen (§10.4) are drawn there, not in this stage's round.
+
+**This stage's place in Settings and in the Health tab.** Intake is third in the one order both
+surfaces use, top to bottom: directly below Coach packet and directly above Body record, or next to
+whichever neighbour is present when one of those is not.
+
+This section fixes what each surface must be able to show. Every state needs a frame at the default
+text size and at `accessibility5`.
 Charts show the curve and its fill; the floor and the range are never drawn as a line or a band.
 
 ### 10.1 Protein card in Your Cards
@@ -1122,19 +1150,22 @@ Unchanged strings (`stage-1.md` §11). With the intake flag on it gains a source
 Health", "Entered here", "CSV import", or "Several sources" when the seven days mix them) and opens
 the intake screen. With the flag off the row is exactly stage 1's.
 
-`StrandiOS/Scorecard/ScorecardView.swift` is edited by four stages in a fixed order: stage 2 (a
-toolbar item), then this stage (the protein row's caption and tap), then stage 5, then stage 6.
+`StrandiOS/Scorecard/ScorecardView.swift` is a shared file. This stage's edit (the protein row's
+caption and tap) is made in its place in the shared-file order (§14.3), in the orchestrator's commit
+3-6h.
 
 ### 10.5 Settings
 
 A card in Settings, iPhone only, in the section that holds the scorecard card
-(`Strand/Screens/SettingsView.swift:466`, `:1854-1977`). Its position among the other stages' cards
-is the one the approved combined Settings frame shows; the edits to `SettingsView.swift` are applied
-in stage order (stage 2's card, then this one, then stages 4, 5 and 6), and `Strand` is built after
-each because the file is shared with macOS. Rows: the feature switch; source (None, Apple Health,
-Enter here); protein floor (the same stored value as the rules sheet's "Daily floor", whole grams
-only, §9.2.1); calorie range low and high; hard floor; Health apps to count (Path A, when more than
-one is known); supplements; cutoff time; cutoff reminder.
+(`Strand/Screens/SettingsView.swift:466`, `:1854-1977`), third in the Settings order (§10). The edit
+to `SettingsView.swift` is made in this stage's place in the shared-file order (§14.3), in the
+orchestrator's commit 3-6h, and `Strand` is built after it because the file is shared with macOS.
+
+The card holds the feature switch, so the switch and one sentence are shown whether the flag is on or
+off; every other row of the card is present only while `noop.intakeEnabled` is on. Rows: the feature
+switch; source (None, Apple Health, Enter here); protein floor (the same stored value as the rules
+sheet's "Daily floor", whole grams, §9.2.1); calorie range low and high; hard floor; Health apps to
+count (Path A, when more than one is known); supplements; cutoff time; cutoff reminder.
 
 | State | What shows |
 |---|---|
@@ -1143,8 +1174,8 @@ one is known); supplements; cutoff time; cutoff reminder.
 | Choosing Apple Health | HealthKit's sheet for the two types, once; then a first read |
 | Apple Health chosen, Health unavailable or the build lacks the entitlement | The row reverts and says why, using the bridge's existing states (`HealthKitBridge.swift:20-28`, `:91-95`) |
 | Range invalid (low above high, hard floor above low) | The field is marked and nothing is saved |
-| Protein floor not a whole number, below 1 or above 100 000 | The field is marked "Enter whole grams" and nothing is saved |
-| A stored floor that is not whole (written before the constraint, or restored) | The stored value is shown, marked "Enter whole grams"; nothing is rewritten until the owner saves |
+| Protein floor entry for which `CutScorecardSettings.isWholeGramProteinFloor` is false | The field is marked "Enter whole grams" and nothing is saved (stage 1 R45's rule for both editors) |
+| Protein floor field opened | Shows the stored floor as a whole number with the unit `g`, the value `CutScorecardSettings.proteinFloorWholeGrams`; empty when no floor is set. A stored floor above stage 1's maximum (a hand-edited settings string) opens marked, as in the rules sheet |
 | Supplements row | Caption: "Supplements listed here are left out of the Coach." |
 | Reminder: off, on, denied by the system | As the weigh-in reminder rows behave (`SettingsView.swift:1992-2031`) |
 | Reminder near the wind-down nudge | Caption: "Silent on days when it falls within 30 minutes of your wind-down reminder." |
@@ -1218,9 +1249,10 @@ static func coachVisible(_ entries: [JournalEntry], defaults: UserDefaults = .st
   question in a notification or widget.
 - The supplement list is also not read by any widget, notification or App Group payload (§12.8).
 
-`AICoach.swift` is edited by other stages in a fixed order (Lab Book ownership, then stage 2's
-extraction, then stage 4). This one-line edit is applied in this stage's place in the build order,
-after stage 2's extraction and before stage 4's edit; it touches none of their lines.
+`AICoach.swift` is edited in one fixed order: Lab Book ownership, then the stage 2 extraction, then
+this stage's one-line supplement exclusion, then stage 4. This stage is third. The line is written
+against the file as the stage 2 extraction leaves it and touches no other line; stage 2's
+byte-identity suite is run unchanged after it and stays green.
 
 ### 10.7 Cutoff reminder
 
@@ -1294,6 +1326,25 @@ package; `IntakePresenter.widgetReading` fills it from `IntakeProteinProgress`.
 A new kind appears in the widget gallery even while the flag is off; a widget extension cannot hide
 one at run time. It then draws "Set up in NOOP" (question I6).
 
+### 10.9 Health tab row
+
+One row in the Health tab's "More health" card (`StrandiOS/Redesign/RedesignHealthView.swift:472-482`),
+third in the order of §10. It is a private view, `HealthIntakeRow`, built like `HealthScorecardRow`
+(`:526-537`): a `NavigationLink(value: RedesignRoute.intake)` around a `NoopListRow` titled "Intake"
+with the icon of `DashboardCard.protein`. `RedesignHealthView` observes `IntakeSettings.flag` and
+mounts the row only while it is on; with the flag off the row is absent and the card is exactly as
+it was. Dividers between the stage rows and the first existing row are as the combined frame shows.
+
+The row carries no value and no caption. Today's grams are shown on the card, the screen and the
+widget, each with its time; a fourth copy without a time is not added.
+
+| State | What shows |
+|---|---|
+| Flag off | No row |
+| Flag on, any source, any path | The row "Intake"; tapping pushes the intake screen (§10.2) in whatever state that screen is in |
+
+Under Path C this row and the Settings card are the two ways to the intake screen.
+
 ## 11. User-facing strings
 
 All through the String Catalog (`Strand/Resources/Localizable.xcstrings` for the app,
@@ -1314,7 +1365,8 @@ and numbers; `IntakePresenter` turns them into strings. English sources:
 | Setup | "Choose where intake comes from", "Apple Health: read what your food app writes", "Enter here: add protein and calories yourself", "None: supplements and the cutoff reminder only" |
 | Settings | "Intake", "Source", "Protein floor", "Calorie range", "Hard floor", "Apps to count", "Supplements", "Add a supplement", "Cutoff time", "Cutoff reminder", "Silent on days when it falls within 30 minutes of your wind-down reminder.", "Your targets need attention" |
 | Supplements | "Supplements", "Marked not taken in Journal", "Supplements listed here are left out of the Coach." |
-| Floor field | "Enter whole grams" |
+| Floor field | "Enter whole grams" (the mark on an entry the field refuses; there is no string for a stored fraction, because none is ever read) |
+| Health tab row | "Intake" (the Settings card's title string) |
 | Chart | "More days will appear here" |
 | Notification | "Food cutoff" / "Your cutoff time is now." |
 | Widget | "Protein", "%lld g to go", "Floor met", "+%lld g over", "as of %@", "Last read %@", "Nothing logged today", "No floor set", "Set up in NOOP", "Open NOOP to refresh" |
@@ -1404,8 +1456,6 @@ Progress:
 - `testEnergyWithNoRangeShowsTheAmountAlone`
 - `testInvalidTargetsBehaveAsNoRange`
 - `testTargetsValidityRules`
-- `testWholeGramFloorPredicate` (true for 1, 100, 100000; false for 0, 0.5, 99.4, 100.5, 100001,
-  a negative value, infinity and not-a-number)
 - `testShownFloorEqualsTheStoredFloorForEveryWholeValue` (for each whole floor from 1 to 400 and a
   measured amount, `shownFloorGrams` equals the floor and equals `Int(floor.rounded())`)
 
@@ -1447,6 +1497,10 @@ Progress:
 - `testFloorHasOneStoredCopy` (set through `IntakeSettings`; read through `CutScorecardSettings`;
   and the reverse; assert `intake.targets` never contains a protein key)
 - `testRingCompleteAndScorecardDayCountedAgree`
+- `testShownFloorIsTheScorecardsWholeGramFloor` (for rules strings written directly with
+  `"proteinFloorGrams"` 99.4, 99.5 and 100, and for no floor: the card readout's floor, the screen
+  model's floor and the widget reading's `floorGrams` each equal
+  `CutScorecardSettings.proteinFloorWholeGrams`, which is 99, 100, 100 and nil)
 
 `IntakeHealthSyncTests.swift`
 - `testDisabledSettingReadsAndWritesNothing`
@@ -1481,11 +1535,17 @@ Progress:
 - `testTheFlagIsAnObservableDefaultsFlagOverTheIntakeKey` (an `ObservableDefaultsFlag` built over a
   suite with `IntakeSettings.enabledKey` follows a write made through `IntakeSettings.isEnabled`,
   and `set(_:)` on it is read back by `IntakeSettings`)
-- `testFloorSetterAcceptsOnlyWholeGrams` (100 is stored; 99.4, 0, a negative value and 100001
-  return false and leave the stored rules string byte-identical; nil clears the floor)
-- `testAFractionalStoredFloorIsReportedAndNotRewritten` (rules written with 99.4 through
-  `CutScorecardSettings`; `proteinFloorNeedsWholeGrams` is true, `proteinFloorGrams` is 99.4, and
-  the stored string is unchanged after every getter)
+- `testFloorSetterWritesThroughTheScorecardSetter` (`setProteinFloorGrams(100)` returns true, and
+  `CutScorecardSettings.parameters.proteinFloorGrams` is 100 and `proteinFloorWholeGrams` is 100;
+  nil clears the floor and the rules string then holds no `proteinFloorGrams` key)
+- `testFloorSetterAcceptsExactlyWhatStageOnesRuleAccepts` (for 1, 100, 100 000, 0, 0.5, 99.4, 99.5,
+  −5, 100 001, NaN and infinity: the setter's return value equals
+  `CutScorecardSettings.isWholeGramProteinFloor` of the value, and every refused value leaves the
+  stored rules string byte-identical)
+- `testAFractionalFloorStoredEarlierReadsWholeThroughIntakeSettings` (the rules string written
+  directly with `"proteinFloorGrams":99.4`: `IntakeSettings.proteinFloorGrams` is 99,
+  `targets(on:)` carries 99, and the stored string is byte-equal after every getter). It depends on
+  stage 1's work package 1-10, which lands first
 - `testTargetsAreTheSameOnEveryDay` (`targets(on:)` for a spread of days, including a non-canonical
   string, returns equal values)
 - `testSetTargetsNeverWritesAProteinKey`
@@ -1576,13 +1636,23 @@ file-and-reason pairs, and a check that each entry still matches.
 - `test_intake_declares_no_flag_class_and_no_day_parser`: no `class IntakeFlag`; the literal
   `noop.intakeEnabled` occurs only in `IntakeSettings.swift`; no `Intake*.swift` file contains a
   `DateFormatter` with a `yyyy-MM-dd` format.
+- `test_intake_declares_no_floor_rule_of_its_own`: the names `isWholeGramFloor` and
+  `proteinFloorNeedsWholeGrams` occur in no Swift file; no `Intake*.swift` file declares a function
+  or property with `WholeGram` in its name or contains the literal `100000` or `100_000` beside
+  `Floor`; `IntakeSettings.swift` calls `CutScorecardSettings.isWholeGramProteinFloor` and reads and
+  writes the floor only through `.parameters` of a `CutScorecardSettings`.
+- `test_health_row_is_mounted_only_under_the_intake_flag`: in
+  `StrandiOS/Redesign/RedesignHealthView.swift`, `RedesignRoute.intake` occurs only inside
+  `HealthIntakeRow`, and `HealthIntakeRow(` occurs once, inside an `if` on the observed
+  `IntakeSettings.flag`.
 
 ### 12.5 Flag-off equivalence
 
 With `noop.intakeEnabled` off: `renderList` keeps its call shape through a defaulted parameter; the
 resolver policy is `legacy` and the scorecard's protein days are the CSV series as before; the Health
 fingerprint string is unchanged; no notification request exists; no `metricSeries` row, defaults key
-or Journal row is written; the widget payload bytes are unchanged; with no supplement listed the
+or Journal row is written; the widget payload bytes are unchanged; the Health tab's "More health"
+card has no Intake row (`test_health_row_is_mounted_only_under_the_intake_flag`); with no supplement listed the
 Coach's Journal rows are unchanged (`testAnAbsentListIsTheIdentity`). Direct assertions:
 `testPolicyIsLegacyWheneverTheFlagIsOff`, `testDisabledSettingReadsAndWritesNothing`,
 `testPayloadWithNilIntakeEncodesNoIntakeKey`, `testFlagOffRemovesEveryRequestAndReconcileDoesNothing`,
@@ -1628,11 +1698,13 @@ For each line, make the change, confirm at least one named test fails, restore.
 | F30 | Intake delete widened to the whole source | `testIntakeDeletionRemovesOnlyTheNamedDayAndKey`, `testTheTwoIntakeIdsAreIndependent` |
 | F31 | A number placed in the notification body | `testNotificationTextCarriesNoNumber` |
 | F32 | Path A totals written under `apple-health` | `testTotalsAreWrittenUnderTheDedicatedIdAndNeverUnderAppleHealth`, `testDeletingAppleHealthDataLeavesEveryIntakeRow`, `test_no_intake_code_names_the_apple_health_source` |
-| F33 | The floor setter accepts 99.4 | `testFloorSetterAcceptsOnlyWholeGrams`, `testWholeGramFloorPredicate` |
+| F33 | The floor setter accepts 99.4, or refuses by a check of its own with a different bound | `testFloorSetterAcceptsExactlyWhatStageOnesRuleAccepts` |
 | F34 | The Coach's Journal read loses its filter | `test_coach_reads_journal_only_through_the_exclusion`, `testCoachRankingInputNeverContainsAListedSupplement` |
 | F35 | The exclusion compares case-sensitively | `testMatchingIgnoresCaseAndSurroundingWhitespace` |
 | F36 | `targets(on:)` made to vary with the day | `testTargetsAreTheSameOnEveryDay` |
 | F37 | The exclusion gated on the intake flag | `testExclusionDoesNotDependOnTheIntakeFlag` |
+| F38 | `IntakeSettings.proteinFloorGrams` decodes the rules string itself, bypassing `CutScorecardSettings.parameters` | `testAFractionalFloorStoredEarlierReadsWholeThroughIntakeSettings`, `testShownFloorIsTheScorecardsWholeGramFloor`, `test_intake_declares_no_floor_rule_of_its_own` |
+| F39 | The Health tab row mounted without its flag check | `test_health_row_is_mounted_only_under_the_intake_flag` |
 
 ### 12.7 Parity: written dispositions (R43)
 
@@ -1661,19 +1733,16 @@ No Kotlin is written, edited or run. Each disposition is recorded with the chang
   `test_supplement_list_reaches_no_widget_or_notification` (above).
 - `Strand/System/IntakeCutoffReminder.swift` is listed in stage 5's
   `test_notification_producers_never_name_personal_events` (§7.6).
-- A grep in the gate's pull-request checklist for the private profile's values is the
-  orchestrator's, run against the diff from the ignored file, with nothing echoed.
 
 ### 12.9 Simulator and rehearsal
 
 - Every frame of §10 reproduced from `IntakeDemo` at the default and largest text size, Reduce
   Motion on and off: `--demo-screen intake-<state>` names. The debug block
-  (`StrandiOS/App/StrandiOSApp.swift:623`) holds one ordered registry of demo providers, landed once
-  by the shared scaffolding commit (scorecard, packet, intake, body record, events, stage 6). This
-  stage adds its own file `StrandiOS/Intake/IntakeDemo.swift`, exposing
-  `static func screen(named: String) -> AnyView?` as the other providers do, and one element in
-  that registry at the intake position. Every name it answers starts with `intake-`; it returns nil
-  for any other name. Compiled for the simulator only, as the scorecard's flows are.
+  (`StrandiOS/App/StrandiOSApp.swift:623`) holds the demo registry, added by the orchestrator's
+  step 0. This stage has its own demo file, `StrandiOS/Intake/IntakeDemo.swift`, exposing
+  `static func screen(named: String) -> AnyView?`, and one element in that registry, added in
+  3-6h. Its reserved prefix is `intake-`: every name it answers starts with it, and it returns nil
+  for any other name. Compiled for the simulator only.
 - The demo's seeded person is stage 1's Fixture Person (§13.6), so a combined demo or simulator seed
   shows one person.
 - Flows by tapping: add, edit, delete, backdate a quick-add entry; tick and untick; change the
@@ -1703,7 +1772,7 @@ the intake settings below to that person and contradicts none of stage 1's value
 
 | Setting | Value |
 |---|---|
-| Protein floor | 100 g (stage 1's `proteinFloorGrams`; a whole number, as §9.2.1 requires) |
+| Protein floor | 100 g (stage 1's `proteinFloorGrams`; a whole number, as stage 1 R45 requires) |
 | Calorie range | 2400 to 2600 kcal |
 | Hard floor | 2100 kcal |
 | Cutoff time | 20:00 (minute 1200) |
@@ -1768,7 +1837,6 @@ falls on 2030-12-09 in Los Angeles. The later instant is on the earlier day, and
 | 105 | nil | noFloor | 105 | — | — | nil |
 
 The two rows with fractional amounts are amounts eaten, not floors; the floor is 100 in every row.
-`IntakeProgress.isWholeGramFloor`: true for 100; false for 99.4.
 
 | kcal | Day open | State | Detail |
 |---|---|---|---|
@@ -1850,46 +1918,56 @@ the owner for the path and, for Path A, for go-aheads G1 and G2.
 | 3-2 | Designer | A, B, C | Files inside `design/round-s3-intake/` only (the folder exists from the scaffolding commit); export `s3-frames.json`. The plugin files `design/figma-plugin/code.js` and `manifest.json` are **not** edited: `importS3` is already there. The Settings card's position and the scorecard protein row's caption follow the combined frame set |
 | 3-3 | Test author | A, B, C | Every test file named in §12; `IntakeFixture.swift`; additions to the existing test files named in §12.2 and §12.3; `Tools/test_intake_single_resolver.py` |
 | 3-4 | Implementer A (pure) | A, B | `Packages/StrandAnalytics/Sources/StrandAnalytics/IntakeAggregation.swift`, `IntakeProgress.swift` |
-| 3-5a | Implementer B (storage and resolver) | A, B, C | New: `Strand/Data/IntakeSettings.swift`, `IntakeResolver.swift`, `IntakeProvider.swift`, `IntakeQuickAddStore.swift`, `IntakeSupplementTick.swift`, `IntakeHealthSync.swift`. Edited, each as one small commit in the order of §14.3: `Strand/Data/CutScorecardInputBuilder.swift` (the protein read and the initialiser, after stage 2's move) with its construction sites `Strand/Data/CutScorecardModel.swift` and `Strand/Data/CoachPacketAssembler.swift` (one parameter and one argument each, §9.4); `Strand/AI/AICoach.swift` (the one line of §10.6.1); `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (two entries in each table and two names in the fork-only comment block) |
+| 3-5a | Implementer B (storage and resolver) | A, B, C | New: `Strand/Data/IntakeSettings.swift`, `IntakeResolver.swift`, `IntakeProvider.swift`, `IntakeQuickAddStore.swift`, `IntakeSupplementTick.swift`, `IntakeHealthSync.swift`. Edited, each as one small commit in this stage's place in the order of §14.3: `Strand/Data/CutScorecardInputBuilder.swift` (the protein read and the initialiser, written against the file as stage 2 leaves it) with its construction sites `Strand/Data/CutScorecardModel.swift` and `Strand/Data/CoachPacketAssembler.swift` (one parameter and one argument each, §9.4); `Strand/AI/AICoach.swift` (the one line of §10.6.1). 3-5a does not edit `BackupSettings.swift` (3-6h) |
 | 3-5b | Implementer B, after G1 go-ahead | A only | `StrandiOS/Health/HealthKitBridge.swift` (`readTypes`, `enableLiveDelivery`, `collectIntakeSamples`, `requestIntakeReadAccess`, the call in `sync`) |
-| 3-6 | Implementer C, after design approval and after 3-4 and 3-5a merge | A, B (C: tick and reminder parts) | New: `Strand/Data/IntakePresenter.swift`, `IntakeModel.swift`; `Strand/System/IntakeCutoffReminder.swift`; `StrandiOS/Intake/IntakeView.swift`, `IntakeQuickAddSheet.swift`, `IntakeSettingsSection.swift`, `IntakeDemo.swift`. Edited: `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, `Strand/Screens/TodayCustomizationMetadata.swift`, `Strand/Screens/TodayCustomizationSheet.swift`, `Strand/Data/TodayCardsEditorPresentation.swift`, `StrandiOS/Redesign/YourCardsSection.swift`, `StrandiOS/Redesign/RedesignRoute.swift`, `StrandiOS/Redesign/RedesignTodayView.swift` (card inputs and the flag), `Strand/Screens/SettingsView.swift` (one card), `StrandiOS/App/RootTabView.swift` (reminder reconcile), `StrandiOS/App/StrandiOSApp.swift` (one element in the demo registry), `StrandiOS/Scorecard/ScorecardView.swift` (the protein row's caption and tap); `Strand/Screens/TodayView.swift` and `Strand/Liquid/LiquidTodayView.swift` only to keep their `DashboardCard` switches exhaustive |
+| 3-6 | Implementer C, after design approval and after 3-4 and 3-5a merge | A, B (C: tick and reminder parts) | New: `Strand/Data/IntakePresenter.swift`, `IntakeModel.swift`; `Strand/System/IntakeCutoffReminder.swift`; `StrandiOS/Intake/IntakeView.swift`, `IntakeQuickAddSheet.swift`, `IntakeSettingsSection.swift`, `IntakeDemo.swift`. Edited: `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, `Strand/Screens/TodayCustomizationMetadata.swift`, `Strand/Screens/TodayCustomizationSheet.swift`, `Strand/Data/TodayCardsEditorPresentation.swift`, `StrandiOS/Redesign/YourCardsSection.swift`, `StrandiOS/Redesign/RedesignTodayView.swift` (card inputs and the flag), `StrandiOS/App/RootTabView.swift` (reminder reconcile); `Strand/Screens/TodayView.swift` and `Strand/Liquid/LiquidTodayView.swift` only to keep their `DashboardCard` switches exhaustive. 3-6 does not edit the files of 3-6h; `IntakeSettingsSection`, `IntakeView` and `IntakeDemo` are complete in their own files so that 3-6h is wiring only |
+| 3-6h | Orchestrator: this stage's one commit of edits to files other stages also edit, on the integration branch, after 3-5a and 3-6 and before 3-8 | A, B (C: the Settings card, the Health row, the route, the registry element and the backup keys; not the scorecard row) | `Strand/Screens/SettingsView.swift` (one card that embeds `IntakeSettingsSection`, at the position of §10); `StrandiOS/Redesign/RedesignHealthView.swift` (`HealthIntakeRow` and its flag-gated mount, §10.9); `StrandiOS/Redesign/RedesignRoute.swift` (the case `intake` and its arm); `StrandiOS/Scorecard/ScorecardView.swift` (the protein row's caption and tap, §10.4); `StrandiOS/App/StrandiOSApp.swift` (one element, `IntakeDemo`, in the demo registry); `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` (two entries in each table and two names in the fork-only comment block, §9.6). `Strand` and `NOOPiOS` are built after the commit |
 | 3-7 | Implementer D | A, B | `StrandiOSShared/PersonalWidgetMetrics.swift`; `StrandiOSWidgets/PersonalProteinWidget.swift` (new); `StrandiOSWidgets/NOOPWidgetBundle.swift`; `StrandiOS/Widgets/WidgetPublish.swift` |
 | 3-8 | Localiser | A, B, C | `Strand/Resources/Localizable.xcstrings`; `StrandiOSWidgets/Localizable.xcstrings` |
 | 3-9 | Orchestrator, after G2 go-ahead | A only | `project.yml` (the usage sentence), then `xcodegen generate` |
 | 3-10 | Reviewers (correctness, contract, data safety) and Verifier | all | None |
 
 Path C builds 3-3 (the tick, reminder, settings, flag and Coach-exclusion tests), the settings, tick,
-Coach-exclusion and reminder parts of 3-5a and 3-6, and 3-8. It builds no card, no widget, no
-resolver switch and no Health read.
+Coach-exclusion and reminder parts of 3-5a and 3-6, the Path C part of 3-6h, and 3-8. It builds no
+card, no widget, no resolver switch and no Health read.
 
 No work package writes, edits or runs Kotlin (R43).
 
 ### 14.3 Shared hotspots and order
 
-The order column is the cross-stage order; "1b" is the Lab Book ownership change. Each hotspot edit
-is one small commit, applied by the orchestrator onto the integration branch in this stage's place
-(step 4 of the build order), with the Localiser last.
+**The one order.** Every file that more than one change edits is edited in this order: Lab Book
+ownership, stage 2, stage 3, stage 4, stage 5, stage 6, then packet v2. **This stage is third.** Each
+row below gives this stage's position for that file and nothing about any other stage's edit; where
+a file is not edited by Lab Book ownership or by stage 2, third still means "in this stage's step,
+before stage 4's step". Stage 1's follow-up packages that precede stage 2 (the R40 flag observation
+in the Today views, and work package 1-10 for the floor) are already in the files this stage finds.
 
-| File | Edited by | Cross-stage order | Rule |
+Each hotspot edit is one small commit on the integration branch in this stage's step (step 4 of the
+build order), with the Localiser last. The files of 3-6h are one orchestrator commit.
+
+| File | Package | This stage's position | Rule |
 |---|---|---|---|
-| `Strand/Resources/Localizable.xcstrings`, `StrandiOSWidgets/Localizable.xcstrings` | 3-8 | 1b, 2, **3**, 4, 5, 6 | Sole writer, once, the last step of the stage, after the English strings are final. Never two branches at once. The widget catalogue is edited by this stage only |
-| `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, `Strand/Screens/TodayCustomizationMetadata.swift`, `TodayCustomizationSheet.swift`, `Strand/Data/TodayCardsEditorPresentation.swift`, `StrandiOS/Redesign/YourCardsSection.swift`, `StrandiOS/Redesign/RedesignTodayView.swift`, `Strand/Screens/TodayView.swift`, `Strand/Liquid/LiquidTodayView.swift` | 3-6 | Stage 1's R40 follow-up (flag observation in the three Today views) first, then this stage. No other stage edits them | One new case in each switch; one defaulted parameter, one `Tap` case and one readout case in `TodayCardReadout`; exhaustiveness only in the classic and Liquid Today views; card inputs and the observed flag in the redesign Today view |
-| `Strand/Screens/SettingsView.swift` | 3-6 | After the combined Settings frame is approved: 2, **3**, 4, 5, 6 | One self-contained card. Shared with macOS: build `Strand` after the edit |
-| `StrandiOS/Redesign/RedesignRoute.swift` | 3-6 | **3**, 4, 5, 6 | One additive case, `intake`, and its arm in the route switch |
-| `StrandiOS/Scorecard/ScorecardView.swift` | 3-6 | 2 (toolbar item), **3** (protein row caption and tap), 5, 6 | The protein row only |
-| `StrandiOS/App/StrandiOSApp.swift` (debug block, `:623`) | 3-6 | The scaffolding commit lands the registry; then one element per stage in integration order | One array element. The registry line itself is not rewritten |
-| `Strand/Data/CutScorecardInputBuilder.swift` | 3-5a | 2 (gains `evaluation(today:)`), then **3** | The protein read through `IntakeProvider` and the initialiser parameter (§9.4) |
-| `Strand/Data/CutScorecardModel.swift`, `Strand/Data/CoachPacketAssembler.swift` | 3-5a | After stage 2's move; before stage 5's and stage 6's edits to the model | One defaulted parameter and one argument each, in the same commit as the builder edit. Nothing else |
-| `StrandTests/CutScorecardInputBuilderTests.swift`, `StrandTests/TodayCardResolverTests.swift` | 3-3 | 2, then **3** | The initialiser argument and new test methods |
-| `StrandTests/OneNumberPerVariableTests.swift`, `StrandTests/BodyMeasurementSingleSourceTests.swift` | 3-3 | After 1b's rewrite of the first; before stage 4's additions | The added `intake:` argument at one line each. No assertion changes |
-| `Strand/AI/AICoach.swift` | 3-5a | 1b, 2, **3** (the one line of §10.6.1), 4 | One line at the Journal read. Applied after stage 2's byte-identity baseline is green; with no supplement listed it changes no byte |
-| `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift`, `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` | 3-5a, 3-3 | **3** (two keys), 5 (one key), 6 (four keys) | One writer at a time. Two entries in each table, two names in the fork-only comment block; test additions are new methods only, in the order of the source file |
-| `Strand/System/IntakeCutoffReminder.swift` (new) against stage 5's `Tools/test_personal_events_boundaries.py` | stage 5, normally | Whichever of the two stages merges second adds the file to the notification-producer list in the same commit | This stage merges first, so stage 5 lists it. If stage 5 is already merged when this file lands, 3-6 adds the list entry in the commit that adds the file |
+| `Strand/Resources/Localizable.xcstrings` | 3-8 | Third | Sole writer while it runs, once, the last step of the stage, after the English strings are final. Never two branches at once |
+| `StrandiOSWidgets/Localizable.xcstrings` | 3-8 | Third; no earlier change edits it | Same rule |
+| `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, `Strand/Screens/TodayCustomizationMetadata.swift`, `TodayCustomizationSheet.swift`, `Strand/Data/TodayCardsEditorPresentation.swift`, `StrandiOS/Redesign/YourCardsSection.swift`, `StrandiOS/Redesign/RedesignTodayView.swift`, `Strand/Screens/TodayView.swift`, `Strand/Liquid/LiquidTodayView.swift` | 3-6 | Third; written against the files as stage 1's R40 follow-up leaves them | One new case in each switch; one defaulted parameter, one `Tap` case and one readout case in `TodayCardReadout`; exhaustiveness only in the classic and Liquid Today views; card inputs and the observed flag in the redesign Today view |
+| `Strand/Screens/SettingsView.swift` | 3-6h | Third, after the combined Settings frame is approved | One self-contained card that embeds `IntakeSettingsSection`, placed third in the Settings order (§10). Shared with macOS: build `Strand` after the edit |
+| `StrandiOS/Redesign/RedesignHealthView.swift` | 3-6h | Third, after the combined Health frame is approved | One private row view and one flag-gated mount, placed third in the Health order (§10.9) |
+| `StrandiOS/Redesign/RedesignRoute.swift` | 3-6h | Third | One additive case, `intake`, and its arm in the route switch |
+| `StrandiOS/Scorecard/ScorecardView.swift` | 3-6h | Third | The protein row's caption and tap only (§10.4) |
+| `StrandiOS/App/StrandiOSApp.swift` (debug block, `:623`) | 3-6h | Third; the registry itself comes from the orchestrator's step 0 | One array element, `IntakeDemo`. The registry line itself is not rewritten |
+| `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` | 3-6h | Third | One writer at a time. Two entries in each table, two names in the fork-only comment block |
+| `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift` | 3-3 | Third | New methods only, appended after the methods already in the file |
+| `Strand/Data/CutScorecardInputBuilder.swift` | 3-5a | Third; written against the file as stage 2 leaves it, with `evaluation(today:)` | The protein read through `IntakeProvider` and the initialiser parameter (§9.4) |
+| `Strand/Data/CutScorecardModel.swift`, `Strand/Data/CoachPacketAssembler.swift` | 3-5a | Third; after stage 2's move of the evaluation, which creates the assembler | One defaulted parameter and one argument each, in the same commit as the builder edit. Nothing else |
+| `StrandTests/CutScorecardInputBuilderTests.swift`, `StrandTests/TodayCardResolverTests.swift` | 3-3 | Third | The initialiser argument and new test methods |
+| `StrandTests/OneNumberPerVariableTests.swift`, `StrandTests/BodyMeasurementSingleSourceTests.swift` | 3-3 | Third | The added `intake:` argument at one line each. No assertion changes |
+| `Strand/AI/AICoach.swift` | 3-5a | Third: after Lab Book ownership and the stage 2 extraction, before stage 4 (§10.6.1) | One line at the Journal read. Applied after stage 2's byte-identity baseline is green; with no supplement listed it changes no byte, and that suite is re-run unchanged after it |
+| `Strand/System/IntakeCutoffReminder.swift` (new) against stage 5's `Tools/test_personal_events_boundaries.py` | 3-6 | This stage's file lands third, before the scan exists | The scan's list of notification producers must name this file (§7.6). If the scan already exists when this file lands, 3-6 adds the list entry in the commit that adds the file |
 | `StrandiOSShared/PersonalWidgetMetrics.swift`, `StrandiOS/Widgets/WidgetPublish.swift`, `StrandiOSWidgets/NOOPWidgetBundle.swift`, `StrandiOS/App/RootTabView.swift` | 3-7, 3-6 | This stage only | One implementer per file |
 | `StrandiOS/Health/HealthKitBridge.swift` | 3-5b | This stage only; waits for the owner's yes (G1) | Second merge |
 | `project.yml` | 3-9 | This stage only; waits for the owner's yes (G2) | Orchestrator only; second merge |
-| `design/figma-plugin/code.js`, `manifest.json` | nobody in this stage | One orchestrator commit adds `importS2` to `importS6` before any designer starts | Not edited by this stage |
-| `Packages/StrandImport/…/MarkerCatalog.swift` | nobody | — | Not edited by this stage |
+| `design/figma-plugin/code.js`, `manifest.json` | nobody in this stage | Not edited; `importS3` comes from the orchestrator's step 0 | — |
+| `Packages/StrandImport/…/MarkerCatalog.swift` | nobody in this stage | Not edited | — |
 
 ### 14.4 Parallel and serial
 
@@ -1904,8 +1982,8 @@ stage 1's R40 follow-up and stage 2): every row of §14.3, `xcodegen generate`, 
 
 Within the stage: 3-3 and 3-4 start now, before the owner answers. 3-5a's settings, tick, resolver
 and quick-add store start now. Interface code (3-6, 3-7 views) waits for design approval, including
-the combined frame set. 3-6 follows 3-4 and 3-5a. 3-8 follows 3-6 and 3-7 and waits for stage 2's
-Localiser to finish. 3-5b and 3-9 wait for G1 and G2 and form the second merge; the Localiser's
+the combined frame set. 3-6 follows 3-4 and 3-5a. 3-6h, the orchestrator's one commit of wiring
+edits, follows 3-5a and 3-6. 3-8 follows 3-6, 3-6h and 3-7 and is the stage's last step. 3-5b and 3-9 wait for G1 and G2 and form the second merge; the Localiser's
 strings for Path A are written in the first merge so the second touches no catalogue.
 
 Shared scaffolding this stage expects to exist before its own code is integrated (the
@@ -1946,7 +2024,7 @@ Work proceeds on each recommendation.
 | G3 | A new widget kind in the existing widget extension | It is the stage's widget. No new target, identifier, profile or entitlement | Add a protein line to an existing widget instead; that changes an accepted widget |
 | G4 | One more local notification (the cutoff), opt-in, off by default | Notification budget | Path without the reminder: the cutoff time still closes the day in §7.5 |
 | G5 | Two Swift-only backup keys, with the Android drift of §9.6. Both sit in clear text in the backup, and the supplement questions contain the names the owner typed | Targets and supplement choices survive a restore | Leave them out; they are re-entered after a restore |
-| G6 | The combined layout for Settings and the scorecard screen covering all stages, then this stage's own frames | Needed before any view code. It fixes where the Intake card sits in Settings and how the protein row's caption reads | None; the view work waits |
+| G6 | The combined layout for the Health tab's "More health" card, Settings and the scorecard screen covering all stages, then this stage's own frames | Needed before any view code. It draws the Intake card in Settings and the Intake row in the Health tab, both third in the order (§10), and how the protein row's caption reads | None; the view work waits |
 
 No migration, no network path, no new target and no new entitlement is needed on any path.
 
@@ -1983,7 +2061,8 @@ decides otherwise.
 | D5 | One more opt-in local notification, the food cutoff, silent within 30 minutes of the wind-down reminder (G4) | No: drop `IntakeCutoffReminder` and its settings rows; the cutoff time still closes the day (§7.5); stage 5's producer list needs no entry |
 | D6 | No dated override of the calorie range exists; `targets(on:)` is the same every day | A real override is a new specification; no call site changes because the parameter is already there |
 | D7 | Path A totals are stored under `noop-intake-health`, not under `apple-health` | Storing under `apple-health` with a warning sentence in the Apple Health delete dialog instead: change one constant, restore the forgetting test, and add the dialog string; older days would again be lost on that delete |
-| D8 | The protein floor is whole grams at both editors | Allowing fractions: remove the predicate from both editors; the card would again round up while other surfaces round to nearest |
+| D8 | The protein floor is whole grams. The rule is stage 1's ruling R45 (stage 1 question S23); this stage's field writes the same stored value through the same setter and adds no rule | Allowing fractions is a change to stage 1's rule and so to stages 1, 2 and 3 together: every surface must then agree on one rounding for display. In this stage only the field's keypad would change, since the setter already defers to stage 1's function |
+| D11 | Intake has a row in the Health tab's "More health" card, third in the order, present only while the flag is on (§10.9) | No row: remove `HealthIntakeRow`, the `RedesignHealthView.swift` edit from 3-6h, the scan `test_health_row_is_mounted_only_under_the_intake_flag` and fault line F39. Under Path C the intake screen is then reached only from the Settings card |
 | D9 | The coach packet's intake section is built once, with the events section, as "packet v2" after stages 3 and 5 (§14.5) | Building it inside this stage: a new work package, a packet version of its own and a second revision of the Claude-side text |
 | D10 | Installs happen at milestones; this stage reaches the phone together with stage 4, after a fresh backup, with the flag off | A separate install for this stage alone is possible and changes no code |
 
@@ -2015,10 +2094,6 @@ value; nothing else depends on the particular numbers except the tables of §13.
   not use it.
 - **Whether a given database holds `nutrition-csv` rows** makes no difference to the design: the
   resolver handles both cases, and the rehearsal checks the flag-off path either way.
-- **How the rules sheet states the whole-gram rule.** This stage supplies
-  `IntakeProgress.isWholeGramFloor` and constrains its own field. The rules sheet's field belongs to
-  stage 1; until that follow-up lands a fractional floor can still be typed there, and this stage
-  then shows it marked (§9.2.1).
 - **The illness watch's confounder flags** are set by substring matches on Journal questions
   answered yes in the last two days (`Strand/App/AppModel.swift:1988-1996`: "alcohol", "drink",
   "workout", "train", "exercise", "sick", "ill", "unwell"). A ticked supplement whose typed name
@@ -2033,8 +2108,8 @@ value; nothing else depends on the particular numbers except the tables of §13.
 - **How an imported WHOOP Journal row spells a question** that the owner later adopts as a
   supplement. The exclusion matches without regard to case and surrounding whitespace; any other
   difference in spelling is a different question to the Journal as well.
-- **The path to the intake screen under Path C.** Path C builds no card, and this stage adds no
-  Health-tab row, so the supplements section and the cutoff row are reached from the Intake card in
+- **The path to the intake screen under Path C.** Path C builds no card, so the supplements section
+  and the cutoff row are reached from the Health tab row (§10.9) and from the Intake card in
   Settings. Whether that is enough is for the combined frame review.
 - **Whether Explore's "Protein" row, labelled "Nutrition", will confuse** once another source feeds
   the intake screen. It is one source's history and is left as it is; a clearer label is a
@@ -2060,14 +2135,14 @@ Changes made to this file after the cross-stage consistency check. One line per 
 | X4 | The packet's intake section is no longer described as stage 2's or this stage's work. §1 and the new §14.5 assign it to the single "packet v2" change after stages 3 and 5; this stage only guarantees the read API (`IntakeProvider.series()`, `IntakeSettings.targets(on:)`). Decision D9 |
 | X5 | The stage-named design scheme was already used here and is now the common one. WP 3-2 no longer edits `design/figma-plugin/code.js` or `manifest.json`; the orchestrator adds `importS3` and the folder (§5, §14.2, §14.3) |
 | X6 | "One chained call" in the debug block became one element in the shared demo registry, with the `intake-` prefix and `IntakeDemo.screen(named:)` (§5, §12.9, §14.2, §14.3) |
-| X12 | The protein floor is whole grams. Added `IntakeProgress.isWholeGramFloor`, `IntakeSettings.setProteinFloorGrams(_:)` and `proteinFloorNeedsWholeGrams` (§4.2, §6.5, §7.4, §9.2.1), the settings states and string (§10.5, §11), four tests and fault line F33 (§12). Decision D8 |
+| X12 (superseded by the second pass below) | The protein floor is whole grams. Added `IntakeProgress.isWholeGramFloor`, `IntakeSettings.setProteinFloorGrams(_:)` and `proteinFloorNeedsWholeGrams` (§4.2, §6.5, §7.4, §9.2.1), the settings states and string (§10.5, §11), four tests and fault line F33 (§12). Decision D8 |
 | X13 | No dated calorie-range override. `targets(on:)` keeps its parameter and returns the same targets every day; the claim that stage 5 supplies an override was removed (§1, §9.2, §14.5), with `testTargetsAreTheSameOnEveryDay` and F36. Decision D6 |
 | X15 | Supplement questions are excluded from the in-app Coach: correction C12, new §10.6.1, `IntakeSettings.coachVisible`, one line in `AICoach.swift`, `IntakeCoachExclusionTests.swift`, two source scans, F34, F35, F37, a settings caption. Decision D1 |
 | X16 | §7.6, §12.8 and the hotspot table record that `IntakeCutoffReminder.swift` must be in stage 5's notification-producer list, added by whichever stage merges second |
 | X18 | The builder change is written after stage 2's move to `evaluation(today:)`. §9.4 gives the new initialiser and every construction site, including `CoachPacketAssembler`; §12.3 and §14.3 give the order of the test-file edits |
 | X19 | `IntakeFlag` was removed; the flag is `IntakeSettings.flag`, a static `ObservableDefaultsFlag`. Day-key validity and arithmetic go through `CanonicalDay` (§5, §6, §6.4, §8.2, §9.2), with `testTheFlagIsAnObservableDefaultsFlagOverTheIntakeKey`, `testWindowValidityFollowsCanonicalDay` and a source scan |
 | X21 | §9.6 names the two whitelist tables instead of line ranges, adds the fork-only comment block and the one-writer order (3, then 5, then 6), states the clear-text content and the drift against the byte-identical contract. Decisions D2 and G5 |
-| X22 | The Intake card's position in Settings and the scorecard protein row's caption follow the combined frame set; edit orders for `SettingsView.swift`, `ScorecardView.swift` and `RedesignRoute.swift` are stated (§10, §10.4, §10.5, §14.3). Question G6 |
+| X22 (extended by the second pass below) | The Intake card's position in Settings and the scorecard protein row's caption follow the combined frame set; edit orders for `SettingsView.swift`, `ScorecardView.swift` and `RedesignRoute.swift` are stated (§10, §10.4, §10.5, §14.3). Question G6 |
 | X24 | Path A totals moved from `apple-health` to the dedicated id `noop-intake-health` (C2, §4.1, §5, §8.2, §9.1, §9.4, §12.2, §12.4, §12.7), so deleting Apple Health's imported data cannot remove intake history. The test that asserted the old clearing was replaced by `testDeletingAppleHealthDataLeavesEveryIntakeRow`; F32 added. Decision D7 and question I14 |
 | X20 (fixture; applied by instruction although stage 3 is not in its list) | One Fixture Person: §13 now takes stage 1's person, floor and protein days. The hand-worked aggregation samples moved to 2030-12-09 and 2030-12-10, before stage 1's phase, with the same amounts and expected totals (the Los Angeles offset on those dates is eight hours). §13.6 gives app-target and demo values from stage 1 |
 
@@ -2088,9 +2163,35 @@ Other changes in the same pass:
 
 | Scaffolding | What this stage does with it |
 |---|---|
-| The demo registry line in `StrandiOS/App/StrandiOSApp.swift` | Adds one element, `IntakeDemo`, at the intake position |
+| The demo registry line in `StrandiOS/App/StrandiOSApp.swift` | Adds one element, `IntakeDemo` (in 3-6h) |
 | Plugin commands `importS2` to `importS6` and the stage-named design folders | Uses `importS3` and `design/round-s3-intake/`; edits no plugin file |
 | `ObservableDefaultsFlag` (`Strand/Data/ObservableDefaultsFlag.swift`) | `IntakeSettings.flag` is one instance of it. Expected shape: `@MainActor final class ObservableDefaultsFlag: ObservableObject`, `init(key: String, defaults: UserDefaults = .standard)`, `@Published private(set) var isEnabled: Bool`, `func set(_ enabled: Bool)`. If the scaffolding's shape differs, the scaffolding is authoritative and §9.2.1 and one test follow it |
 | `CanonicalDay` (`Packages/StrandAnalytics/Sources/StrandAnalytics/CanonicalDay.swift`) | Day-key validity and day arithmetic in `IntakeAggregation`, `IntakeHealthSync` and the quick-add store. Uses `number(_:)` and `key(_:)` as stage 6 §6.0 lists them |
 | `ChargeTypicalBand` | Not used by this stage |
-| The fork-only backup keys comment block above the Swift whitelist | Adds `intake.targets` and `intake.supplement.questions` to it, first of the three stages that add keys |
+| The fork-only backup keys comment block above the Swift whitelist | Adds `intake.targets` and `intake.supplement.questions` to it (in 3-6h) |
+
+### Second pass
+
+Changes made after the independent re-check and the orchestrator's rulings (a) to (k). Where a line
+of the first-pass table above disagrees with this list, this list is the design in force.
+
+| Item | What changed in this file |
+|---|---|
+| X12 and ruling (b): one whole-gram floor rule, owned by stage 1 | Removed `IntakeProgress.isWholeGramFloor`, `IntakeSettings.proteinFloorNeedsWholeGrams`, the "stored floor that is not whole" settings state, this stage's own statement of the upper bound, `testWholeGramFloorPredicate`, `testFloorSetterAcceptsOnlyWholeGrams`, `testAFractionalStoredFloorIsReportedAndNotRewritten` and the §16 item about the rules sheet. `setProteinFloorGrams(_:)` now writes through `CutScorecardSettings.parameters`, the setter the rules sheet uses, and refuses exactly what `CutScorecardSettings.isWholeGramProteinFloor` refuses; the field calls that one function and nothing else, and the range is stage 1's `proteinFloorMaximumGrams`, not a second constant (§4.2, §6.5, §7.4, §9.2, §9.2.1, §10.5, §11, §13.1, §13.4, D8). A fractional floor stored before R45 reads as the nearest whole gram through stage 1's getter, so this stage has no state for it |
+| X12: one printed floor | §7.4 states that the card, ring and widget print the integer of `CutScorecardSettings.proteinFloorWholeGrams`; new tests `testShownFloorIsTheScorecardsWholeGramFloor`, `testFloorSetterWritesThroughTheScorecardSetter`, `testFloorSetterAcceptsExactlyWhatStageOnesRuleAccepts`, `testAFractionalFloorStoredEarlierReadsWholeThroughIntakeSettings`, the scan `test_intake_declares_no_floor_rule_of_its_own`; F33 rewritten, F38 added |
+| X22: hotspot edits are one orchestrator commit | New package 3-6h holds the `SettingsView`, `RedesignHealthView`, `RedesignRoute`, `ScorecardView`, `StrandiOSApp` registry and `BackupSettings` edits; they were removed from 3-6 and 3-5a (§9.6, §10.4, §10.5, §14.2, §14.3, §14.4) |
+| Ruling (c): one shared-file order that includes stage 3 | §14.3 states the order once and gives, for every shared file, only this stage's position (third). The lists of other stages' edits were removed from §9.6, §10.4, §10.5 and the table |
+| Ruling (d): Settings and Health order | §10 states this stage's position: third, below Coach packet and above Body record, with the combined frame set as the authority. The ruling's list places Intake on the Health tab as well, so this stage now has a row there: new §10.9, `HealthIntakeRow`, the `RedesignHealthView.swift` edit in 3-6h, `test_health_row_is_mounted_only_under_the_intake_flag`, F39, decision D11; the earlier sentence that this stage adds no Health row was removed, and the Path C note in §16 follows |
+| X6 and ruling (h): demo registry | §5 and §12.9 state only this stage's file (`StrandiOS/Intake/IntakeDemo.swift`), its reserved prefix (`intake-`) and its one registry element; the list of other stages' providers was removed |
+| X17, the new-conflict item on files ordered without stage 3, and ruling (i): `AICoach.swift` | §10.6.1 and §14.3 give the order as Lab Book ownership, the stage 2 extraction, this stage's one line, stage 4, with this stage third, and say that stage 2's byte-identity suite is re-run unchanged after the line |
+| The same new-conflict item: `CutScorecardModel.swift` and `CoachPacketAssembler.swift` | §14.3 gives this stage's position (third, after stage 2's move) and no other stage's |
+| Ruling (k) and the privacy point on §12.8 | The sentence about a check of the diff against the private profile was removed from §12.8. Nothing replaces it in this file |
+| Privacy point on §13.1 | Unchanged: the calorie range, hard floor and cutoff remain listed in §15 for the owner to confirm as invented |
+| Rulings (a), (e), (f), (g), (j) | Not this stage's. This file does not specify the weigh-in-outranks-scan rule, the private-events switch, the packet's events rows, the `LabMarkerStore` building blocks or `ChargeTypicalBand`, and edits none of their files |
+
+One point the orchestrator should know:
+
+- **The Settings card and "present only while its flag is on".** The Intake card holds the feature
+  switch. §10.5 therefore keeps the switch and one sentence visible with the flag off, and makes every
+  other row of the card present only while the flag is on. If the combined frame puts the switch
+  elsewhere, §10.5's "Flag off" row and the first row of the card follow the frame.
