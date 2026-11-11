@@ -13,12 +13,16 @@ struct BodyScanSheetScreen: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmingDelete = false
     private let onDeleted: () -> Void
+    /// The scan as saved: an edit that changes the day gives it a new id.
+    private let onSaved: (BodyScan) -> Void
 
     /// `model` is for the debug demo, which opens the sheet in a given state.
     init(context: BodyRecordContext, editing: BodyScan?, model: BodyScanSheetModel? = nil,
-         confirmingDelete: Bool = false, onDeleted: @escaping () -> Void = {}) {
+         confirmingDelete: Bool = false, onDeleted: @escaping () -> Void = {},
+         onSaved: @escaping (BodyScan) -> Void = { _ in }) {
         self.context = context
         self.onDeleted = onDeleted
+        self.onSaved = onSaved
         _model = StateObject(wrappedValue: model ?? context.sheetModel(editing: editing))
         _confirmingDelete = State(initialValue: confirmingDelete)
     }
@@ -165,7 +169,10 @@ struct BodyScanSheetScreen: View {
         VStack(spacing: NoopTheme.Layout.s) {
             Button {
                 Task {
-                    if await model.save() != nil { dismiss() }
+                    if let saved = await model.save() {
+                        onSaved(saved)
+                        dismiss()
+                    }
                 }
             } label: {
                 Text(verbatim: BodyRecordPresenter.saveTitle).frame(maxWidth: .infinity)

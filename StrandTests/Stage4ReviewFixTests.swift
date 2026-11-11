@@ -114,4 +114,40 @@ final class Stage4ReviewFixTests: XCTestCase {
         let stored = try await h.everyRow().filter { $0.markerKey == "haemoglobin" }
         XCTAssertEqual(stored.map(\.value), [132])
     }
+
+    // MARK: - Scan detail after an edit that moves the scan to another day
+
+    /// An edit that changes the day moves the scan to a new instant and a new id. The detail follows
+    /// the saved scan instead of taking the I7 "no longer exists" exit.
+    func testScanDetailFollowsAnEditThatChangesTheDay() async throws {
+        let h = try await BodyRecordHarness.make(suites: suites)
+        let original = try await h.save(F.draftA)
+        var moved = F.draftA
+        moved.day = "2031-01-10"
+        let saved = try await h.save(moved, replacing: original)
+        XCTAssertNotEqual(saved.id, original.id)
+
+        let model = BodyRecordModel(store: h.records, unitSystem: { .metric }, locale: { F.british })
+        await model.load()
+        XCTAssertNil(model.scan(id: original.id))
+        XCTAssertNotNil(model.scan(id: saved.id))
+        XCTAssertEqual(model.followedScanId(original.id, saved: saved), saved.id)
+        XCTAssertEqual(model.followedScanId(original.id, editing: true), original.id,
+                       "never leaves while the sheet is still open")
+        XCTAssertNil(model.followedScanId(original.id), "a scan that is gone still leaves the stack (I7)")
+    }
+
+    /// The control: an edit that keeps the day keeps the id, and the detail stays on it.
+    func testScanDetailStaysOnAnEditThatKeepsTheDay() async throws {
+        let h = try await BodyRecordHarness.make(suites: suites)
+        let original = try await h.save(F.draftA)
+        var edited = F.draftA
+        edited.note = "Fixture note, edited"
+        let saved = try await h.save(edited, replacing: original)
+        XCTAssertEqual(saved.id, original.id)
+        let model = BodyRecordModel(store: h.records, unitSystem: { .metric }, locale: { F.british })
+        await model.load()
+        XCTAssertEqual(model.followedScanId(original.id, saved: saved), original.id)
+        XCTAssertEqual(model.followedScanId(original.id), original.id)
+    }
 }

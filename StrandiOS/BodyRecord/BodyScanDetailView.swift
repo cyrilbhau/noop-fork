@@ -19,21 +19,31 @@ struct BodyScanDetailView: View {
 
 struct BodyScanDetailScreen: View {
     private let context: BodyRecordContext
-    private let scanId: String
     @StateObject private var model: BodyRecordModel
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var router: NavRouter
     @Environment(\.dismiss) private var dismiss
     @State private var editing: BodyScan?
     @State private var confirmingDelete = false
+    /// The scan shown: `scanId`, then the id an edit that changed the day saved it under.
+    @State private var currentId: String
 
     init(context: BodyRecordContext, scanId: String, model: BodyRecordModel? = nil) {
         self.context = context
-        self.scanId = scanId
+        _currentId = State(initialValue: scanId)
         _model = StateObject(wrappedValue: model ?? context.model())
     }
 
-    private var detail: BodyScanDetail? { model.detail(id: scanId) }
+    private var detail: BodyScanDetail? { model.detail(id: currentId) }
+
+    /// I7: follows the scan after a reload, or leaves the stack once it no longer exists.
+    private func follow() {
+        if let next = model.followedScanId(currentId, editing: editing != nil) {
+            currentId = next
+        } else {
+            dismiss()
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -48,7 +58,7 @@ struct BodyScanDetailScreen: View {
         .toolbar {
             if detail?.canEdit == true {
                 ToolbarItem(placement: .primaryAction) {
-                    Button { editing = model.scan(id: scanId) } label: {
+                    Button { editing = model.scan(id: currentId) } label: {
                         Text(verbatim: BodyRecordPresenter.editTitle)
                     }
                 }
@@ -56,17 +66,17 @@ struct BodyScanDetailScreen: View {
         }
         .task(id: repo.refreshSeq) {
             await model.load()
-            if model.scan(id: scanId) == nil { dismiss() }
+            follow()
         }
         .sheet(item: Binding(get: { editing.map(EditingScan.init) }, set: { editing = $0?.scan }),
-               onDismiss: { Task { await model.load(); if model.scan(id: scanId) == nil { dismiss() } } }) { item in
-            BodyScanSheetScreen(context: context, editing: item.scan)
+               onDismiss: { Task { await model.load(); follow() } }) { item in
+            BodyScanSheetScreen(context: context, editing: item.scan, onSaved: { currentId = $0.id })
         }
         .confirmationDialog(Text(verbatim: BodyRecordPresenter.scanDeleteConfirmation().title),
                             isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button(role: .destructive) {
                 Task {
-                    guard let scan = model.scan(id: scanId) else { return }
+                    guard let scan = model.scan(id: currentId) else { return }
                     if await model.delete(scan) { dismiss() }
                 }
             } label: { Text(verbatim: BodyRecordPresenter.scanDeleteConfirmation().confirmTitle) }

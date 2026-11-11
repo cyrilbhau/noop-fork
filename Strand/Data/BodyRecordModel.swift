@@ -66,6 +66,16 @@ final class BodyRecordModel: ObservableObject {
     /// I7: nil once the scan is gone.
     func scan(id: String) -> BodyScan? { scans.first { $0.id == id } }
 
+    /// The id the scan detail shows after a reload. An edit that changes the day moves the scan to
+    /// a new instant and so a new id; `saved` is the scan that edit returned. Nil when the scan no
+    /// longer exists (I7: the detail leaves the stack); never nil while `editing`, because the
+    /// sheet's save has not handed its scan back yet.
+    func followedScanId(_ currentId: String, saved: BodyScan? = nil, editing: Bool = false) -> String? {
+        let id = saved?.id ?? currentId
+        if editing { return id }
+        return scan(id: id) == nil ? nil : id
+    }
+
     /// One benchmark's readings from the last load; nil once it has none.
     func benchmark(key: String) -> BenchmarkHistory? {
         guard case .loaded(_, let benchmarks) = load else { return nil }
