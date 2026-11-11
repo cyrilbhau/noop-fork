@@ -129,6 +129,15 @@ struct RootTabView: View {
         }
     }
 
+    /// Stage 3: the food cutoff reminder, from the same `.active` handler. Does nothing at all unless
+    /// the intake flag and the reminder switch are both on: no task and no call to the notification
+    /// centre. A change to the wind-down nudge reaches the cutoff here (stage 3 specification §7.6).
+    private func reconcileIntakeCutoffReminder() {
+        let reminder = IntakeCutoffReminder.live
+        guard reminder.reconcilesOnActive else { return }
+        Task { @MainActor in await reminder.reconcileOnActive() }
+    }
+
     /// Opens Profile at its root. A fresh path each time: Profile is a sheet, not a tab, so re-opening it
     /// should not land the wearer three screens deep in whatever they left last time.
     private func openProfile() {
@@ -259,6 +268,7 @@ struct RootTabView: View {
             if phase == .active {
                 coach.resumeChatGPTConnection()
                 reconcileWeighInReminder()
+                reconcileIntakeCutoffReminder() // Stage 3
             }
         }
         // #1841: the same "Hide bar when scrolling" preference Android drives its own bar with. Here the

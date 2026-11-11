@@ -11,6 +11,9 @@ enum RedesignRoute: Hashable {
     case scorecard
     /// The weigh-in history (specification §10.4), pushed from the scorecard.
     case weighInHistory
+    // Stage 3: the intake screen (stage 3 specification §10.2), pushed from the protein card, the
+    // Health tab's row and the scorecard's protein row while `noop.intakeEnabled` is on.
+    case intake
 
     @ViewBuilder var destination: some View {
         switch self {
@@ -18,6 +21,7 @@ enum RedesignRoute: Hashable {
         case .strain(let dayKey): StrainDetailView(dayKey: dayKey)
         case .scorecard: ScorecardView()
         case .weighInHistory: WeighInHistoryView()
+        case .intake: IntakeView() // Stage 3
         }
     }
 }
