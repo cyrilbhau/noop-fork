@@ -54,7 +54,9 @@ final class WeighInReminder {
     /// The repeating weekly request.
     private static let weeklyId = "weigh-in-reminder"
     /// How many following weeks are covered by dated requests while this week is skipped. The app
-    /// reconciles every time it becomes active, so these are only reached when it stays closed.
+    /// reconciles every time it becomes active (`reconcileOnActive`, called from the scene-phase
+    /// handler of the iPhone shell), so these are only reached when it is not brought to the
+    /// front for that long.
     private static let skippedWeekCover = 4
 
     private static var datedIds: [String] {
@@ -68,9 +70,13 @@ final class WeighInReminder {
     private let settings: CutScorecardSettings
     private let now: () -> Date
     private let calendar: () -> Calendar
-    /// The newest weigh-in day `reconcile` was last told about, so that a changed time keeps
-    /// honouring a week that already has its weigh-in.
+    /// The newest weigh-in day this process was last told about. Every entry point that can
+    /// schedule carries it (`reconcile`, `reconcileOnActive`, `setSchedule`), so what is pending
+    /// never depends on which of them happened to run first after a launch.
     private var latestWeighInDay: String?
+    /// The last scheduling pass. Passes run one after another: one that was suspended on the
+    /// notification centre can then never finish over a later one.
+    private var applying: Task<Void, Never>?
 
     init(center: WeighInReminderCenter, settings: CutScorecardSettings,
          now: @escaping () -> Date = { Date() },
@@ -113,20 +119,47 @@ final class WeighInReminder {
     }
 
     /// Stores the weekday (1 = Sunday to 7 = Saturday) and the minute after local midnight, and
-    /// replaces what is pending when the reminder is on.
+    /// replaces what is pending when the reminder is on. The latest weigh-in day is the one this
+    /// process was last told; a caller that knows it passes it with the schedule instead.
     func setSchedule(weekday: Int, minuteOfDay: Int) async {
         settings.reminderWeekday = min(max(weekday, 1), 7)
         settings.reminderMinuteOfDay = min(max(minuteOfDay, 0), 24 * 60 - 1)
         await apply()
     }
 
+    /// As `setSchedule(weekday:minuteOfDay:)`, carrying the local day of the newest weight, so the
+    /// new request honours a week that already has its weigh-in whoever last called `reconcile`.
+    func setSchedule(weekday: Int, minuteOfDay: Int, latestWeighInDay: String?) async {
+        self.latestWeighInDay = latestWeighInDay
+        await setSchedule(weekday: weekday, minuteOfDay: minuteOfDay)
+    }
+
     /// Brings what is pending into line with the flag, the switch and the latest weigh-in. Called
-    /// after a weigh-in is saved or deleted, when the flag changes, and when the app becomes
-    /// active. `latestWeighInDay` is the local day of the newest weight. Reads the settings and
-    /// writes none.
+    /// after a weigh-in is saved or deleted, when the flag or the switch changes, and through
+    /// `reconcileOnActive` when the app becomes active. `latestWeighInDay` is the local day of the
+    /// newest weight. Reads the settings and writes none.
     func reconcile(latestWeighInDay: String?) async {
         self.latestWeighInDay = latestWeighInDay
         await apply()
+    }
+
+    /// True only while the scorecard flag and the reminder switch are both on: the one condition
+    /// under which becoming active does any work.
+    var reconcilesOnActive: Bool { settings.isEnabled && settings.reminderEnabled }
+
+    /// The app became active. Returns at once, before any call to the notification centre and
+    /// without evaluating `latestWeighInDay`, unless the scorecard flag and the reminder switch
+    /// are both on; otherwise `reconcile` with its value. This is what restores the repeating
+    /// request in a new week when no scorecard surface has been opened since the last weigh-in.
+    func reconcileOnActive(latestWeighInDay: @MainActor () async -> String?) async {
+        guard reconcilesOnActive else { return }
+        await reconcile(latestWeighInDay: await latestWeighInDay())
+    }
+
+    /// The local day of the newest weight the scorecard would call current, as every caller of
+    /// `reconcile` outside the scorecard model reads it: the provider's display series up to today.
+    static func latestWeighInDay(in provider: BodyMeasurementProvider, today: String) -> String? {
+        provider.series(.weight, consumer: .display).last { $0.day <= today }?.day
     }
 
     // MARK: - Scheduling
@@ -135,7 +168,20 @@ final class WeighInReminder {
         center.removePendingRequests(withIdentifiers: [Self.weeklyId] + Self.datedIds)
     }
 
+    /// One scheduling pass, after every pass requested before it has finished.
     private func apply() async {
+        let previous = applying
+        let pass = Task { @MainActor in
+            await previous?.value
+            await self.schedule()
+        }
+        applying = pass
+        await pass.value
+    }
+
+    /// Reads the settings and the latest weigh-in day when it runs, not when it was requested, so
+    /// the last pass always works from the newest state.
+    private func schedule() async {
         guard settings.isEnabled, settings.reminderEnabled else {
             removeAll()
             return
@@ -165,6 +211,7 @@ final class WeighInReminder {
                     identifier: identifier, content: Self.content(),
                     trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)))
             }
+            removeAllIfSwitchedOff()
             return
         }
 
@@ -183,6 +230,13 @@ final class WeighInReminder {
         await center.add(UNNotificationRequest(
             identifier: Self.weeklyId, content: Self.content(),
             trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: true)))
+        removeAllIfSwitchedOff()
+    }
+
+    /// The flag or the switch went off while a pass was suspended on the notification centre:
+    /// what that pass added is removed again, so nothing stays pending behind an off switch.
+    private func removeAllIfSwitchedOff() {
+        if !(settings.isEnabled && settings.reminderEnabled) { removeAll() }
     }
 
     /// The approved text and nothing else: no measurement, no verdict and no phase name, in the

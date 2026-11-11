@@ -1882,6 +1882,11 @@ struct SettingsView: View {
                     .toggleStyle(.switch)
                     .tint(StrandPalette.accent)
                     .task { await loadWeighInReminderState() }
+                    // Back from the system settings: what the row says about notifications is
+                    // checked again. Mounted only while the feature is on.
+                    .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                        Task { await loadWeighInReminderState() }
+                    }
 
                     if shown.reminderIsOn {
                         FormRow(label: "Day") {
@@ -1993,35 +1998,41 @@ struct SettingsView: View {
     private func weighInReminderScheduleChanged(weekday: Int, minuteOfDay: Int) {
         weighInReminderWeekday = weekday
         weighInReminderMinute = minuteOfDay
+        // The day goes with the schedule: this process may never have been told it.
+        let latest = latestWeighInDay(flagEnabled: scorecardFlag.isEnabled)
         Task { @MainActor in
-            await WeighInReminder.live.setSchedule(weekday: weekday, minuteOfDay: minuteOfDay)
+            await WeighInReminder.live.setSchedule(weekday: weekday, minuteOfDay: minuteOfDay,
+                                                   latestWeighInDay: latest)
         }
     }
 
-    /// The stored reminder settings, read when the row appears. A reminder stored as on whose
-    /// permission has since been withdrawn is switched off and shown as denied.
+    /// The stored reminder settings, read when the row appears and when the app comes back to
+    /// the front. A reminder stored as on whose permission has since been withdrawn is switched
+    /// off and shown as denied; a row that says denied stops saying so once notifications are
+    /// allowed, and the switch stays off. The decision is `CutScorecardPresenter.reminderStatus`.
     private func loadWeighInReminderState() async {
         let settings = CutScorecardSettings()
         weighInReminderWeekday = settings.reminderWeekday
         weighInReminderMinute = settings.reminderMinuteOfDay
-        guard settings.reminderEnabled else {
-            if weighInReminderStatus == .on { weighInReminderStatus = .off }
-            return
-        }
-        if await SystemWeighInReminderCenter().authorizationStatus() == .denied {
-            await WeighInReminder.live.setEnabled(false)
-            weighInReminderStatus = .denied
+        let storedOn = settings.reminderEnabled
+        // The system is asked only when its answer can change what the row says.
+        let systemDenied: Bool
+        if storedOn || weighInReminderStatus == .denied {
+            systemDenied = await SystemWeighInReminderCenter().authorizationStatus() == .denied
         } else {
-            weighInReminderStatus = .on
+            systemDenied = false
         }
+        let status = CutScorecardPresenter.reminderStatus(storedOn: storedOn, systemDenied: systemDenied,
+                                                          current: weighInReminderStatus)
+        if storedOn, status == .denied { await WeighInReminder.live.setEnabled(false) }
+        if weighInReminderStatus != status { weighInReminderStatus = status }
     }
 
     /// The local day of the newest weight the scorecard would call current, for the reminder's
     /// "this week already has a weigh-in" rule. Nil with the feature off.
     private func latestWeighInDay(flagEnabled: Bool) -> String? {
         guard flagEnabled else { return nil }
-        let today = Repository.localDayKey(Date())
-        return model.bodyMeasurements.series(.weight, consumer: .display).last { $0.day <= today }?.day
+        return WeighInReminder.latestWeighInDay(in: model.bodyMeasurements, today: Repository.localDayKey(Date()))
     }
     #endif
 

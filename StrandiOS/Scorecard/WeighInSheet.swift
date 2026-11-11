@@ -89,7 +89,13 @@ struct WeighInSheetScreen: View {
             fieldFocused = !showsCalendar
         }
         .onChangeCompat(of: model.phase) { phase in
-            if phase == .saved { dismiss() }
+            guard phase == .saved else { return }
+            // Wherever the sheet was opened from, the saved weigh-in reaches the shared scorecard
+            // model, and through it the weekly reminder, even when that model has never loaded
+            // (the sheet opened from Settings with no scorecard surface shown yet).
+            let scorecard = context.model
+            Task { await scorecard.load() }
+            dismiss()
         }
         .onChangeCompat(of: model.step) { _ in
             showsCalendar = false
