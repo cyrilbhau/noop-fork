@@ -315,8 +315,11 @@ final class LabBookOwnershipFlowTests: XCTestCase {
         XCTAssertEqual(rowsAfter, rowsBefore, "upgrading deleted, moved, re-keyed or changed a row")
         XCTAssertEqual(try Fx.registryIds(store), registryBefore, "upgrading registered or removed a device")
         let cells = try await Fx.labBookCells(store)
-        XCTAssertEqual(cells, Fx.cells, "the one derived cell was corrected and no other cell changed")
-        XCTAssertEqual(lines.all.count, 1, "one line for the launch that repaired, none for the next")
+        // Ruling A11: a projected value that equals a stored reading of that marker and day is kept,
+        // so the 98.0 cell stays as it was found and the repair has nothing to report.
+        let kept = Fx.cells.map { $0.key == "weight" && $0.day == Fx.day3 ? Fx.Cell(key: "weight", day: Fx.day3, value: 98.0) : $0 }
+        XCTAssertEqual(cells, kept, "a cell holding a stored reading's value was rewritten, or another cell changed")
+        XCTAssertEqual(lines.all.count, 0, "the repair changed nothing, so it logs nothing on either launch")
     }
 
     // MARK: - §8.6: whole-data removal still removes everything
