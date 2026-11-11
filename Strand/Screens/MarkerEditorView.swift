@@ -637,7 +637,7 @@ private func markerEditorPreviewRepo() -> Repository {
 }
 
 #Preview("Marker Editor") {
-    MarkerEditorView { _ in }
+    MarkerEditorView { _ in true }
         .environmentObject(markerEditorPreviewRepo())
         .frame(width: 520, height: 720)
         .preferredColorScheme(.dark)
