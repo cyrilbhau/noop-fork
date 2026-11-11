@@ -36,6 +36,10 @@ struct LiquidTodayView: View {
     @ObservedObject private var motion = NoopMotionState.shared
     private var poseStill: Bool { motion.poseStill(reduceMotion) }
 
+    /// The scorecard flag, observed (stage 1 ruling R40). Reading it writes nothing, and it
+    /// publishes only when the flag changes.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+
     /// Shared with the real Today's card-customise editor so the two stay in sync.
     @AppStorage(DashboardCardPrefs.selectionKey) private var dashboardCardsRaw = ""
     /// #today-hosted-cards: the ordered Trends/Sleep cards the user has hosted in Today. Empty by default
@@ -103,6 +107,8 @@ struct LiquidTodayView: View {
     /// #1862: the optional Coach launcher sheet. Presentation state only — opening it requests nothing.
     @State private var showCoachLauncher = false
     @State private var showSettings = false
+    /// The weigh-in sheet the Weight tile opens with the scorecard flag on (ruling R41).
+    @State private var showWeighInSheet = false
     /// The iPhone shell's Profile sheet (replaces the More tab). nil on macOS, where the avatar opens Settings.
     @Environment(\.openProfile) private var openProfile
     @State private var synthesisExpanded = false
@@ -465,7 +471,10 @@ struct LiquidTodayView: View {
         // Stage 1 ruling R38: the weight the day model holds was resolved under another policy than
         // the current one (the scorecard flag changed), so it is resolved again. The id is one flag
         // read per body evaluation; while the flag stays put the model reads nothing.
-        .task(id: dayModel.bodyWeightPolicyKey(BodyMeasurementProvider.live(repository: repo, profile: profile))) {
+        // Ruling R40: the flag itself is observed (`scorecardFlag`) and is part of the identity, so
+        // a change made while Today stays mounted re-evaluates the body and re-runs this task.
+        .task(id: dayModel.bodyWeightPolicyKey(BodyMeasurementProvider.live(repository: repo, profile: profile),
+                                               flagEnabled: scorecardFlag.isEnabled)) {
             await dayModel.resolveBodyWeightAgainIfPolicyChanged(
                 BodyMeasurementProvider.live(repository: repo, profile: profile), repo: repo)
         }
@@ -487,6 +496,9 @@ struct LiquidTodayView: View {
         .sheet(isPresented: $showCoachLauncher) {
             CoachLauncherSheet()
         }
+        #if os(iOS)
+        .sheet(isPresented: $showWeighInSheet) { WeighInSheet() }
+        #endif
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 SettingsView()
@@ -790,7 +802,8 @@ struct LiquidTodayView: View {
             // Data-driven off the SAME @AppStorage the CUSTOMISE editor writes, so add / remove /
             // reorder in Customise reflects on the home screen live. The hydration filter mirrors classic
             // TodayView's `enabledDashboardCards` and Android's `it != HYDRATION || hydrationEnabled`.
-            ForEach(DashboardCardPrefs.decodeEnabled(dashboardCardsRaw)
+            // Stage 1 specification §10.1: a card only the iPhone redesign draws is not in this list.
+            ForEach(DashboardCard.classicSelection(raw: dashboardCardsRaw)
                         .filter { hydrationEnabled || $0 != .hydration }
                         // Coach off means the AI is off, so the launcher card goes with the tab: leaving it
                         // on Today would offer a feature the wearer has just switched off. Same gate shape
@@ -950,6 +963,9 @@ struct LiquidTodayView: View {
             // leaving Today.
             cardAction(title: card.title, sub: card.subtitle, value: "",
                        tint: StrandPalette.accent, frac: 0.5) { showCoachLauncher = true }
+        case .scorecard:
+            // Drawn by the iPhone redesign only; the list above never contains it.
+            EmptyView()
         }
     }
 
@@ -1268,8 +1284,17 @@ struct LiquidTodayView: View {
             ktile(String(localized: "Steps"), icon: keyMetricIcon(metric), stepsText, "", StrandPalette.chargeColor,
                   fracOver(stepCount, 10000), key: stepsDetailKey, detailMetric: stepsDetailMetric)
         case .weight:
+            // Ruling R41: the tap target is the one decision every weight readout shares. Flag off
+            // it is the catalogue page, as it was; flag on it leads to a correction.
+            let correction = BodyMeasurementCorrection.route(for: .liquidTodayWeightTile,
+                                                             policy: scorecardFlag.displayPolicy)
+            // Two keys, not one: the catalogue page a tap pushes follows the route, the sparkline
+            // does not. Flag off both are "weight", the one key this tile passed before.
+            let keys = LiquidWeightTileKeys(route: correction)
             let (val, cap) = weightTile(bodyWeight)
-            ktile(String(localized: "Weight"), icon: keyMetricIcon(metric), val, "", StrandPalette.metricAmber, nil, key: "weight", caption: cap)
+            ktile(String(localized: "Weight"), icon: keyMetricIcon(metric), val, "", StrandPalette.metricAmber, nil,
+                  key: keys.navigationKey, sparklineKey: keys.sparklineKey, caption: cap,
+                  opensWeighIn: Self.presentsWeighIn(correction))
         case .calories:
             // #616: imported-first value (imported ?: activeKcalEst) + route the tap to the matching
             // detail source, so the number, its sparkline and the chart it opens all agree.
@@ -1308,7 +1333,8 @@ struct LiquidTodayView: View {
     }
 
     private func ktile(_ label: String, icon: String, _ value: String, _ unit: String, _ tint: Color, _ frac: Double?,
-                       key: String? = nil, detailMetric: MetricDescriptor? = nil, caption: String? = nil) -> some View {
+                       key: String? = nil, sparklineKey: String? = nil, detailMetric: MetricDescriptor? = nil,
+                       caption: String? = nil, opensWeighIn: Bool = false) -> some View {
         let displayValue = Self.tileDisplayValue(value, unit: unit)
         let tile = VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -1345,7 +1371,9 @@ struct LiquidTodayView: View {
             // windowed series keeps a clear placeholder of the same height so every tile in a detailed row
             // stays equal-height with its bars aligned.
             if keyMetricsDetailed {
-                let spark = key.map { windowedSpark($0) } ?? []
+                // `sparklineKey` is set only where the series key and the navigation key differ (the
+                // weight tile); every other tile draws the series of its one `key`, as before.
+                let spark = (sparklineKey ?? key).map { windowedSpark($0) } ?? []
                 if spark.count >= 2 {
                     Sparkline(values: spark,
                               gradient: Gradient(colors: [tint.opacity(0.5), tint]))
@@ -1365,7 +1393,11 @@ struct LiquidTodayView: View {
         // #430 parity: tap -> the metric's trend detail (the same Explore dossier its MetricRow pushes,
         // closure-based NavigationLink per #38). A metric with no catalog entry stays inert.
         return Group {
-            if let metric = detailMetric ?? key.flatMap({ key in
+            if opensWeighIn {
+                Button { showWeighInSheet = true } label: { tile }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the weigh-in sheet")
+            } else if let metric = detailMetric ?? key.flatMap({ key in
                 MetricCatalog.all.first(where: { $0.key == key })
             }) {
                 NavigationLink { MetricDetailView(metric: metric) } label: { tile }
@@ -1374,6 +1406,16 @@ struct LiquidTodayView: View {
                 tile
             }
         }
+    }
+
+    /// True when the tile presents the weigh-in sheet for `route`. The sheet is an iPhone screen:
+    /// on macOS no route presents it, and a correction route leaves the tile without a tap target.
+    private static func presentsWeighIn(_ route: BodyMeasurementCorrectionRoute) -> Bool {
+        #if os(iOS)
+        return route.offersCorrection
+        #else
+        return false
+        #endif
     }
 
     // MARK: - Last workouts
@@ -1624,7 +1666,7 @@ struct LiquidTodayView: View {
     /// the provider supplies the profile value as it is now.
     private func weightTile(_ dated: ResolvedBodyMeasurement?) -> (value: String, caption: String) {
         let shown = BodyMeasurementProvider.live(repository: repo, profile: profile).displayWeightValue(dated)
-        let caption = dated != nil ? String(localized: "latest") : String(localized: "from profile")
+        let caption = BodyMeasurementCorrection.todayCaption(dated: dated, policy: scorecardFlag.displayPolicy)
         return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
     }
 
@@ -1665,6 +1707,22 @@ struct LiquidTodayView: View {
         guard let carried = sources.min(by: { $0.day < $1.day }) else { return nil }
         return TodayView.carriedCaption(priorDayKey: carried.day,
                                         todayKey: displayDay?.day ?? selectedDayKey)
+    }
+}
+
+/// The two keys of the Liquid Today weight tile. `ktile` used one `key` for both the catalogue
+/// page a tap pushes and the series its detailed-mode sparkline draws, so a route that is not a
+/// catalogue page (the weigh-in sheet, flag on) took the sparkline away.
+struct LiquidWeightTileKeys: Equatable {
+    /// The catalogue key the tile pushes: `route.metricKey`. Nil for every other route.
+    let navigationKey: String?
+    /// The key `ktile` hands to `TodayDayModel.windowedSpark(_:windowDays:)`, and the key
+    /// `TodayDayModel` banks the weight series under in `kSparks`: "weight", whatever the route.
+    let sparklineKey: String
+
+    init(route: BodyMeasurementCorrectionRoute) {
+        navigationKey = route.metricKey
+        sparklineKey = "weight"
     }
 }
 
@@ -3054,20 +3112,27 @@ final class TodayDayModel: ObservableObject {
         let appleRows = await appleA
         guard requestedDayKey == selectedDayKey(repo: repo) else { return }
         publishBodyWeight(provider, series: series, asOf: .day(requestedDayKey, isCurrent: isCurrent),
-                          appleRows: appleRows)
+                          appleRows: appleRows, repo: repo)
     }
 
-    /// Resolve `bodyWeight` from `series` and record the policy it was resolved under. A series
+    /// Resolve `bodyWeight` AND the weight sparkline from `series`, together (ruling R40), and
+    /// record the policy they were resolved under. This is the one writer of both. A series
     /// fetched under a policy that is no longer the provider's never replaces a reading resolved
     /// under the current one: an obsolete read does not publish. With nothing better held it is
     /// taken, and its recorded policy is what keeps it off the screen and makes the view's policy
     /// task resolve again (ruling R38).
     private func publishBodyWeight(_ provider: BodyMeasurementProvider, series: BodyWeightSeries,
-                                   asOf: BodyWeightAsOf, appleRows: [AppleDaily]) {
+                                   asOf: BodyWeightAsOf, appleRows: [AppleDaily], repo: Repository) {
         let current = provider.displayPolicy
         if series.policy != current, bodyWeightPolicy == current { return }
         bodyWeightPolicy = series.policy
         bodyWeight = provider.displayWeight(from: series, asOf: asOf, appleRows: appleRows)
+        // The trailing 30 days ending on the selected day: the window every key-metric sparkline banks.
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: selectedLogicalDay)
+        let cutoff = Repository.localDayKey(calendar.date(byAdding: .day, value: -29, to: dayStart) ?? dayStart)
+        let selected = selectedDayKey(repo: repo)
+        kSparks["weight"] = series.points.filter { $0.day >= cutoff && $0.day <= selected }.map { ($0.day, $0.value) }
     }
 
     /// The reading a weight tile shows: `bodyWeight` while the policy it was resolved under is
@@ -3082,10 +3147,12 @@ final class TodayDayModel: ObservableObject {
     struct BodyWeightPolicyKey: Equatable {
         let held: BodyMeasurementPolicy?
         let current: BodyMeasurementPolicy
+        /// The observed scorecard flag (ruling R40).
+        let flagEnabled: Bool
     }
 
-    func bodyWeightPolicyKey(_ provider: BodyMeasurementProvider) -> BodyWeightPolicyKey {
-        BodyWeightPolicyKey(held: bodyWeightPolicy, current: provider.displayPolicy)
+    func bodyWeightPolicyKey(_ provider: BodyMeasurementProvider, flagEnabled: Bool) -> BodyWeightPolicyKey {
+        BodyWeightPolicyKey(held: bodyWeightPolicy, current: provider.displayPolicy, flagEnabled: flagEnabled)
     }
 
     /// Ruling R38: resolve the weight again when the one held was resolved under another policy
@@ -3287,6 +3354,9 @@ final class TodayDayModel: ObservableObject {
         for row in sparkRows {
             if let count = row.steps { stepSparkByDay[row.day] = Double(count) }
         }
+        // Awaited before the dictionary is set, so the weight value and its sparkline are published
+        // in the same step as the other sparklines.
+        let weightSeries = await weightA
         kSparks = [
             "recovery": sparkRows.compactMap { r in r.recovery.map { (r.day, $0) } },
             "strain": sparkRows.compactMap { r in r.strain.map { (r.day, $0) } },
@@ -3307,8 +3377,19 @@ final class TodayDayModel: ObservableObject {
                 .map { ($0.day, $0.value) },
             "sleep_performance": restSeries.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey(repo: repo) }
                 .map { ($0.day, $0.value) },
-            "weight": (await weightA).points.filter { $0.day >= sparkCutoff && $0.day <= selectedDayKey(repo: repo) },
+            // Written by `publishBodyWeight` just below, with the value it belongs to (ruling R40).
+            "weight": kSparks["weight"] ?? [],
         ]
+        // Weight for the SELECTED day, resolved by the provider, and its sparkline, from one series
+        // and in one step, with no suspension since the dictionary above was set. With the scorecard
+        // flag off the value is a real Apple-Health reading (the day's daily, else the "weight"
+        // series' newest point on or before it, so a sparse-but-recent value still renders). Falls
+        // back to the user's profile weight in the renderer (weightTile).
+        // Ruling R33: the selected day is the logical day; at offset 0 it is the current day.
+        publishBodyWeight(
+            bodyMeasurements, series: weightSeries,
+            asOf: .day(selectedDayKey(repo: repo), isCurrent: selectedDayOffset == 0),
+            appleRows: appleRowsForSpark, repo: repo)
         let stressReadings = await Task.detached(priority: .utility) {
             let model = StressModel(days: daysSnapshot, stored: storedStress)
             // Both the chart and score are on the same 0–3 axis. Preserve UTC chart-day identities.
@@ -3336,17 +3417,6 @@ final class TodayDayModel: ObservableObject {
         // #616: same-day imported active energy — the calorie fallback when the strap banked no on-device
         // HR estimate for the day, so the tile/card/detail agree (imported-first, mirrors steps).
         importedActiveKcalDay = (await appleA).filter { $0.day == selectedDayKey(repo: repo) }.compactMap { $0.activeKcal }.max()
-
-        // Weight for the SELECTED day, resolved by the provider. With the scorecard flag off that is
-        // a real Apple-Health reading (the day's daily, else the "weight" series' newest point on or
-        // before it, so a sparse-but-recent value still renders). Falls back to the user's profile
-        // weight in the renderer (weightTile).
-        let appleRows = await appleA
-        let weightSeries = await weightA
-        // Ruling R33: the selected day is the logical day; at offset 0 it is the current day.
-        publishBodyWeight(
-            bodyMeasurements, series: weightSeries,
-            asOf: .day(selectedDayKey(repo: repo), isCurrent: selectedDayOffset == 0), appleRows: appleRows)
 
         // Awaited ONCE: the timestamps and the means have to come from the same read, or the segments
         // would describe a different series than the one drawn.
@@ -3420,8 +3490,8 @@ final class TodayDayModel: ObservableObject {
         if !dataLoaded { withAnimation(.easeIn(duration: 0.4)) { dataLoaded = true } }
         // Build the remaining fields from this call's already-awaited results and its fixed day key.
         // Re-awaiting an async-let consumes the same result; no additional repository reads occur here.
-        let requestedImportedSteps = appleRows.filter { $0.day == requestedDayKey }.compactMap { $0.steps }.max()
-        let requestedImportedKcal = appleRows.filter { $0.day == requestedDayKey }.compactMap { $0.activeKcal }.max()
+        let requestedImportedSteps = appleRowsForSpark.filter { $0.day == requestedDayKey }.compactMap { $0.steps }.max()
+        let requestedImportedKcal = appleRowsForSpark.filter { $0.day == requestedDayKey }.compactMap { $0.activeKcal }.max()
         let requestedEstimate = stepsByDay[requestedDayKey] ?? (requestedCards.isToday ? stepsSeries.last?.value : nil)
         requestedCards.importedStepsDay = requestedImportedSteps
         requestedCards.stepCount = requestedCards.displayDay?.steps.map(Double.init)
@@ -3567,6 +3637,11 @@ final class TodayDayModel: ObservableObject {
 
     /// A metric's spark values inside the chosen window, oldest → newest.
     func windowedSpark(_ key: String, windowDays: Int) -> [Double] {
+        // Ruling R40: the weight sparkline is withheld on the same condition as the value it
+        // belongs to, a reading resolved under another policy than the current one.
+        if key == "weight", let provider = bodyWeightProvider, bodyWeightPolicy != provider.displayPolicy {
+            return []
+        }
         let cutoff = sparkWindowCutoffKey(windowDays: windowDays)
         return (kSparks[key] ?? []).filter { $0.0 >= cutoff }.map { $0.1 }
     }

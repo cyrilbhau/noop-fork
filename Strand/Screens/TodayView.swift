@@ -288,7 +288,8 @@ struct TodayView: View {
         // Opt-in gate (mirrors the Android TodayScreen filter `it != HYDRATION || hydrationEnabled`):
         // the hydration card only renders when the feature is on AND the user has added it via CUSTOMISE.
         // It's not in the default selection, so a fresh install never shows it until both are true.
-        DashboardCardPrefs.decodeEnabled(dashboardCardsRaw)
+        // Stage 1 specification §10.1: a card only the iPhone redesign draws is not in this list.
+        DashboardCard.classicSelection(raw: dashboardCardsRaw)
             .filter { hydrationEnabled || $0 != .hydration }
             // Coach off means the AI is off, so the launcher card goes with the tab: leaving it on
             // Today would offer a feature the wearer has just switched off. Same gate shape as
@@ -332,6 +333,9 @@ struct TodayView: View {
     /// (ruling R37), and neither it nor the sparkline is shown once that policy is no longer the
     /// provider's (ruling R38).
     @State private var weightSeries: BodyWeightSeries?
+    /// The scorecard flag, observed (ruling R40). Reading it writes nothing, and it publishes only
+    /// when the flag changes, so with the flag left alone this never re-renders Today.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     // Design Reset / #582, the pinned "Your cards" values (Stress / Fitness age / Vitality), surfaced
     // on Today so the buried Explore features sit on the home screen. Loaded in loadAll; nil hides the row.
     @State private var stressToday: Double?
@@ -450,6 +454,8 @@ struct TodayView: View {
     /// #1862: the optional Coach launcher sheet, opened from the default-OFF Coach dashboard card.
     /// Presentation state only — nothing is requested from a provider by opening it.
     @State private var showCoachLauncher = false
+    /// The weigh-in sheet the Weight tile opens with the scorecard flag on (ruling R41).
+    @State private var showWeighInSheet = false
     @State private var showUpdatesInbox = false
 
     /// The NEWEST day-key (max yyyy-MM-dd in `repo.days`) announced to the inbox. Persisted (not @State)
@@ -1591,7 +1597,10 @@ struct TodayView: View {
         // one (the scorecard flag changed), so the weight is fetched and resolved again. The id is
         // one flag read per body evaluation; while the flag stays put the task runs once, when the
         // first series lands, finds the policies equal and reads nothing.
-        .task(id: WeightPolicyKey(held: weightSeries?.policy, current: bodyMeasurements.displayPolicy)) {
+        // Ruling R40: the flag itself is observed (`scorecardFlag`) and is part of the identity,
+        // so a change made while Today stays mounted re-evaluates the body and re-runs this task.
+        .task(id: WeightPolicyKey(held: weightSeries?.policy, current: bodyMeasurements.displayPolicy,
+                                  flagEnabled: scorecardFlag.isEnabled)) {
             if weightIsUnderAnotherPolicy { await reloadWeight() }
         }
         .onChangeCompat(of: hydrationEnabled) { _ in Task { await reloadHydration() } }
@@ -1642,6 +1651,9 @@ struct TodayView: View {
         .sheet(isPresented: $showCoachLauncher) {
             CoachLauncherSheet()
         }
+        #if os(iOS)
+        .sheet(isPresented: $showWeighInSheet) { WeighInSheet() }
+        #endif
         .sheet(isPresented: $showUpdatesInbox) {
             UpdatesInboxView(onClose: { showUpdatesInbox = false })
         }
@@ -2683,6 +2695,9 @@ struct TodayView: View {
             // would take you off Today, which is the discoverability problem this card exists to solve.
             pinnedCardActionRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
                                 value: dashboardValue(card)) { showCoachLauncher = true }
+        case .scorecard:
+            // Drawn by the iPhone redesign only; `enabledDashboardCards` never lists it here.
+            EmptyView()
         }
     }
 
@@ -2705,6 +2720,7 @@ struct TodayView: View {
         case .hydration:   return StrandPalette.metricCyan
         case .coupled:     return StrandPalette.chargeColor
         case .coach:       return StrandPalette.accent
+        case .scorecard:   return card.customizationTint
         }
     }
 
@@ -2819,6 +2835,9 @@ struct TodayView: View {
         case .coach:
             // #1862: likewise a launcher row. Empty rather than "—" for the same reason — there is no
             // missing measurement here, there is no measurement at all.
+            return ""
+        case .scorecard:
+            // Never rendered here (see `dashboardCardRow`): no value to resolve.
             return ""
         }
     }
@@ -4154,7 +4173,7 @@ struct TodayView: View {
                 }
             )
         case .weight:
-            StatTile(
+            let weight = StatTile(
                 label: "Weight",
                 value: weightTile(shownWeightReading).value,
                 caption: weightTile(shownWeightReading).caption,
@@ -4162,6 +4181,15 @@ struct TodayView: View {
                 sparkline: shownWeightSpark,
                 sparkColor: StrandPalette.accent
             )
+            // Ruling R41: flag off the tile is bare, as it was; flag on a tap leads to a correction.
+            if Self.presentsWeighIn(BodyMeasurementCorrection.route(for: .classicTodayWeightTile,
+                                                                    policy: scorecardFlag.displayPolicy)) {
+                Button { showWeighInSheet = true } label: { weight }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the weigh-in sheet")
+            } else {
+                weight
+            }
         case .calories:
             StatTile(
                 label: "Calories",
@@ -5262,8 +5290,18 @@ struct TodayView: View {
     /// the provider supplies the profile value as it is now.
     private func weightTile(_ dated: ResolvedBodyMeasurement?) -> (value: String, caption: String) {
         let shown = bodyMeasurements.displayWeightValue(dated)
-        let caption = dated != nil ? String(localized: "latest") : String(localized: "from profile")
+        let caption = BodyMeasurementCorrection.todayCaption(dated: dated, policy: scorecardFlag.displayPolicy)
         return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
+    }
+
+    /// True when the tile presents the weigh-in sheet for `route`. The sheet is an iPhone screen:
+    /// on macOS no route presents it, and the tile stays without a tap target.
+    private static func presentsWeighIn(_ route: BodyMeasurementCorrectionRoute) -> Bool {
+        #if os(iOS)
+        return route.offersCorrection
+        #else
+        return false
+        #endif
     }
 
     /// The weight part of `loadHistoryWide`, on its own. Called when the provider's revision moved
@@ -5322,6 +5360,7 @@ struct TodayView: View {
     private struct WeightPolicyKey: Equatable {
         let held: BodyMeasurementPolicy?
         let current: BodyMeasurementPolicy
+        let flagEnabled: Bool
     }
 
     /// The one source of body weight and waist for this view.

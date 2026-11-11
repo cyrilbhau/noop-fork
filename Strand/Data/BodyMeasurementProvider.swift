@@ -15,6 +15,17 @@ struct BodyWeightSeries: Sendable {
     let points: [(day: String, value: Double)]
 }
 
+/// What a Today weight tile shows: the value and the sparkline behind it, as one reading (ruling
+/// R40). Both parts were resolved under `policy`, so a view cannot refresh one without the other.
+struct BodyWeightDisplay {
+    let policy: BodyMeasurementPolicy
+    /// The dated reading, or the profile value when there is none.
+    let value: ResolvedBodyMeasurement
+    /// False when `value` is the profile fallback.
+    let isDated: Bool
+    let sparkline: [(day: String, value: Double)]
+}
+
 /// The day a Today view resolves its weight tile for.
 enum BodyWeightAsOf {
     /// Liquid and the redesign: the day the wearer is looking at, and whether it is the current
@@ -363,6 +374,16 @@ final class BodyMeasurementProvider: ObservableObject {
                 policy: .legacyDisplay)
         }
         return resolved?.day == nil ? nil : resolved
+    }
+
+    /// The weight series, the dated reading and the printed value in one step, on one read of the
+    /// flag (ruling R40): the series fixes the policy, and the value is resolved from that series.
+    func displayWeight(days: Int, trailingDays: Int? = nil, asOf: BodyWeightAsOf,
+                       appleRows: [AppleDaily]) async -> BodyWeightDisplay {
+        let series = await displayWeightSeries(days: days, trailingDays: trailingDays)
+        let dated = displayWeight(from: series, asOf: asOf, appleRows: appleRows)
+        return BodyWeightDisplay(policy: series.policy, value: displayWeightValue(dated),
+                                 isDated: dated != nil, sparkline: series.points)
     }
 
     /// What a weight tile prints: the dated reading it resolved, else the profile value as it is now.

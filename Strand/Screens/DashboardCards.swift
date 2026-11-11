@@ -45,9 +45,19 @@ enum DashboardCard: String, CaseIterable, Identifiable {
     /// row for one. Opening the sheet makes NO provider request — see `CoachLauncherSheet`.
     case coach
 
+    /// Optional, default-OFF (stage 1 specification §10.1): the weekly weigh-in and scorecard. A value
+    /// card: the current weight and one caption, tapping through to the scorecard screen. It renders
+    /// only on the iPhone redesign's Today, only after the owner adds it, and only while
+    /// `noop.cutScorecardEnabled` is on. No Android twin: the feature is iPhone-only.
+    case scorecard
+
     var id: String { rawValue }
 
     var isShortcut: Bool { self == .coupled || self == .coach }
+
+    /// True for a card only the iPhone redesign's Today draws. Classic Today, Liquid Today and macOS
+    /// filter such a card out, so what they can render is the list as it was before the card existed.
+    var isRedesignOnly: Bool { self == .scorecard }
 
     /// The card's display label (the UPPERCASE WHOOP metric-row label is derived from this). Localized via
     /// the String Catalog so the dashboard rows read in the user's language (the `.uppercased()` the row
@@ -70,6 +80,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .hydration:   return String(localized: "Hydration")
         case .coupled:     return String(localized: "Coupled view")
         case .coach:       return String(localized: "Coach")
+        case .scorecard:   return String(localized: "Scorecard")
         }
     }
 
@@ -95,6 +106,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         // Reuses the Coach screen's own subtitle, so the card and the screen describe the feature
         // identically and no new copy needs translating into ten locales.
         case .coach:       return String(localized: "Ask about your charge, effort, rest and workouts, grounded in your own numbers.")
+        case .scorecard:   return String(localized: "Weight and this week's verdict")
         }
     }
 
@@ -116,6 +128,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .hydration:   return "waterbottle.fill"
         case .coupled:     return "circle.hexagongrid.fill"
         case .coach:       return "bubble.left.and.text.bubble.right.fill"
+        case .scorecard:   return "scalemass"
         }
     }
 
@@ -137,6 +150,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .hydration:   return ""    // value bakes in "<total> / <goal> L" itself
         case .coupled:     return ""    // a tap-through row, no value, so no unit
         case .coach:       return ""    // likewise: a launcher row, no metric of its own
+        case .scorecard:   return ""    // the card's own readout carries kg or lb
         }
     }
 
@@ -149,6 +163,14 @@ enum DashboardCard: String, CaseIterable, Identifiable {
 
     /// Canonical order used to list the disabled remainder in the editor.
     static let canonicalOrder: [DashboardCard] = allCases
+
+    /// The saved selection as classic Today, Liquid Today and macOS draw it: without any card only
+    /// the redesign draws. A selection left empty by that is the decoder's all-unknown case, so the
+    /// default set stands in, exactly as it did before such a card existed.
+    static func classicSelection(raw: String) -> [DashboardCard] {
+        let drawable = DashboardCardPrefs.decodeEnabled(raw).filter { !$0.isRedesignOnly }
+        return drawable.isEmpty ? defaultSelection : drawable
+    }
 }
 
 /// Display-only persistence for the "Your cards" dashboard selection. Holds an ORDERED list of the enabled

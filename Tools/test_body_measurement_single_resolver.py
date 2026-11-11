@@ -299,5 +299,328 @@ class BodyMeasurementSingleResolverTests(unittest.TestCase):
         self.assertEqual(problems, [], "\n".join(problems))
 
 
+# ---------------------------------------------------------------------------------------------
+# Ruling R41 (specification §18): one number per variable, on every surface.
+#
+# The scan above polices the spellings §8.6 listed. The surface audit of 11 November 2026 found
+# readers and labels those spellings cannot see. Each is a pattern or a positive requirement here,
+# so the bypass found once fails this file if it comes back. The behavioural half is
+# ``StrandTests/OneNumberPerVariableTests.swift``, whose "API ASSUMED" block defines the members
+# named below (``BodyMeasurementCorrection``, ``BodyMeasurementSourcePage``,
+# ``AICoachEngine.bodyMeasurements``, ``WeighInSheetModel(weighIns:provider:…)``).
+#
+# weight-metric-route: a tap hard-wired to the catalogue page of the Apple Health weight series
+#   (`.metric("weight")`). A current-weight readout takes its route from
+#   `BodyMeasurementCorrection.route(for:policy:)`, which returns that page only with the flag off.
+# lab-category-read: Lab Book rows read by category, which carries the `weight` and `waist` rows
+#   past the `lab-marker-key` pattern (the Coach roll-up, listed under LIMITS above until R41).
+# newest-as-latest: a page of ONE source's series calling its newest point "Latest". Scanned only in
+#   the source pages; the wording comes from `BodyMeasurementSourcePage`. It constrains the labels a
+#   weight or waist series can reach: the generic stat labels of a metric page (`"Latest"`,
+#   `"Latest reading"`) and an interpolated `, latest \(…)` label. A string that names one metric
+#   which is not a body measurement cannot be shown for a weight or a waist, so it is not a readout
+#   of either; `NOT_A_BODY_SERIES` lists those strings.
+R41_PATTERNS: dict[str, re.Pattern[str]] = {
+    "weight-metric-route": re.compile(r"\.metric\(\s*\"(?:weight|waist)\"\s*\)"),
+    "lab-category-read": re.compile(r"\blabMarkers\([^)]*\bcategory:"),
+    "newest-as-latest": re.compile(r"\"Latest(?: reading)?\"|, latest \\\("),
+}
+
+# Lines the newest-as-latest pattern does not constrain: string literals that name a metric which is
+# not body weight or waist. Today that is the steps chart's VoiceOver summary ("Steps chart, …,
+# latest … steps, …"), which predates ruling R41 and is drawn for the steps metric only.
+# ``test_r41_allowlist_entries_still_match`` fails when an entry here stops matching.
+NOT_A_BODY_SERIES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\"Steps chart, "),
+)
+
+# The pages that list one source's body-measurement series.
+SOURCE_PAGES = (
+    "Strand/Screens/MetricExplorerView.swift",
+    "Strand/Screens/LabBookView.swift",
+    "Strand/Screens/AppleHealthView.swift",
+)
+# Pattern -> the files it is scanned in (None: every app-target file).
+R41_SCOPE: dict[str, tuple[str, ...] | None] = {
+    "weight-metric-route": None,
+    "lab-category-read": None,
+    "newest-as-latest": SOURCE_PAGES,
+}
+# File -> (the R41 patterns it may contain, the reason, a spelling the file must ALSO contain).
+R41_ALLOWLIST: dict[str, tuple[frozenset[str], str, str | None]] = {
+    "Strand/Screens/LabBookView.swift":
+        (frozenset({"lab-category-read"}), "the Lab Book list: a labelled source page", None),
+    "Strand/AI/AICoach.swift":
+        (frozenset({"lab-category-read"}),
+         "the Coach roll-up of the OTHER markers; weight and waist come from the provider",
+         "bodyMeasurements"),
+}
+
+CORRECTION_SURFACES: dict[str, tuple[str, ...]] = {
+    "Strand/Liquid/LiquidTodayView.swift": ("liquidTodayWeightTile",),
+    "Strand/Screens/TodayView.swift": ("classicTodayWeightTile",),
+    "StrandiOS/Redesign/RedesignTodayView.swift": ("redesignTodayWeightRow",),
+    "Strand/Screens/SettingsView.swift": ("settingsWeightRow", "settingsWaistRow"),
+}
+
+SOURCE_PAGE_MEMBERS: dict[str, tuple[str, ...]] = {
+    "Strand/Screens/MetricExplorerView.swift": ("title", "newestLabel", "newestReadingLabel"),
+    "Strand/Screens/LabBookView.swift": ("labBookAccessibilityLabel",),
+    "Strand/Screens/AppleHealthView.swift": ("newestReadingLabel",),
+    "Strand/Screens/CompareView.swift": ("title",),
+}
+
+# Surfaces R41 names that carry no body weight and no waist today. A weight added to one of them
+# is a new readout of the current value and has to come from the provider, so it fails here first.
+NO_BODY_MEASUREMENT = (
+    "StrandiOSWidgets", "StrandiOSShared", "StrandiOS/Widgets",   # widgets and their shared payload
+    "StrandiOS/System/NOOPAppIntents.swift",                      # Siri and Shortcuts answers
+    "Strand/Data/CsvExport.swift", "Strand/Data/ShortcutHealthExport.swift",   # exports
+    "Strand/Data/HydrationStore.swift",                           # the hydration goal
+)
+BODY_MEASUREMENT_WORD = re.compile(
+    r"weightKg|waistCm|bodyMass|BodyMeasurement|estimateWeightKg|estimateWaistCm|\"(?:weight|waist)\"")
+
+
+def code(file: str) -> str:
+    """One file's code with comments blanked, as one string."""
+    return "\n".join(strip_comments((ROOT / file).read_text(encoding="utf-8")))
+
+
+def call_arguments(text: str, callee: str) -> list[str]:
+    """The argument text of every `callee(` call in `text`, parentheses balanced."""
+    found: list[str] = []
+    for match in re.finditer(r"(?<![\w.])" + re.escape(callee) + r"\(", text):
+        depth, i = 1, match.end()
+        while i < len(text) and depth:
+            depth += {"(": 1, ")": -1}.get(text[i], 0)
+            i += 1
+        found.append(text[match.end():i - 1])
+    return found
+
+
+def r41_matches(name: str, line: str) -> bool:
+    """True when `line` is an occurrence of the R41 pattern `name`."""
+    if not R41_PATTERNS[name].search(line):
+        return False
+    if name == "newest-as-latest" and any(other.search(line) for other in NOT_A_BODY_SERIES):
+        return False
+    return True
+
+
+def r41_occurrences() -> list[tuple[str, int, str, str]]:
+    found: list[tuple[str, int, str, str]] = []
+    for path in swift_files():
+        file = path.relative_to(ROOT).as_posix()
+        lines = strip_comments(path.read_text(encoding="utf-8"))
+        for name in R41_PATTERNS:
+            scope = R41_SCOPE[name]
+            if scope is not None and file not in scope:
+                continue
+            for number, line in enumerate(lines, start=1):
+                if r41_matches(name, line):
+                    found.append((file, number, name, line.strip()))
+    return found
+
+
+class OneNumberPerVariableScanTests(unittest.TestCase):
+    maxDiff = None
+
+    def test_r41_patterns_match_the_bypasses_the_audit_found(self) -> None:
+        samples = {
+            "weight-metric-route": ['sparkKey: "weight", route: .metric("weight"), opensScorecard: isWeighIn)',
+                                    'path.append(TabRoute.metric( "waist" ))'],
+            "lab-category-read": [
+                "let rows = (try? await store.labMarkers(deviceId: repo.deviceId, category: category.rawValue)) ?? []"],
+            "newest-as-latest": ['StatGridItem("Latest", value: latestValue?.value, unit: latestValue?.unit),',
+                                 'Text("Latest reading").strandOverline()',
+                                 r'.accessibilityLabel("\(displayName(for: key)), latest \(latestLabel(latest, key: key))")'],
+        }
+        # The five metric-page sites the pattern was written for, as they read before ruling R41.
+        samples["newest-as-latest"] += [
+            '("Latest", heroValue),',
+            'StatTile(label: "Latest", value: latestPoint.map { fmt($0.value) } ?? "—",',
+            'return ([String(localized: "Latest reading"), date] + (source.map { [$0] } ?? [])).joined(separator: " · ")',
+            # A body series worded like the steps summary is still an occurrence.
+            r'return String(localized: "Weight chart, \(points.count) readings, latest \(latest.value) kg")',
+        ]
+        self.assertEqual(set(samples), set(R41_PATTERNS))
+        for name, lines in samples.items():
+            for line in lines:
+                self.assertTrue(r41_matches(name, line), f"{name} must match: {line}")
+        for line in ['route: .metric("steps")', "case .metric(let key):", ".metricDetail(key: \"weight\")",
+                     'store.labMarkers(deviceId: id, markerKey: key)', 'private enum Aggregate { case latest, mean }',
+                     'String(localized: "latest")', 'StatGridItem("Lowest", value: low.value)',
+                     # The steps chart's VoiceOver summaries: one named metric, not a body measurement.
+                     r'return String(localized: "Steps chart, \(buckets.count) daily \(noun), latest \(latest.mean) steps, \(period)")',
+                     r'return String(localized: "Steps chart, \(buckets.count) weekly \(noun), latest \(latest.mean) average steps per observed day, \(period)")',
+                     r'return String(localized: "Steps chart, \(buckets.count) monthly \(noun), latest \(latest.mean) average steps per observed day, \(period)")']:
+            for name in R41_PATTERNS:
+                self.assertFalse(r41_matches(name, line), f"{name} must not match: {line}")
+
+    def test_no_surface_bypasses_the_resolver_or_calls_a_source_series_latest(self) -> None:
+        offenders = []
+        for file, number, name, line in r41_occurrences():
+            allowed = R41_ALLOWLIST.get(file)
+            if allowed and name in allowed[0] and (allowed[2] is None or allowed[2] in code(file)):
+                continue
+            offenders.append(f"{file}:{number}: [{name}] {line}")
+        self.assertEqual(
+            offenders, [],
+            "Ruling R41, one number per variable. weight-metric-route: take the tap target from "
+            "BodyMeasurementCorrection.route(for:policy:). lab-category-read: a roll-up that reads Lab "
+            "Book rows by category must leave weight and waist to BodyMeasurementProvider (AICoach.swift "
+            "is allowed the read only while it also names `bodyMeasurements`). newest-as-latest: word a "
+            "source page through BodyMeasurementSourcePage, which keeps \"Latest\" for every metric that "
+            "is not a body measurement and for the flag-off state:\n" + "\n".join(offenders))
+
+    def test_r41_allowlist_entries_still_match(self) -> None:
+        found = {(file, name) for file, _, name, _ in r41_occurrences()}
+        for file, (patterns, reason, _) in R41_ALLOWLIST.items():
+            self.assertTrue((ROOT / file).is_file(), f"{file} is missing ({reason})")
+            self.assertTrue(patterns <= set(R41_PATTERNS), f"{file} names an unknown pattern")
+            self.assertTrue(any((file, name) in found for name in patterns),
+                            f"{file} no longer contains a pattern it is allowed ({reason}); remove the entry")
+        for file in SOURCE_PAGES:
+            self.assertTrue((ROOT / file).is_file(), f"source page {file} is missing")
+        pages = "\n".join(code(file) for file in SOURCE_PAGES)
+        for other in NOT_A_BODY_SERIES:
+            self.assertTrue(any(other.search(line) and R41_PATTERNS["newest-as-latest"].search(line)
+                                for line in pages.splitlines()),
+                            f"NOT_A_BODY_SERIES entry {other.pattern} excuses no line any more; remove it")
+
+    def test_estimates_read_the_provider_and_nothing_else(self) -> None:
+        """Calories, fitness age, VO2max, Health readiness and the Test Centre prefill."""
+        required = {
+            "Strand/Data/IntelligenceEngine.swift": {"estimateWeightKg()": 3, "estimateWaistCm()": 2},
+            "Strand/App/AppModel.swift": {"estimateWeightKg()": 1},
+            "Strand/Screens/HealthView.swift": {"estimateWeightKg()": 1, "estimateWaistCm()": 2},
+            "Strand/Screens/TestCentreView.swift": {"estimateWeightKg()": 1},
+        }
+        for file, members in required.items():
+            text = code(file)
+            for member, count in members.items():
+                self.assertGreaterEqual(text.count("bodyMeasurements." + member), count,
+                                        f"{file} must read bodyMeasurements.{member} at least {count} time(s)")
+        constructions = [(path.relative_to(ROOT).as_posix(), arguments)
+                         for path in swift_files()
+                         for arguments in call_arguments(code(path.relative_to(ROOT).as_posix()), "UserProfile")]
+        self.assertEqual(sorted(file for file, _ in constructions),
+                         ["Strand/App/AppModel.swift", "Strand/Data/IntelligenceEngine.swift"],
+                         "a new UserProfile construction is a new reader of the current weight: pin it here")
+        for file, arguments in constructions:
+            self.assertRegex(arguments, r"^\s*weightKg:\s*bodyMeasurements\.estimateWeightKg\(\)\s*,",
+                             f"{file}: the estimates' UserProfile takes its weight from the provider")
+
+    def test_today_views_take_the_weight_from_the_provider(self) -> None:
+        required = {
+            "Strand/Liquid/LiquidTodayView.swift": ("displayWeightSeries(days: 91)", "provider.displayWeight(from:",
+                                                    "displayWeightValue("),
+            "Strand/Screens/TodayView.swift": ("displayWeightSeries(days: 91, trailingDays: 90)",
+                                               "bodyMeasurements.displayWeight(from:", "asOf: .latest",
+                                               "displayWeightValue("),
+            "StrandiOS/Redesign/RedesignTodayView.swift": ("dayModel.shownBodyWeight(provider)",
+                                                           "provider.displayWeightValue(dated)"),
+        }
+        for file, spellings in required.items():
+            text = code(file)
+            for spelling in spellings:
+                self.assertIn(spelling, text, f"{file} no longer reads {spelling}")
+
+    def test_settings_scorecard_and_reminder_read_the_provider(self) -> None:
+        required = {
+            "Strand/Screens/SettingsView.swift": ("bodyMeasurements.current(kind, consumer: .display)",
+                                                  "scorecardFlag.isEnabled"),
+            "Strand/Data/CutScorecardInputBuilder.swift": ("provider.series(",),
+            "Strand/Data/CutScorecardModel.swift": ("provider.series(.weight, consumer: .display)",),
+            "Strand/System/WeighInReminder.swift": ("provider.series(.weight, consumer: .display)",),
+        }
+        for file, spellings in required.items():
+            text = code(file)
+            for spelling in spellings:
+                self.assertIn(spelling, text, f"{file} no longer reads {spelling}")
+
+    def test_every_current_value_surface_binds_its_correction_route(self) -> None:
+        missing = []
+        for file, surfaces in CORRECTION_SURFACES.items():
+            text = code(file)
+            if not re.search(r"BodyMeasurementCorrection\s*\.\s*route\(", text):
+                missing.append(f"{file}: no BodyMeasurementCorrection.route(for:policy:) call")
+            for surface in surfaces:
+                if not re.search(r"\." + surface + r"\b", text):
+                    missing.append(f"{file}: does not name .{surface}")
+        self.assertEqual(
+            missing, [],
+            "Ruling R41: every place that shows the current weight or waist offers a way to correct it. "
+            "Each view takes its tap target from BodyMeasurementCorrection.route(for:policy:), naming its "
+            "own BodyMeasurementSurface case in the file:\n" + "\n".join(missing))
+
+    def test_scorecard_screen_hosts_the_weigh_in_sheet_and_the_history(self) -> None:
+        text = code("StrandiOS/Scorecard/ScorecardView.swift")
+        self.assertRegex(text, r"\bWeighInSheet\w*\(", "the scorecard screen is a correction route: it opens the sheet")
+        self.assertRegex(text, r"\bWeighInHistory\w*\(", "the scorecard screen links to the weigh-in history")
+
+    def test_source_pages_word_themselves_through_one_helper(self) -> None:
+        missing = [
+            f"{file}: BodyMeasurementSourcePage.{member}("
+            for file, members in SOURCE_PAGE_MEMBERS.items()
+            for member in members
+            if not re.search(r"BodyMeasurementSourcePage\s*\.\s*" + member + r"\(", code(file))
+        ]
+        self.assertEqual(
+            missing, [],
+            "Ruling R41: a page of one source's weight or waist series is labelled as that source and "
+            "never as \"latest\" or \"current\". These pages do not take their wording from "
+            "BodyMeasurementSourcePage:\n" + "\n".join(missing))
+
+    def test_coach_context_takes_weight_and_waist_from_the_provider(self) -> None:
+        coach = code("Strand/AI/AICoach.swift")
+        self.assertRegex(coach, r"\bbodyMeasurements\b",
+                         "AICoach.swift builds the context without the body-measurement provider")
+        wired = [path.relative_to(ROOT).as_posix() for path in swift_files()
+                 if re.search(r"coach\.bodyMeasurements\s*=|AICoachEngine\([^)]*bodyMeasurements:",
+                              code(path.relative_to(ROOT).as_posix()))]
+        self.assertTrue(wired, "no app-target file hands the shared BodyMeasurementProvider to the Coach engine "
+                               "(`coach.bodyMeasurements = …`); the engine would keep its flag-off text")
+
+    def test_weigh_in_sheet_offers_the_resolver_value(self) -> None:
+        constructions = [(path.relative_to(ROOT).as_posix(), arguments)
+                         for path in swift_files()
+                         for arguments in call_arguments(code(path.relative_to(ROOT).as_posix()), "WeighInSheetModel")]
+        self.assertTrue(constructions, "no WeighInSheetModel construction was found; the scan is broken")
+        without = [f"{file}: WeighInSheetModel({' '.join(arguments.split())})"
+                   for file, arguments in constructions if not re.search(r"\bprovider:", arguments)]
+        self.assertEqual(without, [], "the weigh-in sheet is built without the provider, so the value it offers "
+                                      "is its own newest Lab Book row and not the resolver's:\n" + "\n".join(without))
+        text = code("Strand/Data/CutScorecardModel.swift")
+        section = re.search(r"^final class WeighInSheetModel\b.*?(?=^(?:@MainActor\n)?(?:final class|struct|enum) )",
+                            text, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(section, "WeighInSheetModel was not found in CutScorecardModel.swift")
+        self.assertRegex(section.group(0), r"\.current\(",
+                         "WeighInSheetModel never asks the provider for the current value")
+
+    def test_surfaces_with_no_body_measurement_stay_without_one(self) -> None:
+        files: list[Path] = []
+        for name in NO_BODY_MEASUREMENT:
+            target = ROOT / name
+            self.assertTrue(target.exists(), f"{name} is missing; update NO_BODY_MEASUREMENT")
+            files.extend(sorted(target.rglob("*.swift")) if target.is_dir() else [target])
+        for root in sorted(ROOT.glob(WATCH_GLOB)):
+            files.extend(sorted(root.rglob("*.swift")))
+        self.assertGreater(len(files), 10, "the scan found implausibly few files")
+        offenders = [
+            f"{path.relative_to(ROOT).as_posix()}:{number}: {line.strip()}"
+            for path in files
+            for number, line in enumerate(strip_comments(path.read_text(encoding="utf-8")), start=1)
+            if BODY_MEASUREMENT_WORD.search(line)
+        ]
+        self.assertEqual(
+            offenders, [],
+            "Widgets, the watch, Siri and Shortcuts answers, the exports and the hydration goal carry no "
+            "body weight or waist. One added here is a new readout of the current value: take it from "
+            "BodyMeasurementProvider, add a test for the surface to OneNumberPerVariableTests.swift, and "
+            "then remove the file from NO_BODY_MEASUREMENT:\n" + "\n".join(offenders))
+
+
 if __name__ == "__main__":
     unittest.main()

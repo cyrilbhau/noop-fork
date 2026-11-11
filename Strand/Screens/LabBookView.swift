@@ -31,6 +31,10 @@ import WhoopStore
 struct LabBookView: View {
     @EnvironmentObject var repo: Repository
     @EnvironmentObject var live: LiveState
+    /// Ruling R41: the Weight and Waist cards list one source's readings, so with the scorecard
+    /// flag on their VoiceOver label does not call the newest one "latest". Observed, so the label
+    /// follows the flag.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
 
     /// All readings, grouped + ordered for display. Loaded off the store on appear/refresh.
     @State private var markers: [LabMarkerRow] = []
@@ -404,7 +408,9 @@ struct LabBookView: View {
         // opening a marker's detail feels physical (replaces the flat .plain style).
         .buttonStyle(LiquidPressStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(displayName(for: key)), latest \(latestLabel(latest, key: key)), \(series.count) readings")
+        .accessibilityLabel(Text(verbatim: BodyMeasurementSourcePage.labBookAccessibilityLabel(
+            name: displayName(for: key), value: latestLabel(latest, key: key), readings: series.count, key: key,
+            policy: scorecardFlag.displayPolicy)))
     }
 
     // MARK: - Disclaimer (always visible footnote + link)

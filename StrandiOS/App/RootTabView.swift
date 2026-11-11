@@ -32,6 +32,7 @@ struct RootTabView: View {
     let homeScreenQuickActionsEnabled: Bool
 
     @EnvironmentObject private var repo: Repository
+    @EnvironmentObject private var profile: ProfileStore
     @EnvironmentObject private var coach: AICoachEngine
     @Environment(\.scenePhase) private var scenePhase
     /// Cross-screen navigation requests (e.g. Live → "Manage devices"). Devices isn't a tab, so a request
@@ -109,6 +110,22 @@ struct RootTabView: View {
             tabPaths[tag] = NavigationPath()
         } else {
             scrollTop[tag] += 1
+        }
+    }
+
+    /// Stage 1 weekly weigh-in reminder, from the scene-phase `.active` handler. Does nothing at all
+    /// unless the scorecard flag and the reminder switch are both on: no task, no provider, no store
+    /// read and no call to the notification centre. With both on, the newest weigh-in day is read
+    /// afresh and `reconcileOnActive` brings the pending requests into line with it.
+    private func reconcileWeighInReminder() {
+        let reminder = WeighInReminder.live
+        guard reminder.reconcilesOnActive else { return }
+        let provider = BodyMeasurementProvider.live(repository: repo, profile: profile)
+        Task { @MainActor in
+            await reminder.reconcileOnActive {
+                await provider.refresh()
+                return WeighInReminder.latestWeighInDay(in: provider, today: Repository.localDayKey(Date()))
+            }
         }
     }
 
@@ -239,7 +256,10 @@ struct RootTabView: View {
             if !enabled && selectedTab == TabTag.coach { selectedTab = TabTag.today }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { coach.resumeChatGPTConnection() }
+            if phase == .active {
+                coach.resumeChatGPTConnection()
+                reconcileWeighInReminder()
+            }
         }
         // #1841: the same "Hide bar when scrolling" preference Android drives its own bar with. Here the
         // system owns the behaviour — iOS 26's tab bar MINIMISES to a pill on scroll down rather than

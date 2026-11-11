@@ -4,8 +4,10 @@ import WhoopStore
 
 /// Presentation resolved from an in-memory snapshot, shared by the redesigned Today rows and tiles.
 struct TodayCardReadout: Equatable {
-    enum Tint: Equatable { case hrv, heart, breath, lift, stress, recovery, sleep, temp, coach, muted }
-    enum Tap: Equatable { case route(TabRoute), stepSources, coachSheet, none }
+    /// `neutral` is the primary text colour: body weight has no semantic colour in the palette.
+    enum Tint: Equatable { case hrv, heart, breath, lift, stress, recovery, sleep, temp, coach, muted, neutral }
+    /// `scorecard` pushes the scorecard screen (iPhone redesign only).
+    enum Tap: Equatable { case route(TabRoute), stepSources, coachSheet, scorecard, none }
 
     var value: String? = nil
     var unit: String? = nil
@@ -16,6 +18,10 @@ struct TodayCardReadout: Equatable {
     var sparkKey: String? = nil
     /// Steps keeps its source-specific destination metadata while its current interaction opens a sheet.
     var route: TabRoute? = nil
+    /// The value is drawn in the tertiary colour: it is the last known reading, not a current one.
+    var valueIsDimmed = false
+    /// The tile draws its skeleton in place of this readout.
+    var isLoading = false
 }
 
 /// A value snapshot; resolving a card never performs a repository read or consults stored preferences.
@@ -45,6 +51,8 @@ struct TodayCardInputs {
     var fahrenheit = false
     var locale = AppLanguage.activeLocale
     var rollingStepsAverage: RollingStepsAverage? = nil
+    /// The scorecard card for today (stage 1 specification §10.1). Nil: not loaded yet.
+    var scorecard: CutScorecardCard? = nil
 }
 
 /// Owns a completed value snapshot independently of the legacy loader's incrementally published fields.
@@ -103,10 +111,39 @@ enum TodayCardResolver {
         }
     }
 
+    /// `scorecardEnabled` is the `noop.cutScorecardEnabled` flag. It defaults to off, so a call
+    /// site that does not pass it renders the list as if the scorecard card had never been added.
     static func renderList(raw: String, hydrationEnabled: Bool, coachEnabled: Bool,
-                           visibleKeyMetrics: [KeyMetric]?) -> [DashboardCard] {
+                           visibleKeyMetrics: [KeyMetric]?, scorecardEnabled: Bool = false) -> [DashboardCard] {
         selection(raw: raw, visibleKeyMetrics: visibleKeyMetrics).filter {
             ($0 != .hydration || hydrationEnabled) && ($0 != .coach || coachEnabled)
+                && ($0 != .scorecard || scorecardEnabled)
+        }
+    }
+
+    /// Why nothing renders, when a switched-off feature is the reason; nil when a card renders and
+    /// when no gate explains the empty list. Each gate that withholds a selected card is named, so
+    /// a selection emptied by a gate never reads as missing data.
+    static func gatedCaption(raw: String, hydrationEnabled: Bool, coachEnabled: Bool,
+                             scorecardEnabled: Bool, visibleKeyMetrics: [KeyMetric]?) -> String? {
+        guard renderList(raw: raw, hydrationEnabled: hydrationEnabled, coachEnabled: coachEnabled,
+                         visibleKeyMetrics: visibleKeyMetrics, scorecardEnabled: scorecardEnabled).isEmpty
+        else { return nil }
+        let selected = selection(raw: raw, visibleKeyMetrics: visibleKeyMetrics)
+        let hydrationOff = selected.contains(.hydration) && !hydrationEnabled
+        let coachOff = selected.contains(.coach) && !coachEnabled
+        let scorecardOff = selected.contains(.scorecard) && !scorecardEnabled
+        // One whole sentence per combination, so each can be translated as a sentence.
+        switch (hydrationOff, coachOff, scorecardOff) {
+        case (true, true, true):
+            return String(localized: "Nothing to show while Hydration, Coach and Scorecard are off.")
+        case (true, true, false): return String(localized: "Nothing to show while Hydration and Coach are off.")
+        case (true, false, true): return String(localized: "Nothing to show while Hydration and Scorecard are off.")
+        case (false, true, true): return String(localized: "Nothing to show while Coach and Scorecard are off.")
+        case (true, false, false): return String(localized: "Nothing to show while Hydration is off.")
+        case (false, true, false): return String(localized: "Nothing to show while Coach is off.")
+        case (false, false, true): return String(localized: "Nothing to show while Scorecard is off.")
+        case (false, false, false): return nil
         }
     }
 
@@ -128,6 +165,7 @@ enum TodayCardResolver {
         case .hydration: return String(localized: "Hydration")
         case .coupled: return String(localized: "Coupled view")
         case .coach: return String(localized: "Coach")
+        case .scorecard: return CutScorecardPresenter.cardTitle
         }
     }
 
@@ -280,6 +318,17 @@ enum TodayCardResolver {
         case .coach:
             return TodayCardReadout(caption: String(localized: "Ask about your recovery, strain, sleep and workouts, grounded in your own numbers."),
                                     tint: .coach, tap: .coachSheet)
+        case .scorecard:
+            // The scorecard is about this week: a past day shows a dash, as Hydration does.
+            guard inputs.isToday else {
+                return TodayCardReadout(caption: CutScorecardPresenter.pastDayCard().caption, tint: .neutral)
+            }
+            guard let card = inputs.scorecard else {
+                return TodayCardReadout(caption: String(localized: "No data"), tint: .neutral, isLoading: true)
+            }
+            return TodayCardReadout(value: card.value, unit: card.unit, caption: card.caption, tint: .neutral,
+                                    tap: card.opensScorecard ? .scorecard : .none,
+                                    valueIsDimmed: card.isDimmed, isLoading: card.status == .loading)
         case .hrv, .restingHr, .respiratory, .steps, .bloodOxygen, .skinTemp, .calories:
             preconditionFailure("Every twin is resolved before the card-only cases")
         }

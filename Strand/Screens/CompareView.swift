@@ -124,6 +124,11 @@ struct CompareView: View {
     @AppStorage(UnitPrefs.effortScaleKey) private var effortScaleRaw = EffortScale.hundred.rawValue
     private var effortScale: EffortScale { UnitPrefs.resolveEffortScale(effortScaleRaw) }
 
+    /// Ruling R41: a charted weight or waist series is one source's history, so with the scorecard
+    /// flag on it is named by its source. Observed, so the names follow the flag; every other
+    /// series, and the flag-off state, keep the catalogue title.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+
     // Distinct, high-legibility series colors (avoid the recovery/strain ramps so
     // overlay lines read as categorical, not as a value gradient).
     private static let seriesPalette: [Color] = [
@@ -376,7 +381,7 @@ struct CompareView: View {
                             .font(StrandFont.subhead)
                             .foregroundStyle(StrandPalette.textTertiary)
                     } else {
-                        FlowChips(metrics: selected, colorFor: colorFor) { metric in
+                        FlowChips(metrics: selected, policy: scorecardFlag.displayPolicy, colorFor: colorFor) { metric in
                             remove(metric)
                         }
                     }
@@ -400,7 +405,8 @@ struct CompareView: View {
                             Button {
                                 toggle(metric)
                             } label: {
-                                Label(metric.title, systemImage: isOn ? "checkmark" : metric.icon)
+                                Label(metric.compareTitle(scorecardFlag.displayPolicy),
+                                      systemImage: isOn ? "checkmark" : metric.icon)
                             }
                             .disabled(!isOn && selected.count >= maxSelection)
                         }
@@ -459,7 +465,8 @@ struct CompareView: View {
             ) {
                 // The overlay is min–max NORMALIZED 0–1, so the Effort scale never touches the line shape;
                 // only the per-series hover read-outs convert (passed through to the tooltip). (#268)
-                OverlayChart(series: nonEmpty, effortScale: effortScale, height: NoopMetrics.chartHeight)
+                OverlayChart(series: nonEmpty, policy: scorecardFlag.displayPolicy, effortScale: effortScale,
+                             height: NoopMetrics.chartHeight)
             } footer: {
                 legend(nonEmpty)
             }
@@ -481,7 +488,7 @@ struct CompareView: View {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(s.color)
                         .frame(width: 14, height: 3)
-                    Text(s.metric.title)
+                    Text(s.metric.compareTitle(scorecardFlag.displayPolicy))
                         .font(StrandFont.subhead)
                         .foregroundStyle(StrandPalette.textPrimary)
                     Spacer()
@@ -492,7 +499,7 @@ struct CompareView: View {
                 }
                 .padding(.vertical, 7)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(s.metric.title), range \(s.metric.format(s.realMin, effortScale: effortScale)) to \(s.metric.format(s.realMax, effortScale: effortScale))")
+                .accessibilityLabel("\(s.metric.compareTitle(scorecardFlag.displayPolicy)), range \(s.metric.format(s.realMin, effortScale: effortScale)) to \(s.metric.format(s.realMax, effortScale: effortScale))")
                 if idx < series.count - 1 {
                     Divider().overlay(StrandPalette.hairline)
                 }
@@ -678,8 +685,17 @@ struct CompareView: View {
 // MARK: - Selected-metric chips (wrapping flow layout)
 
 /// Removable chips for the active selection, tinted to each series' color.
+private extension MetricDescriptor {
+    /// The name a compared series is shown under: the catalogue title, and for a weight or waist
+    /// series under the unified policy its source as well (ruling R41).
+    func compareTitle(_ policy: BodyMeasurementPolicy) -> String {
+        BodyMeasurementSourcePage.title(title, key: key, sourceLabel: sourceLabel, policy: policy)
+    }
+}
+
 private struct FlowChips: View {
     let metrics: [MetricDescriptor]
+    let policy: BodyMeasurementPolicy
     let colorFor: (MetricDescriptor) -> Color
     let onRemove: (MetricDescriptor) -> Void
 
@@ -691,7 +707,7 @@ private struct FlowChips: View {
                 let color = colorFor(metric)
                 HStack(spacing: 7) {
                     Circle().fill(color).frame(width: 8, height: 8)
-                    Text(metric.title)
+                    Text(metric.compareTitle(policy))
                         .font(StrandFont.subhead)
                         .foregroundStyle(StrandPalette.textPrimary)
                         .lineLimit(1)
@@ -704,7 +720,7 @@ private struct FlowChips: View {
                             .foregroundStyle(StrandPalette.textTertiary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Remove \(metric.title)")
+                    .accessibilityLabel("Remove \(metric.compareTitle(policy))")
                 }
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
@@ -726,6 +742,8 @@ private struct FlowChips: View {
 /// the nearest day.
 private struct OverlayChart: View {
     let series: [CompareSeries]
+    /// The policy the hover read-out names its series under.
+    let policy: BodyMeasurementPolicy
     /// Effort display scale (#268) — passed through to the hover tooltip's real-value read-outs. The
     /// plotted points stay min–max normalized 0–1, so the line shape is unaffected.
     var effortScale: EffortScale = .hundred
@@ -1010,6 +1028,7 @@ private struct OverlayChart: View {
                         MultiTooltip(
                             date: snap.date,
                             series: series,
+                            policy: policy,
                             values: dayValues,
                             effortScale: effortScale,
                             anchorX: cx,
@@ -1080,6 +1099,7 @@ private struct MultiTooltip: View {
     /// The hovered day, pre-parsed once by the chart's model (no per-frame parse).
     let date: Date
     let series: [CompareSeries]
+    let policy: BodyMeasurementPolicy
     /// Real values on the hovered day keyed by series id, precomputed in the chart's
     /// model. Replaces a per-frame linear `rows` scan per series.
     let values: [String: Double]
@@ -1109,7 +1129,7 @@ private struct MultiTooltip: View {
             ForEach(series) { s in
                 HStack(spacing: 7) {
                     Circle().fill(s.color).frame(width: 7, height: 7)
-                    Text(s.metric.title)
+                    Text(s.metric.compareTitle(policy))
                         .font(StrandFont.caption)
                         .foregroundStyle(StrandPalette.textSecondary)
                     Spacer(minLength: 12)

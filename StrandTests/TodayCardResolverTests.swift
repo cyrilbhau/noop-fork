@@ -276,4 +276,168 @@ final class TodayCardResolverTests: XCTestCase {
             XCTAssertFalse(TodayCardResolver.cardTitle(card).isEmpty, card.rawValue)
         }
     }
+
+    // MARK: - Scorecard entry card (stage 1 specification §10.1, §17 placement P1, frames A1, A2, P1.1, P1.2)
+    //
+    // Written before the implementation exists.
+    //
+    // API ASSUMED BY THESE TESTS
+    //
+    //     enum DashboardCard { ...; case scorecard }      // rawValue "scorecard"; a value card, not a shortcut;
+    //                                                     // absent from `defaultSelection`
+    //     extension DashboardCard {
+    //         /// True for `scorecard` only: classic Today, Liquid Today and macOS filter such a card out.
+    //         var isRedesignOnly: Bool { get }
+    //     }
+    //     TodayCardResolver.renderList(raw:hydrationEnabled:coachEnabled:visibleKeyMetrics:
+    //                                  scorecardEnabled: Bool = false)
+    //     TodayCardsEditorPresentation.availableCards(redesign: Bool, scorecardEnabled: Bool) -> [DashboardCard]
+    //         // what the editor lists: `DashboardCard.canonicalOrder`, without `scorecard` unless both are true
+    //     TodayCardInputs.scorecard: CutScorecardCard?    // nil: not loaded yet (the tile shows its skeleton)
+    //     TodayCardReadout.Tap.scorecard                  // pushes the scorecard screen
+    //
+    // `CutScorecardCard` is assumed at the top of CutScorecardPresenterTests.swift. Synthetic values only.
+
+    /// The card ids as they were before the scorecard card existed, in canonical order.
+    private let baselineCardIds = ["hrv", "restingHr", "respiratory", "steps", "stepsAverage30", "stress", "fitnessAge",
+                                   "vo2max", "vitality", "bloodOxygen", "skinTemp", "sleep", "calories", "hydration",
+                                   "coupled", "coach"]
+
+    private func scorecardCard(_ status: CutScorecardStatus = .verdict, value: String? = "97.6",
+                               caption: String? = "Change nothing", dimmed: Bool = false) -> CutScorecardCard {
+        CutScorecardCard(status: status, title: "Scorecard", value: value, unit: value == nil ? nil : "kg",
+                         caption: caption, isDimmed: dimmed, opensScorecard: true)
+    }
+
+    func testScorecardCardIsAValueCardWithAStableId() {
+        XCTAssertEqual(DashboardCard.scorecard.rawValue, "scorecard")
+        XCTAssertEqual(DashboardCard(rawValue: "scorecard"), .scorecard)
+        XCTAssertFalse(DashboardCard.scorecard.isShortcut, "a value card, not a shortcut card")
+        XCTAssertNil(TodayCardResolver.keyMetricTwin(for: .scorecard))
+        XCTAssertEqual(TodayCardResolver.cardTitle(.scorecard), "Scorecard")
+        XCTAssertEqual(DashboardCard.scorecard.title, "Scorecard")
+        XCTAssertEqual(DashboardCard.scorecard.subtitle, "Weight and this week's verdict", "frame P1.2")
+        XCTAssertFalse(DashboardCard.scorecard.icon.isEmpty)
+        XCTAssertTrue(DashboardCard.scorecard.isRedesignOnly)
+        XCTAssertEqual(DashboardCard.allCases.filter(\.isRedesignOnly), [.scorecard],
+                       "no existing card is taken away from classic or Liquid Today")
+    }
+
+    func testScorecardCardIsNotInTheDefaultSelection() {
+        XCTAssertFalse(DashboardCard.defaultSelection.contains(.scorecard))
+        XCTAssertEqual(DashboardCard.defaultSelection.map(\.rawValue),
+                       ["stress", "fitnessAge", "vitality", "hrv", "restingHr"], "the default set is unchanged")
+        XCTAssertEqual(DashboardCardPrefs.encode(DashboardCard.defaultSelection),
+                       "[\"stress\",\"fitnessAge\",\"vitality\",\"hrv\",\"restingHr\"]")
+        XCTAssertEqual(DashboardCardPrefs.decodeEnabled(""), DashboardCard.defaultSelection)
+        // A fresh install with the flag on still does not show it: the owner adds it.
+        for visible in [nil, KeyMetric.defaultOrder] as [[KeyMetric]?] {
+            XCTAssertFalse(TodayCardResolver.renderList(raw: "", hydrationEnabled: true, coachEnabled: true,
+                                                       visibleKeyMetrics: visible, scorecardEnabled: true)
+                .contains(.scorecard))
+        }
+    }
+
+    func testScorecardCardIsHiddenWhileTheFlagIsOff() {
+        let saved: [DashboardCard] = [.scorecard, .stress, .hydration, .coach, .hrv]
+        let raw = DashboardCardPrefs.encode(saved)
+        let withoutIt = DashboardCardPrefs.encode(saved.filter { $0 != .scorecard })
+        for hydration in [false, true] {
+            for coach in [false, true] {
+                for visible in [nil, [KeyMetric.hrv]] as [[KeyMetric]?] {
+                    let off = TodayCardResolver.renderList(raw: raw, hydrationEnabled: hydration, coachEnabled: coach,
+                                                           visibleKeyMetrics: visible, scorecardEnabled: false)
+                    XCTAssertFalse(off.contains(.scorecard))
+                    XCTAssertEqual(off, TodayCardResolver.renderList(raw: withoutIt, hydrationEnabled: hydration,
+                                                                     coachEnabled: coach, visibleKeyMetrics: visible),
+                                   "flag off: the list is the list as if the card had never been added")
+                    // The parameter defaults to off, so every existing call site is unchanged.
+                    XCTAssertEqual(TodayCardResolver.renderList(raw: raw, hydrationEnabled: hydration,
+                                                                coachEnabled: coach, visibleKeyMetrics: visible), off)
+                }
+            }
+        }
+        XCTAssertEqual(TodayCardResolver.renderList(raw: DashboardCardPrefs.encode([.scorecard]), hydrationEnabled: true,
+                                                   coachEnabled: true, visibleKeyMetrics: nil), [],
+                       "the only saved card, gated off: nothing renders, and no default set appears in its place")
+    }
+
+    func testScorecardCardCanBeAddedAndRemoved() {
+        let added = DashboardCard.defaultSelection + [.scorecard]
+        let raw = DashboardCardPrefs.encode(added)
+        XCTAssertEqual(DashboardCardPrefs.decodeEnabled(raw), added, "the saved selection round-trips with the card")
+        XCTAssertEqual(TodayCardResolver.renderList(raw: raw, hydrationEnabled: false, coachEnabled: false,
+                                                   visibleKeyMetrics: nil, scorecardEnabled: true), added)
+        // Its position is the owner's: first, if they put it first.
+        let first = DashboardCardPrefs.encode([.scorecard] + DashboardCard.defaultSelection)
+        XCTAssertEqual(TodayCardResolver.renderList(raw: first, hydrationEnabled: false, coachEnabled: false,
+                                                   visibleKeyMetrics: nil, scorecardEnabled: true).first, .scorecard)
+        // Removed again.
+        let removed = DashboardCardPrefs.encode(added.filter { $0 != .scorecard })
+        XCTAssertEqual(TodayCardResolver.renderList(raw: removed, hydrationEnabled: false, coachEnabled: false,
+                                                   visibleKeyMetrics: nil, scorecardEnabled: true),
+                       DashboardCard.defaultSelection)
+        // Like the other gated cards, a saved choice survives the flag going off and on again.
+        XCTAssertEqual(TodayCardResolver.selection(raw: raw, visibleKeyMetrics: nil), added)
+    }
+
+    func testFlagOffTheEditorsCardListIsByteIdenticalToTheBaseline() {
+        for redesign in [false, true] {
+            XCTAssertEqual(TodayCardsEditorPresentation.availableCards(redesign: redesign, scorecardEnabled: false)
+                .map(\.rawValue), baselineCardIds, "redesign \(redesign)")
+        }
+        XCTAssertEqual(TodayCardsEditorPresentation.availableCards(redesign: false, scorecardEnabled: true)
+            .map(\.rawValue), baselineCardIds, "classic and Liquid Today never offer it")
+        let offered = TodayCardsEditorPresentation.availableCards(redesign: true, scorecardEnabled: true)
+        XCTAssertEqual(offered.filter { $0 != .scorecard }.map(\.rawValue), baselineCardIds,
+                       "the existing cards keep their order")
+        XCTAssertEqual(offered.filter { $0 == .scorecard }.count, 1, "and the scorecard is offered once")
+        XCTAssertEqual(DashboardCard.allCases.filter { !$0.isRedesignOnly }.map(\.rawValue), baselineCardIds,
+                       "what classic and Liquid Today can render is the baseline list")
+        XCTAssertEqual(DashboardCard.canonicalOrder, DashboardCard.allCases)
+    }
+
+    func testScorecardCardReadoutIsTheCardsValueUnitAndCaption() {
+        var input = inputs()
+        input.scorecard = scorecardCard()
+        let tile = TodayCardResolver.readout(DashboardCard.scorecard, input)
+        XCTAssertEqual(tile.value, "97.6")
+        XCTAssertEqual(tile.unit, "kg")
+        XCTAssertEqual(tile.caption, "Change nothing")
+        XCTAssertEqual(tile.tap, .scorecard, "it taps through to the scorecard screen")
+        XCTAssertNil(tile.sparkKey)
+
+        input.scorecard = scorecardCard(.noCutPhase, value: nil, caption: "Set up your phase")
+        let empty = TodayCardResolver.readout(DashboardCard.scorecard, input)
+        XCTAssertNil(empty.value, "a dash, never zero")
+        XCTAssertNil(empty.unit)
+        XCTAssertEqual(empty.caption, "Set up your phase")
+        XCTAssertEqual(empty.tap, .scorecard)
+
+        input.scorecard = scorecardCard(.overdue, caption: "Last weigh-in Wed 5 Mar", dimmed: true)
+        let overdue = TodayCardResolver.readout(DashboardCard.scorecard, input)
+        XCTAssertEqual(overdue.value, "97.6", "the last weight still shows")
+        XCTAssertEqual(overdue.caption, "Last weigh-in Wed 5 Mar")
+    }
+
+    func testScorecardCardNotLoadedYetShowsNoValue() {
+        let input = inputs()
+        XCTAssertNil(input.scorecard, "a snapshot starts without a scorecard card")
+        let tile = TodayCardResolver.readout(DashboardCard.scorecard, input)
+        XCTAssertNil(tile.value, "nothing loaded is not a weight of zero")
+        XCTAssertNil(tile.unit)
+    }
+
+    func testScorecardCardForAPastDayIsShownForTodayOnly() {
+        var input = inputs()
+        input.scorecard = scorecardCard()
+        input.isToday = false
+        input.selectedDayKey = "2026-10-20"
+        let tile = TodayCardResolver.readout(DashboardCard.scorecard, input)
+        XCTAssertNil(tile.value, "today's weight is not shown against a past day")
+        XCTAssertNil(tile.unit)
+        XCTAssertEqual(tile.caption, "Shown for today only")
+        XCTAssertEqual(tile.tap, .none)
+        XCTAssertNil(tile.route)
+    }
 }
