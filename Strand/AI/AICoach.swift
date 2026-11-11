@@ -1247,7 +1247,8 @@ final class AICoachEngine: ObservableObject {
         var lines: [String] = []
 
         // 1. Strongest behaviour→outcome associations (EffectRanker over the journal × Charge).
-        let entries = await repo.journalEntries()
+        // Stage 3: supplement questions stay out of the Coach (§10.6.1); no list is the identity.
+        let entries = IntakeSettings.coachVisible(await repo.journalEntries())
         // Yes days and NO days, kept apart. A day with no journal row for the question lands in
         // neither, so an unanswered day is never counted as a No (BehaviorInsights.effect).
         var byBehaviour: [String: Set<String>] = [:]
