@@ -10,7 +10,15 @@ the repository root. Nothing was built or run for this document; it is a reading
 This file contains no personal measurements. Every number in an example belongs to the synthetic
 "Fixture Person" in §13, and every default in §6.3 was chosen for this document.
 
+Reconciled with the cross-stage check on 11 November 2026, in two passes: see §19 for what changed
+and rulings R44 to R48 in §18 for the changes of behaviour. Two rules of the workstream have their
+one home in this file: a manual weigh-in outranks a body scan within its week (§8.7, R44) and the
+protein floor is a whole number of grams (§9.2, R45). Android work is stopped by ruling R43; every mention of
+Kotlin below describes files already in the tree and orders no further Kotlin work.
+
 ## 1. Goal and scope
+
+Android: ruling R43 (§18) stops all Android work. Nothing in this section orders a Kotlin change.
 
 **Goal.** The owner records weight and waist once a week in under thirty seconds and sees a verdict
 derived only from their own fixed rules.
@@ -33,7 +41,15 @@ derived only from their own fixed rules.
 - Smart-scale pairing. Any change to the Apple Health read set (`readTypes` stays as it is).
 - Charts with horizontal bands, target lines or rules. Curves and fills only.
 - Rules for phases that are not a cut. A phase of any other kind produces no verdict (§7.2).
-- Android screens. Android receives the Kotlin twin of the pure function and the two backup keys only.
+- Diet breaks and deloads. They are events (stage 5 specification, the `dietBreak` and `deload`
+  kinds), never phases. A phase is only a long block. The scorecard keeps reporting during an event
+  (§7.2, ruling R46).
+- A target date, and any second weight goal. The one target weight is the active phase's
+  `targetWeightKg` (§9.2). A dated target on the timeline is a stage 6 checkpoint with no weight, and
+  a checkpoint that carries a weight is a waypoint (stage 6 specification; ruling R47).
+- Android, entirely (R43). The Kotlin twin of the pure function, its oracle test and the two backup
+  keys were written before that ruling; they stay in the tree as written, were never executed, and
+  are not maintained.
 - Any medical statement. The screen reports the owner's own numbers against the owner's own rules.
 - A migration. None is needed and none is added.
 
@@ -130,14 +146,16 @@ No Apple Health waist read exists anywhere in the tree.
 
 ### 4.4 Android twins of the shared pieces
 
+A record of what exists on the Kotlin side. Under R43 none of it is edited, compiled or run again.
+
 | Piece | Where | Stage 1 |
 |---|---|---|
 | Marker catalogue | `android/app/src/main/java/com/noop/analytics/MarkerCatalog.kt:102-105` | Unchanged; no new key |
 | Profile values | `android/app/src/main/java/com/noop/ui/SettingsScreen.kt:184` (`ProfileStore`) | Unchanged |
 | Newest-weight resolver for Health Connect, which writes the newest reading into the profile | `android/app/src/main/java/com/noop/analytics/ProfileWeightSync.kt:18-36`, `android/app/src/main/java/com/noop/ui/HealthConnectWeightSync.kt:25-31` | Unchanged. It is the precedent for §8.5: an external reading written through to `profile.weightKg`, which then travels in the backup |
 | Today weight tile | `android/app/src/main/java/com/noop/ui/TodayMetricsLogic.kt:107` | Unchanged |
-| Backup whitelist | `android/app/src/main/java/com/noop/data/BackupSettings.kt:50-76` | Two keys added (§9.3) |
-| Week and day helpers | `WeeklyDigest.kt:440`, `LocalDayWindows.kt:210`, `:308` | Reused by the Kotlin twin |
+| Backup whitelist | `android/app/src/main/java/com/noop/data/BackupSettings.kt:50-76` | The two keys of §9.3 were added before R43. No later key is added |
+| Week and day helpers | `WeeklyDigest.kt:440`, `LocalDayWindows.kt:210`, `:308` | Used by the Kotlin twin as written |
 
 ## 5. Final names
 
@@ -145,7 +163,11 @@ No Apple Health waist read exists anywhere in the tree.
 |---|---|---|
 | Pure function | `CutScorecard.evaluate(_:)` (confirmed) | `Packages/StrandAnalytics/Sources/StrandAnalytics/CutScorecard.swift` |
 | Its types | `CutScorecardInput`, `CutScorecardReading`, `CutScorecardLiftObservation`, `CutScorecardProteinDay`, `CutScorecardPhase`, `CutScorecardParameters`, `CutScorecardResult` and the output types in §6 | Same file. Top-level and prefixed, as `AdaptiveExpenditureDay` and `AdaptiveExpenditureEstimate` are |
-| Kotlin twin | `com.noop.analytics.CutScorecard` | `android/app/src/main/java/com/noop/analytics/CutScorecard.kt` |
+| Kotlin twin | `com.noop.analytics.CutScorecard`. Written before R43, never executed, not maintained | `android/app/src/main/java/com/noop/analytics/CutScorecard.kt` |
+| Protein floor, whole grams | `CutScorecardSettings.isWholeGramProteinFloor(_:)`, `CutScorecardSettings.proteinFloorMaximumGrams`, `CutScorecardSettings.normalizedProteinFloorGrams(_:)`, `CutScorecardSettings.proteinFloorWholeGrams` (§9.2, R45) | `Strand/Data/CutScorecardSettings.swift` |
+| Weigh-in outranks scan | `BodyMeasurementResolver.withoutOutrankedScans(_:asOf:)`, `BodyMeasurementResolver.weighInSource` (§8.7, R44) | `Strand/Data/BodyMeasurementResolver.swift` |
+| Debug demo | `ScorecardDemo`; its names are the existing unprefixed set in that file, and any name added later takes the prefix `scorecard-` | `StrandiOS/Scorecard/ScorecardDemo.swift` |
+| Scan source id, read only | `MarkerCatalog.scanSource` (`"body-scan"`), declared by stage 4 | `Packages/StrandImport/Sources/StrandImport/MarkerCatalog.swift` |
 | Resolver | `BodyMeasurementResolver` (pure), `BodyMeasurementProvider` (repository-backed) | `Strand/Data/BodyMeasurementResolver.swift`, `Strand/Data/BodyMeasurementProvider.swift` |
 | Write funnel | `WeighInStore` | `Strand/Data/WeighInStore.swift` |
 | Settings | `CutScorecardSettings` | `Strand/Data/CutScorecardSettings.swift` |
@@ -473,7 +495,7 @@ Plausibility ranges (a 600 kg weight) are not this function's job. The entry she
 
 1. Validate as in §6.5. Drop and count invalid items.
 2. **Quantize.** `quantize(x) = sign(x) × floor(|x| × 1000 + 0.5) ÷ 1000`. Written out because Swift's
-   `rounded()` and the Kotlin rounding functions disagree on halves; the twin implements this
+   `rounded()` and other languages' rounding functions disagree on halves; any port implements this
    expression, not a library call. Every threshold comparison below compares quantized values.
 3. **Weeks.** `weekStart(day)` is the Monday of the day's week. `weeksBetween(a, b)` is the whole
    number of weeks from `weekStart(a)` to `weekStart(b)`.
@@ -488,6 +510,11 @@ Plausibility ranges (a 600 kg weight) are not this function's job. The entry she
    without a delete; and the current week's point then equals the resolver's "current weight" by
    construction, so the two cannot disagree. A mean would be a number that appears nowhere else in
    the app.
+
+   The function applies this rule to the readings it is given. Which readings it is given is the
+   resolver's decision: in a week that holds both a manual weigh-in and a body-scan weight row, the
+   resolver's series leaves the scan row out (§8.7, ruling R44), so the week's point is the
+   latest manual weigh-in. `CutScorecardReading` carries no source and the function is unchanged.
 5. **`weeks`.** One entry per Monday week from the earliest week holding any valid weight or waist
    reading to the week containing `today`, with no gaps. A week with no weigh-in has `weightKg == nil`.
    It is never filled, carried forward or interpolated.
@@ -502,6 +529,10 @@ Plausibility ranges (a 600 kg weight) are not this function's job. The entry she
   protein signals are still computed. The rate-band signal is `unknown(.noActivePhase)`, the
   projection is `.noActivePhase`, all three rules are `unknown(.noActivePhase)` and the verdict is
   `insufficientData(.noActivePhase)`.
+- **A diet break or a deload is not a phase** (ruling R46). It is a stage 5 event. The function is
+  given the same active cut phase throughout it and reports as in any other week; nothing in the
+  input says an event is running, and no rule, window or count pauses for it. The event's note is
+  shown under the verdict by stage 5 (its `CutScorecardPresentation.eventNote`), not by this stage.
 - `today < phase.startDay`: identical, except the verdict reason is `.phaseNotStarted`.
 - Otherwise the **domain** is every week from `weekStart(phase.startDay)` on. `inPhase` marks them.
   Readings from before the domain appear in `weeks` and nowhere else. The first in-phase weigh-in is
@@ -666,7 +697,8 @@ Why this order and these lines:
 is always in `rules`.
 
 Reaching the phase target does not alter the verdict. The rules are the owner's and the function does
-not add a fourth. The projection reports `targetReached` and the screen leads with it (§10.2).
+not add a fourth. The projection runs to the phase's `targetWeightKg` and to nothing else: a stage 6
+waypoint weight never reaches this function (ruling R47). The projection reports `targetReached` and the screen leads with it (§10.2).
 
 ### 7.8 Projection
 
@@ -736,18 +768,34 @@ enum BodyMeasurementResolver {
     /// The one place a flag state and a consumer become a policy.
     static func policy(flagEnabled: Bool, consumer: BodyMeasurementConsumer) -> BodyMeasurementPolicy
     /// Every dated reading the policy admits, ascending, one per (day, source rule below).
+    /// `asOf` nil: every candidate. `asOf` set: candidates dated after it are left out before any
+    /// rule of §8.2 runs, so a later reading can never change which earlier one is admitted.
     static func series(_ kind: BodyMeasurementKind, candidates: BodyMeasurementCandidates,
-                       policy: BodyMeasurementPolicy) -> [DatedBodyMeasurement]
+                       policy: BodyMeasurementPolicy, asOf: String? = nil) -> [DatedBodyMeasurement]
     /// The current value as of `day`. Nil only for a waist that has never been set anywhere.
     static func resolve(_ kind: BodyMeasurementKind, asOf day: String,
                         candidates: BodyMeasurementCandidates,
                         policy: BodyMeasurementPolicy) -> ResolvedBodyMeasurement?
+    /// The row's value in kg or cm, or nil when its unit or value is not usable (§8.2, table).
+    static func normalizedValue(of row: LabMarkerRow, as kind: BodyMeasurementKind) -> Double?
+
+    /// R44 (§8.7). The source the weigh-in sheet and the Lab Book editor write.
+    static let weighInSource = "manual"
+    /// R44 (§8.7). `rows` in their given order, without each `weight` or `waist` row whose source is
+    /// `MarkerCatalog.scanSource` and whose Monday week also holds a usable row of the same marker
+    /// key with source `weighInSource`. Only rows dated on or before `asOf` are judged or can
+    /// outrank; nil judges every row. Every other row is returned untouched.
+    static func withoutOutrankedScans(_ rows: [LabMarkerRow], asOf: String? = nil) -> [LabMarkerRow]
 }
 ```
 
-`resolve` is `series(...).last(where: day <= asOf)`, else the profile value. The scorecard's weekly
-points are built from the same `series`. So the scorecard's `currentWeightKg`, the Today tile and the
-estimates' input are three reads of one list.
+`resolve(kind, asOf: day, …)` is `series(kind, …, asOf: day).last`, else the profile value. The
+scorecard's weekly points are built from the same list: `BodyMeasurementProvider.series(_:consumer:asOf:)`
+(its `asOf` also defaults to nil) forwards to the function above, and `CutScorecardInputBuilder`
+passes `asOf: today`. So the scorecard's `currentWeightKg`, the Today tile and the estimates' input
+are three reads of one list. Under the two legacy policies `asOf` only drops the later days, which
+is what `last(where: day <= asOf)` did before the parameter existed, so their results are unchanged.
+`withoutOutrankedScans` and the `asOf` parameter arrive with work package 1-11 (§8.7, §14).
 
 ### 8.2 Precedence (the `unified` policy)
 
@@ -758,21 +806,27 @@ That is **changed** to:
    came from.
 2. On the same day, **Lab Book beats Apple Health**. Within Lab Book on the same day, the greatest
    `takenAt` wins, then the greatest `id`.
-3. With no dated reading, the **profile value**: source `profile` when the profile key was written,
+3. **Within one Monday week a manual weigh-in outranks a body scan** (ruling R44). Under the
+   `unified` policy the Lab Book rows pass through
+   `withoutOutrankedScans(candidates.labBook, asOf: asOf)` before rules 1 and 2 run. §8.7 is the
+   whole of the rule: what a week, a manual row and a scan are, the function, its two callers and
+   what follows from it.
+4. With no dated reading, the **profile value**: source `profile` when the profile key was written,
    `profileDefault` when it never was (the weight default of 75 at `Profile.swift:125`). A waist of 0
    is "not set" and resolves to nil.
 
 Why the change: strict source precedence would let a months-old manual reading hide a newer one from
 another source, and the Apple Health page (`AppleHealthView.swift:530`) would then show a different
 "latest weight" from Today. Newest-wins is also what Android's existing resolver does
-(`ProfileWeightSync.kt:36`). For the owner today the two rules give the same answer, because the
-Health read set excludes body mass and the Apple series does not grow.
+(`ProfileWeightSync.kt:36`). In this build the two rules give the same answer wherever no Apple
+Health weight is newer than a Lab Book one, because the Health read set excludes body mass and the
+Apple series does not grow.
 
 Candidates and exclusions:
 
 | Store | Admitted | Notes |
 |---|---|---|
-| `labMarker` `weight` / `waist`, any `source` | Yes | Unit normalised: `kg` as is; `lb` or `lbs` divided by `UnitFormatter.poundsPerKilogram`; `cm` as is; `in` multiplied by `UnitFormatter.centimetersPerInch`; unit comparison is case-insensitive after trimming. A row with any other unit, a nil `value`, or a non-finite or non-positive value is ignored |
+| `labMarker` `weight` / `waist`, any `source` | Yes, subject to rule 3 for `body-scan` rows | Unit normalised: `kg` as is; `lb` or `lbs` divided by `UnitFormatter.poundsPerKilogram`; `cm` as is; `in` multiplied by `UnitFormatter.centimetersPerInch`; unit comparison is case-insensitive after trimming. A row with any other unit, a nil `value`, or a non-finite or non-positive value is ignored |
 | `appleDaily.weightKg` and `metricSeries` `weight` under `apple-health` | Yes, weight only | Both are written from the same imports; merged per day, the daily column winning |
 | `metricSeries` `weight` under `nutrition-csv` | **No** | The unit is not recorded (`NutritionCsvImport.swift:23-24`) |
 | `metricSeries` under `lab-book` | **No** | It is a projection of the `labMarker` rows already admitted, and reading both would count one reading twice |
@@ -828,7 +882,8 @@ Why keep the mirror when no reader uses it:
 - `profile.weightKg` and `profile.waistCm` are in the backup whitelist on both platforms
   (`BackupSettings.swift:52`, `:54`; `BackupSettings.kt:53`, `:55`). The mirror keeps a backup's
   settings and its database rows in agreement.
-- Android's analytics read the profile value. A database restored there computes from the same weight.
+- Android's analytics, as they stand in the tree, read the profile value. A backup restored there
+  would compute from the same weight. (A description of existing code; R43 orders no Android work.)
 - If the flag is switched off, the legacy policies fall back to a profile value that is the last
   weigh-in, not a stale figure.
 - There is precedent on both platforms: the derived age mirrored under the legacy key
@@ -856,7 +911,92 @@ Two tests, because counting call sites alone is the weak form of this check.
    Book weight, an older Apple Health weight and a different profile value, it asserts that the
    Today tile input, the `UserProfile` handed to the estimates, the Health readiness input and
    `CutScorecardResult.currentWeightKg` are the same number, and the same again for waist. Then it
-   deletes the Lab Book row and asserts all four move together.
+   deletes the Lab Book row and asserts all four move together. A third pass adds a `body-scan`
+   weight row later in the same week as a manual weigh-in and asserts that none of the four moves
+   (R44).
+
+For the rule of §8.7 the same pair applies: the source scan
+`test_outranking_rule_has_two_callers` (§12.4) fixes where the function may be called, and the
+behavioural tests above and in §12.3 assert what the two callers produce.
+
+### 8.7 Ruling R44: a manual weigh-in outranks a scan within its week
+
+This section is the one specification of the rule in the workstream. The resolver is this stage's,
+so the rule is a ruling on the resolver. No other specification restates it: the stage 4
+specification refers here and keeps only the scan sheet's own notice and the variants and tests
+that exercise the rule with scans.
+
+A scan's total mass comes from another instrument than the bathroom scale, clothed and later in the
+day. If it could stand for a week that also has a morning weigh-in, it would move the fitted rate
+and could change the verdict. So:
+
+> Within one Monday week, a usable manual row outranks every body-scan row of the same marker key
+> in that week, for the weekly point, the current value, the profile mirror and the estimates. In a
+> week with no usable manual row, a body-scan row is an ordinary reading.
+
+Exactly:
+
+- **Week** is `CutScorecard.weekStart(containing: row.day)`, the Monday rule of §7 (the step 0
+  `CanonicalDay` rule is pinned to it by test). A row whose `day` is not a canonical day key belongs
+  to no week: it outranks nothing and is not outranked.
+- **Manual** is a row whose `source` equals `BodyMeasurementResolver.weighInSource` (`"manual"`,
+  what `WeighInStore` and the Lab Book editor write). **Scan** is a row whose `source` equals
+  `MarkerCatalog.scanSource` (`"body-scan"`, declared by stage 4's catalogue package). The resolver
+  file imports `StrandImport` and names the scan source only through that constant; it never spells
+  the literal.
+- **Any other source is neither.** A row imported from a markers CSV (source `lab-csv`), an Apple
+  Health value and every other source are not outranked and outrank nothing. In particular **a scan
+  imported by CSV is not outranked**: it competes with a manual weigh-in by instant, under rules 1
+  and 2 of §8.2, as any other reading does (S24).
+- **Usable** is `normalizedValue(of: row, as: kind) != nil`. A manual row in an unknown unit, or
+  with no value, does not outrank a scan.
+- **Kinds.** The rule runs per marker key, for `weight` and for `waist`, the two keys the resolver
+  reads. A manual weight does not outrank a scan's waist, nor the reverse. Rows of any other marker
+  key pass through untouched.
+- **As-of day.** Only rows dated on or before the as-of day are judged, and only such rows can
+  outrank. **A row dated after the as-of day never suppresses**, and is itself returned untouched.
+  So a look-back at a past day returns what was true on that day, and adding a reading later never
+  changes it. With `asOf` nil every row is judged.
+- **Order and identity.** The function returns the surviving rows in the order it was given them.
+  It copies, changes and deletes nothing: there is still one stored number per reading (R41), and
+  the scan row stays listed in the history (§10.4) and in the body record, as a dated figure.
+- **Device ids.** The function looks at `markerKey`, `day`, `source`, `unit` and `value` only. Rows
+  under different device ids in the given list are judged together, which is what the candidates
+  hold after the Lab Book ownership change.
+
+The function is the one in §8.1, in `Strand/Data/BodyMeasurementResolver.swift`. It has exactly two
+callers, and a source scan keeps it at two (§12.4):
+
+1. **`BodyMeasurementResolver.series`**, `unified` policy only, both kinds. The Lab Book fold
+   iterates `withoutOutrankedScans(candidates.labBook, asOf: asOf)` in place of
+   `candidates.labBook`, and then drops what is dated after `asOf`. `resolve`, the provider's
+   snapshot, the profile mirror, the estimates' input and the scorecard's weekly points are all
+   built from `series`, so they follow from one list. `BodyMeasurementProvider.series(_:consumer:asOf:)`
+   only forwards the parameter, and `CutScorecardInputBuilder` passes `asOf: today`.
+2. **`CutScorecardPresenter.history`**, which lists stored rows rather than the series and so needs
+   the rule a second time. It gains one parameter, `today: String`, given by the model from the same
+   `today` it hands the builder. The loop that marks each week's representative skips an entry whose
+   weight row is not in `withoutOutrankedScans(weights, asOf: today)`. The entry is still listed,
+   without the mark.
+
+What follows, stated so that nobody finds it later:
+
+- A scan on Wednesday and a manual weigh-in on the Monday of the same week: the current weight on
+  Wednesday is Monday's weigh-in, although the scan is newer. That is the rule, not a defect.
+- A scan in a week with no usable manual row is that week's point and, while it is the newest
+  reading, the current weight.
+- Entering a manual weigh-in later in a scan's week moves the week's point and the current value
+  from the scan to the weigh-in from that day on. Looking back at a day before the weigh-in still
+  returns the scan. Deleting the weigh-in moves them back.
+- A scan on Sunday and a manual weigh-in on the Monday after are in different weeks; both count.
+- The rule is not gated by stage 4's flag: a `body-scan` row can exist only if that flag was once
+  on, and it keeps being read after the flag goes off. With `noop.cutScorecardEnabled` off the
+  legacy policies never read Lab Book and the history screen is not reachable, so nothing changes.
+- The pure function `CutScorecard.evaluate`, its Kotlin twin and every stored row are unchanged.
+
+Where it is built: work package 1-11 (§14), in stage 4's serialised step, after stage 4's catalogue
+package has declared `MarkerCatalog.scanSource` and before stage 4's scan writer exists. The cases
+are in §13.5, the tests in §12.3 and §12.4, the faults in §12.6 (F29 to F35, F40 to F43).
 
 ## 9. Storage
 
@@ -914,10 +1054,116 @@ today. The app passes a `CutScorecardPhase` to `evaluate` only when the active p
 otherwise it passes nil. `targetWeightKg` is omitted when there is no target. Stage 1's interface
 edits the active phase and can start a new one; it does not edit past phases.
 
+**What a phase is, and is not** (rulings R46 and R47).
+
+- A phase is a long block: a cut, or a stretch of some other kind that the owner wants the scorecard
+  to stay silent for. A **diet break or a deload is never entered as a phase.** It is a stage 5 event
+  (`personalEvents.items`, kinds `dietBreak` and `deload`; that specification owns its storage and
+  its screens). Starting a phase of kind `other` for a two-week break would silence the verdict and,
+  when the cut resumed as a new phase, reset the baseline of every rule (§7.2); an event does
+  neither. The phase sheet says so beside the kind control (§10.5).
+- `targetWeightKg` in the active phase is **the only target weight in the app.** The projection
+  (§7.8), the scorecard's projection row, stage 2's packet and stage 6's timeline all read it from
+  here. A phase element has no target date and no end date, and gains none. A date the owner wants
+  to aim for is a stage 6 checkpoint of category `targetDate`, with no weight, attached to the
+  phase by `phaseStartDay`. A stage 6 checkpoint that carries a weight (`timeline.checkpoints`,
+  category `weightWaypoint`, field `waypointWeightKg`) is a **waypoint**: it is
+  labelled "waypoint", never "target", it is not read by anything in this stage, and stage 6's sheet
+  refuses a waypoint equal to or beyond the phase target with a link to the phase sheet of §10.5.
+
+The settings type, as the tests use it:
+
+```swift
+struct CutScorecardStoredPhase: Equatable, Codable {
+    enum Kind: String, Codable { case cut, other }
+    var kind: Kind
+    var name: String
+    var startDay: String                 // "yyyy-MM-dd"
+    var targetWeightKg: Double?          // nil: the key is omitted from the stored JSON
+    var rateLowPercentPerWeek: Double
+    var rateHighPercentPerWeek: Double
+    init(kind: Kind, name: String, startDay: String, targetWeightKg: Double?,
+         rateLowPercentPerWeek: Double, rateHighPercentPerWeek: Double)
+}
+
+final class CutScorecardSettings {
+    static let enabledKey = "noop.cutScorecardEnabled"
+    static let phasesKey = "cutScorecard.phases"
+    static let rulesKey = "cutScorecard.rules"
+    static let reminderEnabledKey = "cutScorecard.reminder.enabled"
+    static let reminderWeekdayKey = "cutScorecard.reminder.weekday"
+    static let reminderMinuteOfDayKey = "cutScorecard.reminder.minuteOfDay"
+    static let storedVersion = 1
+
+    init(defaults: UserDefaults = .standard)
+
+    var isEnabled: Bool { get set }
+    var reminderEnabled: Bool { get set }
+    var reminderWeekday: Int { get set }
+    var reminderMinuteOfDay: Int { get set }
+
+    var phases: [CutScorecardStoredPhase] { get set }     // ascending by startDay; unreadable: []
+    var phasesNeedAttention: Bool { get }
+    @discardableResult func discardUnreadablePhases() -> Bool
+    func activePhase(on today: String) -> CutScorecardStoredPhase?
+    func evaluationPhase(on today: String) -> CutScorecardPhase?   // nil unless the active phase is a cut
+
+    var parameters: CutScorecardParameters { get set }    // the only reader and writer of cutScorecard.rules
+    var rulesNeedAttention: Bool { get }
+
+    /// R45. The greatest floor an editor accepts, in grams.
+    static let proteinFloorMaximumGrams = 100_000
+    /// R45. The one rule for a floor an editor may save: finite, at least 1, at most
+    /// `proteinFloorMaximumGrams`, and equal to its own rounded value.
+    static func isWholeGramProteinFloor(_ grams: Double) -> Bool
+    /// R45. The whole-gram form of a stored protein floor.
+    static func normalizedProteinFloorGrams(_ grams: Double?) -> Double?
+    /// R45. The floor as every surface prints it; nil when no floor is set.
+    var proteinFloorWholeGrams: Int? { get }
+}
+```
+
 `cutScorecard.rules` is an object whose keys are the property names of `CutScorecardParameters`, plus
 `"v":1`. `proteinFloorGrams` is omitted when unset. A missing key takes the generic default. An
 object that fails to parse, or that fails the validation in §6.5, is treated as absent and the screen
 shows the "rules need attention" state rather than a verdict.
+
+**The protein floor: one home, one rule, one printed form** (ruling R45). This is the one
+specification of the rule in the workstream. The phase-and-rules sheet of §10.5 is the first editor
+of the floor; stage 3's intake settings are the second, and they write the same stored value through
+the same setter and add no rule of their own.
+
+- **One home.** The floor is `proteinFloorGrams` inside `cutScorecard.rules` and nowhere else. No
+  other defaults key, table or file holds a protein floor. `CutScorecardSettings.parameters` is the
+  only getter and the only setter. Stage 3's intake settings read and write the floor through that
+  property and store nothing of their own; stage 2's packet reads the same property.
+- **One rule for what may be saved.** `isWholeGramProteinFloor(g)` is true when `g` is finite,
+  `1 <= g <= 100000` and `g == g.rounded()`. Both editors call this one function (or, where a
+  package cannot see it, a predicate that a test asserts equal to it over the cases of §12.3) and
+  use nothing else to decide: a whole-number keypad, and an entry for which the function is false
+  marks the field invalid and disables "Save". Neither editor rounds what the owner typed. An empty
+  field means no floor and is saved as nil. So `100` is accepted; `99.5`, `0`, `-5` and `100001`
+  are refused.
+- **Stored and read whole.** `normalizedProteinFloorGrams(x)` returns nil for nil; for a finite
+  `x > 0` it returns `max(1, x.rounded(.toNearestOrAwayFromZero))`; any other value (zero, negative,
+  NaN, infinite) is returned unchanged, so the validation of §6.5 still rejects it and the rules
+  still "need attention". The `parameters` setter applies it before writing, so the stored JSON
+  number is always whole (`100`, written by the encoder as `100` or `100.0`; both read back equal)
+  whichever caller wrote it. The `parameters` getter applies it after reading, so a fractional floor
+  stored before this ruling reads as the nearest whole gram everywhere; the stored string is not
+  rewritten by a read (R30) and becomes whole at the next save. The type stays `Double?` in
+  `CutScorecardParameters`, so the pure function and its signature are unchanged.
+- **No reader ever sees a fraction**, so no surface has a "needs whole grams" state and none is
+  specified anywhere: a floor stored as a fraction before this ruling is, for every reader and both
+  editors, the nearest whole gram. The only stored floor that an editor would refuse is one above
+  the maximum, which no editor can write; a settings string holding one (a hand-edited backup) reads
+  as stored, and each editor opens with the field marked until a floor in range is typed.
+- **One printed form.** `proteinFloorWholeGrams` is
+  `parameters.proteinFloorGrams.flatMap { Int(exactly: $0) }`: the whole number, or nil when no floor
+  is set. Every surface that prints the floor prints that integer followed by `g` with no decimal
+  places: the rules sheet, the scorecard's protein row, stage 2's packet line (`floor 100 g`) and
+  stage 3's card, ring and widget. Because the value is whole, rounding it up, down or to nearest
+  gives the same number, so no two surfaces can print different floors.
 
 Both strings are written with sorted keys so that the same settings give the same bytes.
 
@@ -925,16 +1171,26 @@ Both strings are written with sorted keys so that the same settings give the sam
 
 | Canonical key | JSON kind | Swift storage key | Joins the whitelist |
 |---|---|---|---|
-| `cutScorecard.phases` | String | `cutScorecard.phases` | **Yes**, both platforms |
-| `cutScorecard.rules` | String | `cutScorecard.rules` | **Yes**, both platforms |
+| `cutScorecard.phases` | String | `cutScorecard.phases` | **Yes** |
+| `cutScorecard.rules` | String | `cutScorecard.rules` | **Yes** |
 | `noop.cutScorecardEnabled` | — | — | No. A Bool cannot cross, and `noop.*` toggles are per install by the whitelist's own rule (`BackupSettings.swift:40-42`). After a restore the feature is off until switched on, which is the safe direction |
 | `cutScorecard.reminder.*` | — | — | No. A reminder depends on this device's notification permission; restoring "on" would persist a switch that cannot fire, the defect `WindDownNudge.swift:128-135` documents |
 
 Edits: `BackupSettings.whitelist` and `BackupSettings.appleDefaultsKey` (`BackupSettings.swift:49-70`,
-`:75-89`); `BackupSettingsCodec.WHITELIST` and the snapshot and apply mappings (`BackupSettings.kt:50-76`,
-`:143`, `:191`). A JSON array carried as a String has a precedent in `today.hostedCards`
-(`BackupSettings.swift:44-48`, `:62`). Android stores and re-exports the two strings without parsing
-them.
+`:75-89`). A JSON array carried as a String has a precedent in `today.hostedCards`
+(`BackupSettings.swift:44-48`, `:62`). The same two keys were added to `BackupSettingsCodec.WHITELIST`
+and its snapshot and apply mappings (`BackupSettings.kt:50-76`, `:143`, `:191`) before R43; that
+code stores and re-exports the two strings without parsing them, and it is not edited again.
+
+**Drift from Android (R43).** The two keys of this stage are on both whitelists. The reconciliation
+adds no key and changes no stored shape: the floor inside `cutScorecard.rules` is now always a whole
+number, which the Kotlin side carries untouched as part of an opaque string, and the scan rule of
+§8.2 changes which stored `labMarker` row is read, not what is stored. The Kotlin `CutScorecard`
+still matches the Swift pure function, which did not change. Android has no counterpart of the
+resolver, so on Android a body-scan weight row is an ordinary Lab Book reading. The keys later
+stages add are on the Swift whitelist only; they are listed in the fork-only comment block above
+`BackupSettings.whitelist` that the shared scaffolding commit adds (§19), and the Kotlin whitelist
+is knowingly behind.
 
 The whitelist's header requires that the file stay safe to share (`BackupSettings.swift:13-15`). A
 target weight is the same class of value as the `profile.weightKg` it already carries.
@@ -1001,9 +1257,15 @@ weigh-in" action; links to history and to phase and rules.
 | Readings in a non-metric unit preference | Every weight in the unit system, every waist in the matching length unit |
 | Largest text size | Signal rows stack label over value; curves keep their height; nothing truncates a number |
 | Reduce Motion | No count-up and no staggered entrance |
+| A diet break or deload event overlaps the judged week | The verdict is exactly what it would be without the event. Stage 5 adds one note under it (its specification, `eventNote`); with stage 5's flag off the screen is as this table says |
+| A scan and a manual weigh-in in one week | The curve's point, the current weight and the rate use the manual weigh-in (§8.7) |
 
 Curves are a line with a gradient fill, one point per week. No horizontal band for the expected rate,
-no target line, no rule. The target appears as a number in the projection row.
+no target line, no rule. The target appears as a number in the projection row, and it is always the
+phase's `targetWeightKg`: a stage 6 waypoint weight is never shown on this screen.
+
+Later stages add to this screen as the combined design frame fixes. None of them changes a row of
+the table above.
 
 ### 10.3 Weigh-in sheet
 
@@ -1015,7 +1277,7 @@ Step 1, weight. Step 2, waist. One date for both.
 | Step 1, prior reading exists | The field is prefilled with the last weight, selected for overtyping |
 | Out of range | Weight outside 30–250 kg (the range Settings and onboarding use, `SettingsView.swift:530`, `OnboardingWizard.swift:807`) or not a number: "Next" is disabled and the field says which bound |
 | Backdating | The date control allows any past instant and no future one, as the Lab Book editor does (`MarkerEditorView.swift:224`). The sheet shows the week the reading will fall in |
-| Already logged this week | A line: "You logged <value> on <day>. This reading will represent the week." Saving is allowed |
+| Already logged this week | A line: "You logged <value> on <day>. This reading will represent the week." Saving is allowed. The line is true whether the earlier reading is a manual weigh-in or a scan: a manual weigh-in outranks a scan of the same week (R44) |
 | Step 2 | Waist field, prefilled the same way; range 40–200 cm; "Skip" saves weight only |
 | Step 2 skipped | Weight saved; the waist signal for that week will be "not measured" |
 | Saving | Buttons disabled; inputs captured before the write begins |
@@ -1032,7 +1294,7 @@ Newest first, weight and waist of the same day and instant on one row.
 |---|---|
 | Loading | Skeleton rows |
 | Empty | "No weigh-ins yet" |
-| Rows | Date, weight, waist or "not measured", and a mark on the reading that represents its week |
+| Rows | Date, weight, waist or "not measured", and a mark on the reading that represents its week. The mark follows the resolver: in a week with both a usable manual weigh-in and a scan it sits on the latest manual weigh-in, never on the scan (R44). The presenter decides it with `withoutOutrankedScans(weights, asOf: today)`, the function the resolver's series uses, with the same `today` the scorecard was evaluated for (§8.7), not by a second rule in the view. The outranked scan stays listed without the mark |
 | A reading from another source | Shown with its source (for example a Lab Book CSV import or Apple Health). An Apple Health value is read-only here; a Lab Book row can be edited and deleted whatever wrote it |
 | A reading in an unrecognised unit | Not listed here; it remains in Lab Book. A footnote says how many were left out |
 | Edit | Opens the sheet with that reading's values and instant |
@@ -1050,8 +1312,11 @@ Not in the roadmap's frame list (§3, C9).
 | Editing | Current values |
 | Invalid | A field that fails §6.5 is marked and "Save" is disabled |
 | Start a new phase | Appends a phase; the previous one stays in the stored list |
-| Kind "other" | No target, no band, no rules; the scorecard shows "No cut phase is active" |
+| Kind "other" | No target, no band, no rules; the scorecard shows "No cut phase is active". Beside the kind control: "For a diet break or a deload, add an event instead. The scorecard keeps reporting." The line is shown whatever the state of stage 5's flag; it links to the Events screen only while that flag is on |
+| Target weight | The one target weight in the app (§9.2). Optional. No target-date field exists here |
 | Protein floor left empty | Allowed; the protein signal reads "No floor set" |
+| Protein floor entered | Whole grams only, from 1 to 100 000, whole-number keypad; the entry is valid exactly when `CutScorecardSettings.isWholeGramProteinFloor` is true (§9.2). "100" is accepted; "99.5", "0", "-5" and "100001" mark the field and disable "Save". The field shows the stored value as a whole number with the unit `g` |
+| Protein floor stored as a fraction before R45 | The field opens showing the nearest whole gram (what every reader already sees); saving writes the whole number |
 
 ### 10.6 Settings
 
@@ -1059,6 +1324,10 @@ A toggle "Weekly weigh-in and scorecard" for the flag, with the reminder row ben
 while the flag is on: off; on with weekday and time; and "Notifications are off for NOOP" with a link
 to system settings when permission was denied (the outcome `WindDownNudge.swift:124`, `:137-175`
 models).
+
+Position: the Scorecard card is the first of the workstream's cards in Settings, top to bottom, and
+is present whatever the other flags are. The combined frame set is the authority for the whole
+list.
 
 ### 10.7 Body metrics rows in Settings
 
@@ -1077,6 +1346,10 @@ scorecard when the source is Lab Book and to the existing metric page otherwise.
 
 Two frames: (a) the Today card with a pushed scorecard screen, plus a row in the Health tab; (b) a
 tab. The specification recommends (a). See C6 for why (b) costs a tab.
+
+Position: in the Health tab's list of the workstream's rows the Scorecard row is the first, top to
+bottom, present only while `noop.cutScorecardEnabled` is on. The combined frame set is the authority
+for the whole list.
 
 ### 10.10 Notification text
 
@@ -1117,6 +1390,8 @@ all through the String Catalog (`Strand/Resources/Localizable.xcstrings`; locale
 | Projection | "Estimated %@ at this rate", "Target reached", "No target set", "No date while weight is not falling", "More than %lld weeks at this rate", "Log a weigh-in to check the target" |
 | Rule progress | "%lld of %lld weeks" |
 | Source captions | "Lab Book", "Apple Health", "from profile" |
+| Protein floor, wherever it is printed | "%lld g": the whole number from `proteinFloorWholeGrams`, never a decimal (R45) |
+| Phase sheet, beside the kind control | "For a diet break or a deload, add an event instead. The scorecard keeps reporting." |
 
 None of these strings states or implies a health outcome. "Estimated" marks the projection.
 
@@ -1272,9 +1547,40 @@ Fixture
 - `testFlagOffPoliciesMatchTheOldTodayAndEstimateBehaviour`
 - `testSeriesAndResolveAgreeOnTheCurrentValue`
 
+Manual weigh-in against a scan (R44, §8.7; cases in §13.5; these land with work package 1-11)
+
+- `testManualWeighInOutranksALaterScanInTheSameWeek`
+- `testManualWeighInOutranksAScanOnTheSameDayWithALaterInstant`
+- `testScanAloneInAWeekIsThatWeeksReading`
+- `testScanInOneWeekIsNotSuppressedByAManualWeighInInAnotherWeek`
+- `testScanIsCurrentUntilAManualWeighInIsSavedInItsWeek` (`asOf` before, then on, the manual day)
+- `testAManualRowAfterTheAsOfDayDoesNotSuppressAScan`
+- `testSundayScanAndMondayWeighInAreInDifferentWeeksAndBothCount`
+- `testCsvImportedRowNeitherSuppressesNorIsSuppressed`
+- `testCsvImportedScanCompetesWithAManualWeighInByInstant` (S7b: the later instant wins either way)
+- `testManualRowInAnUnknownUnitDoesNotOutrank` (S11)
+- `testRowWithANonCanonicalDayIsNeitherOutrankedNorOutranking` (S12)
+- `testAppleHealthValueInAScanWeekDoesNotOutrankIt` (S13)
+- `testManualWaistOutranksAScanWaistInTheSameWeek`
+- `testManualWeightDoesNotOutrankAScanWaist` (S14)
+- `testScanRuleDoesNotApplyUnderTheLegacyPolicies`
+- `testResolveEqualsLastOfSeriesForEveryAsOfDay` (generated over the §13.5 rows)
+- `testAsOfNilAndAsOfAfterEveryRowGiveTheSameSeries`
+
+The function itself, called directly:
+
+- `testWithoutOutrankedScansKeepsOrderAndLeavesOtherMarkerKeysAlone` (S15)
+- `testWithoutOutrankedScansReturnsRowsAfterTheAsOfDayUntouched` (S16)
+- `testWithoutOutrankedScansJudgesRowsUnderDifferentDeviceIdsTogether`
+- `testWithoutOutrankedScansOfNoRowsIsEmpty`
+- `testWeighInSourceIsTheSourceTheWeighInStoreWrites` (saves through `WeighInStore` and compares the
+  stored row's `source` with `BodyMeasurementResolver.weighInSource`)
+
 `BodyMeasurementSingleSourceTests.swift` — the behavioural test in §8.6, plus
-`testProfileMirrorEqualsResolverAfterSaveEditAndDelete` and
-`testMirrorIsNotWrittenWhileTheFlagIsOff`.
+`testProfileMirrorEqualsResolverAfterSaveEditAndDelete`,
+`testMirrorIsNotWrittenWhileTheFlagIsOff` and, with work package 1-11,
+`testScanInAWeekWithAManualWeighInMovesNoCurrentWeightReader` and
+`testProfileMirrorKeepsTheManualWeighInWhenAScanFollowsInTheSameWeek`.
 
 `WeighInStoreTests.swift`
 
@@ -1299,6 +1605,32 @@ Fixture
 - `testCorruptRulesAreTreatedAsAbsent`
 - `testFlagDefaultsToOff`
 
+Protein floor (R45; work package 1-10)
+
+- `testIsWholeGramProteinFloorAcceptsWholeGramsFromOneToTheMaximumOnly` (true for 1, 100 and
+  100 000; false for 0, 0.5, 99.4, 99.5, −5, 100 001, NaN and infinity)
+- `testNoValueAnEditorAcceptsIsChangedByNormalisation` (for 1, 100 and 100 000, the value written
+  and the value read back are the value given)
+- `testNormalizedProteinFloorRoundsHalvesAwayFromZeroAndNeverBelowOne` (99.4 → 99, 99.5 → 100,
+  0.2 → 1, nil → nil)
+- `testNormalizedProteinFloorLeavesInvalidValuesForValidationToReject` (0, −5, NaN and infinity come
+  back unchanged, and rules holding one of them still need attention)
+- `testSettingAFractionalFloorStoresAWholeNumber`
+- `testFractionalFloorStoredEarlierReadsWholeAndTheStoredStringIsNotRewritten` (writes the rules
+  string directly with `"proteinFloorGrams":99.4`, reads 99, and asserts the stored string is
+  byte-equal afterwards)
+- `testProteinFloorWholeGramsIsNilWithoutAFloor`
+- `testProteinFloorWholeGramsEqualsTheParameterTheScorecardIsGiven` (floor 100: the accessor is 100
+  and `CutScorecardInputBuilder`'s input carries `proteinFloorGrams == 100`)
+- `testCeilingFloorAndNearestOfTheStoredFloorAgree` (for stored 99.4, 99.5 and 100: `rounded(.up)`,
+  `rounded(.down)` and `rounded()` of the value read are one number)
+
+Phases (R46, R47)
+
+- `testAStoredPhaseHasNoTargetDateOrEndDateKey` (the encoded element's keys are exactly `kind`,
+  `name`, `rateHighPercentPerWeek`, `rateLowPercentPerWeek`, `startDay`, `targetWeightKg`, `v`)
+- `testTargetWeightIsReadOnlyFromTheActivePhase`
+
 `CutScorecardInputBuilderTests.swift`
 
 - `testWarmUpAndUnperformedSetsAreExcluded`
@@ -1306,10 +1638,23 @@ Fixture
 - `testNoSessionsYieldsEmptyLifts`
 - `testProteinDaysComeFromTheNutritionSeries`
 - `testWeightsComeFromTheResolverSeries`
+- `testWeeklyPointIsTheManualWeighInWhenAScanSharesTheWeek` (work package 1-11)
+- `testBuilderPassesTodayAsTheSeriesAsOfDay` (work package 1-11)
 
 `CutScorecardPresenterTests.swift` — one test per row of §10.1 and §10.2, named for the state, each
 asserting the presentation built from a fixture result; plus `testNoStateRendersAMissingValueAsZero`
-and `testNoStringContainsAnInterpolatedNilOrNaN`.
+and `testNoStringContainsAnInterpolatedNilOrNaN`. With work package 1-10:
+`testRulesSheetAcceptsAWholeProteinFloor`, `testRulesSheetRefusesAFractionalProteinFloor`,
+`testRulesSheetRefusesAZeroOrNegativeProteinFloor`, `testRulesSheetShowsTheFloorAsAWholeNumber`,
+`testProteinRowPrintsTheFloorWithoutADecimal`, `testPhaseSheetOtherKindPointsToEvents` and
+`testProjectionRowTargetIsThePhaseTarget` and `testRulesSheetRefusesAProteinFloorAboveTheMaximum`.
+With work package 1-11: `testHistoryMarksTheManualWeighInNotTheScanAsRepresentingTheWeek`,
+`testHistoryStillListsTheOutrankedScanWithoutTheMark`,
+`testHistoryMarksTheScanInAWeekWithNoManualWeighIn` and
+`testHistoryIgnoresAManualRowDatedAfterTodayWhenMarking`. The rules-sheet tests drive the
+sheet's draft through the same entry point the view uses for typed text (a typed string in, the
+field's validity and the saved `parameters.proteinFloorGrams` out) and assert on those two outputs
+only.
 
 `WeighInReminderTests.swift`
 
@@ -1334,14 +1679,33 @@ Backup — `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift`
 
 - `test_no_reader_bypasses_the_resolver`
 - `test_allowlist_entries_still_match`
-- `test_scorecard_backup_keys_match_on_both_platforms` (reads the two whitelist files and compares
-  only the two keys this stage adds, because of C10)
+- `test_scorecard_backup_keys_match_on_both_platforms` (reads the two whitelist files as text and
+  compares only the two keys this stage adds, because of C10. It compiles and runs nothing on the
+  Kotlin side, so it stays valid under R43; it is not extended to any later key)
+- `test_protein_floor_has_one_stored_home` (work package 1-10): outside
+  `Strand/Data/CutScorecardSettings.swift`, no file under `Strand/`, `StrandiOS/`, `StrandiOSShared/`
+  or `StrandiOSWidgets/` contains a string literal with `proteinFloor` in it, so no second defaults
+  key or JSON field for the floor can appear. Stage 3 states the same check from its side
+  (`test_protein_floor_is_stored_only_in_scorecard_rules`); the two are kept, one per suite
+
+- `test_outranking_rule_has_two_callers` (work package 1-11): under `Strand/`, `StrandiOS/`,
+  `StrandiOSShared/`, `StrandiOSWidgets/` and the watch targets, `withoutOutrankedScans(` occurs
+  only in `Strand/Data/BodyMeasurementResolver.swift` (its declaration and one call, inside
+  `series`) and once in `Strand/Data/CutScorecardPresenter.swift`; and neither of those two files
+  contains the string literal `"body-scan"`. A third caller, or the literal spelled beside the
+  constant, fails the test, and its message says that §8.7 of this specification is the rule's one
+  home
+
+The behavioural tests of §8.6 stay the stronger check for the scan rule (R44): every current-weight
+reader keeps the manual weigh-in when a scan follows it.
 
 ### 12.5 Flag-off equivalence
 
 With the flag off, the baseline suite's results are unchanged: `renderList` keeps its existing call
 shape through a defaulted parameter, the legacy policies return the old values, the card is absent
 from the editor, no notification request exists, and no `labMarker` row or profile value is written.
+The scan rule (R44) runs only under the `unified` policy, and the whole-gram floor (R45) changes no
+read while no floor is stored.
 `testFlagOffPoliciesMatchTheOldTodayAndEstimateBehaviour` and
 `testMirrorIsNotWrittenWhileTheFlagIsOff` are the direct assertions.
 
@@ -1380,37 +1744,65 @@ the pull request.
 | F26 | A Today view reads `profile.weightKg` directly | `test_no_reader_bypasses_the_resolver` |
 | F27 | Edit deletes before inserting | `testEditingTheDateInsertsBeforeDeleting` |
 | F28 | Mirror written with the flag off | `testMirrorIsNotWrittenWhileTheFlagIsOff` |
+| F29 | Scan rule removed (the scan is admitted beside a manual weigh-in) | `testManualWeighInOutranksALaterScanInTheSameWeek` |
+| F30 | Scan rule applied per day, not per Monday week | `testManualWeighInOutranksALaterScanInTheSameWeek`, `testSundayScanAndMondayWeighInAreInDifferentWeeksAndBothCount` |
+| F31 | Scan rows dropped even with no manual weigh-in in the week | `testScanAloneInAWeekIsThatWeeksReading` |
+| F32 | Rows after the as-of day allowed to suppress | `testAManualRowAfterTheAsOfDayDoesNotSuppressAScan` |
+| F33 | Any non-scan source allowed to suppress a scan | `testCsvImportedRowNeitherSuppressesNorIsSuppressed` |
+| F34 | Scan rule applied under a legacy policy | `testScanRuleDoesNotApplyUnderTheLegacyPolicies` |
+| F35 | Builder calls `series` without `asOf` | `testBuilderPassesTodayAsTheSeriesAsOfDay` |
+| F40 | A manual row in an unknown unit allowed to outrank | `testManualRowInAnUnknownUnitDoesNotOutrank` |
+| F41 | The rule applied across marker keys (a manual weight outranks a scan waist), or to weight only | `testManualWeightDoesNotOutrankAScanWaist`, `testManualWaistOutranksAScanWaistInTheSameWeek` |
+| F42 | The history marks its week without calling the function | `testHistoryMarksTheManualWeighInNotTheScanAsRepresentingTheWeek` |
+| F43 | A third caller of the function added, or the scan source spelled as a literal | `test_outranking_rule_has_two_callers` |
+| F36 | Floor not normalised on write | `testSettingAFractionalFloorStoresAWholeNumber` |
+| F37 | Floor not normalised on read, or the read rewrites the stored string | `testFractionalFloorStoredEarlierReadsWholeAndTheStoredStringIsNotRewritten` |
+| F38 | Rules sheet rounds a typed fraction and saves it | `testRulesSheetRefusesAFractionalProteinFloor` |
+| F39 | Floor printed with decimals | `testProteinRowPrintsTheFloorWithoutADecimal`, `testRulesSheetShowsTheFloorAsAWholeNumber` |
+| F44 | The editor rule's upper bound removed, or its whole-number test dropped | `testIsWholeGramProteinFloorAcceptsWholeGramsFromOneToTheMaximumOnly`, `testRulesSheetRefusesAProteinFloorAboveTheMaximum` |
 
 ### 12.7 Parity
 
+**Status under R43.** Android work is stopped. Items 1, 3, 4 and 6 below record how the Kotlin
+files that are in the tree were produced; they are not instructions, and nobody writes, compiles or
+runs Kotlin for this stage again. Item 2 is a Swift test and stays in force: it is what stops the
+Swift function drifting from the recorded oracle output. The gate script's Android rows are waived
+by flag and reported as waived. The reconciliation changes (R44 to R48) touch no file with a Kotlin
+twin: the pure function is unchanged, so the oracle literal is unchanged and is not regenerated.
+
 Layout follows `android/app/src/test/java/com/noop/analytics/LiftMetricsParityOracleTest.kt:1-80`.
 
-1. **Swift to Kotlin.** Compile `CutScorecard.swift` with `WeeklyDigest.swift` and a `main.swift`
+1. **Swift to Kotlin (done before R43).** Compile `CutScorecard.swift` with `WeeklyDigest.swift` and a `main.swift`
    standalone (`swiftc -O`). `main.swift` evaluates the fixture at each of its 22 days, every variant
    in §13.4, and a generated spread: a fixed-seed linear congruential generator written out in the
    file (not a library generator, which differs by platform) producing at least 500 inputs that vary
    reading counts, gaps, values, lift coverage and every parameter. It prints one block per
    evaluation: every field of the result in declaration order, Doubles as `%.6f`, nil as `nil`,
-   enums as raw values. That standard output is pasted verbatim as the expected literal in
+   enums as raw values. That standard output was pasted verbatim as the expected literal in
    `android/app/src/test/java/com/noop/analytics/CutScorecardParityOracleTest.kt`, which builds the
    same inputs with the same generator and prints through the same format.
 2. **Kotlin to Swift.** `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/CutScorecardOracleTests.swift`
    holds the same literal and asserts the Swift output against it, so a later change on the Swift
    side fails on the Swift side.
-3. Named edges the spread must include, since they are where a port diverges: `quantize` on exact
+3. Named edges the spread includes, since they are where a port diverges: `quantize` on exact
    halves and on negatives; a `ceil` on a value that is an integer but for floating-point error;
    the tie order in "latest reading of the week"; integer division of negative week differences;
    exercise names that differ only by case or trailing space; day keys before 1970.
 4. `android/app/src/test/java/com/noop/analytics/CutScorecardTest.kt` mirrors the named cases of
    §12.1.
-5. Android tests cannot run on this machine (no JDK; Q3). Until that changes the Kotlin twin and its
-   tests are reported as **written, not run**, and the pull request says so.
-6. The two backup keys are checked by `test_scorecard_backup_keys_match_on_both_platforms` and by
-   `BackupSettingsCodecTest.kt`.
+5. The Kotlin twin and its tests are **written, never run** (R43), and every report says so. They
+   are not counted as passing anywhere.
+6. The two backup keys are checked by `test_scorecard_backup_keys_match_on_both_platforms`, which
+   reads source text only. `BackupSettingsCodecTest.kt` holds the Kotlin-side case as written and
+   is not run.
 7. **Written disposition for the resolver.** `BodyMeasurementResolver` has no Kotlin twin. It is
    app-layer selection among platform-specific sources, Android has no scorecard surface in this
    workstream, and it produces no new stored shape: its only writes are `labMarker` rows and the
    existing `profile.weightKg` and `profile.waistCm` keys. Android keeps `ProfileWeightSync`.
+8. **Written disposition for R44 and R45.** Neither has a Kotlin counterpart and neither needs one
+   under R43. R44 is a rule of the resolver of item 7. R45 lives in `CutScorecardSettings`, an
+   app-layer type with no twin; the stored key and its JSON kind are unchanged. The drift is stated
+   in §9.3.
 
 ### 12.8 Simulator and rehearsal
 
@@ -1421,6 +1813,16 @@ real-data rehearsal from 0B-7, whose results stay out of the repository.
 ## 13. Fixture
 
 Everything here is invented. "Fixture Person" does not exist; the numbers are round on purpose.
+
+**This is the one Fixture Person for every stage** (ruling R48). Demo screens, simulator seeds and
+app-target fixtures of stages 2 to 6 and of the Lab Book ownership change use this person: the phase
+of §13.1, weigh-ins on Wednesdays from 2031-01-08 with the weights and waists of §13.3 (100.0 kg and
+100.0 cm in week 1, 93.5 kg and 93.5 cm in week 22), week 10 missed, the lift table and protein days
+of §13.2, and a protein floor of 100 g. A fixture in another stage that needs a body weight on a day
+takes the weight this table gives for that day's week (a scan in week 4 has a total mass of 97.6 kg,
+not some other person's), and one that needs a floor takes 100 g. A pure-logic golden in another
+stage may keep its own values when it is never shown beside these. Where R31 forces dates relative
+to the real clock, the series keeps its weekday and its week numbers and is shifted by whole weeks.
 
 ### 13.1 Person, phase and parameters
 
@@ -1543,7 +1945,40 @@ Each is the fixture with one change.
 | V11 | "Fixture Press" renamed "fixture press" from week 17 on | Common exercises fall to one |
 | V12 | Target 80.0, `today` 2031-02-26 | `beyondHorizon` (17.2 kg at 0.1 kg per week) |
 
+### 13.5 Resolver cases for a scan beside a manual weigh-in (R44, §8.7)
+
+Lab Book `weight` rows in kg unless stated, all under one device id, `unified` policy, no Apple
+Health values, profile weight 75 and set. "manual" is source `manual`; "scan" is source
+`MarkerCatalog.scanSource`. Times are UTC and the stored `day` is as given. Each case starts from the
+fixture's manual weigh-ins of weeks 1 to 4 (100.0, 99.2, 98.4 and 97.6 kg on 2031-01-08, -15, -22
+and -29 at 07:00) and adds the rows listed. The added values differ from the week's weigh-in on
+purpose, so that a test can tell which row was chosen; they are resolver test rows, not demo data
+(a demo scan takes the week's own weight, §13).
+
+| Case | Added rows | Expected |
+|---|---|---|
+| S1 | scan 98.0 on Thursday 2031-01-30 at 12:00 | `series` holds no entry for 2031-01-30. `resolve(asOf: 2031-01-30)` and `resolve(asOf: 2031-02-02)` are 97.6, source `labBook`, day 2031-01-29. The scorecard's week 4 point is 97.6 |
+| S2 | scan 98.0 on Wednesday 2031-01-29 at 12:00 (same day as the manual row, later instant) | The entry for 2031-01-29 is 97.6 with the manual row's `rowId` |
+| S3 | scan 97.0 on Wednesday 2031-02-05 at 12:00; no manual row in week 5 | The entry for 2031-02-05 is 97.0. `resolve(asOf: 2031-02-05)` is 97.0, day 2031-02-05. Week 5's point is 97.0 |
+| S4 | as S3, then manual 97.5 on Friday 2031-02-07 at 07:00 | `resolve(asOf: 2031-02-05)` and `resolve(asOf: 2031-02-06)` are 97.0 (the scan). `resolve(asOf: 2031-02-07)` is 97.5, and `series(asOf: 2031-02-07)` holds no entry for 2031-02-05. Week 5's point evaluated with `today` 2031-02-07 is 97.5 |
+| S5 | scan 97.0 on Sunday 2031-02-02 at 12:00 (week 4); manual 97.5 on Monday 2031-02-03 at 07:00 (week 5) | Week 4 holds a manual row (2031-01-29), so the Sunday scan is left out. `resolve(asOf: 2031-02-02)` is 97.6; `resolve(asOf: 2031-02-03)` is 97.5 |
+| S6 | as S5 with the week 4 manual row removed | The Sunday scan is week 4's reading (97.0) and the Monday row is week 5's (97.5); both are in `series` |
+| S7 | a row with source `lab-csv`, 98.0 on Thursday 2031-01-30 at 12:00 | Not a scan for this rule: the entry for 2031-01-30 is 98.0 and `resolve(asOf: 2031-01-30)` is 98.0 |
+| S7b | a row with source `lab-csv`, 98.0 on Wednesday 2031-01-29 at 12:00 (same day as the manual row, later instant); then the same row at 06:00 | A scan imported by CSV is not outranked and competes by instant: at 12:00 the entry for 2031-01-29 is 98.0; at 06:00 it is 97.6 |
+| S8 | scan 98.0 on Thursday 2031-01-30 at 12:00 and a `lab-csv` row 97.9 on Friday 2031-01-31 at 12:00 | The scan is left out (week 4 has a manual row); the CSV row stays. `resolve(asOf: 2031-01-31)` is 97.9 |
+| S9 | waist rows: manual 98.5 cm on 2031-01-29 at 07:00, scan 99.0 cm on 2031-01-30 at 12:00 | Waist `resolve(asOf: 2031-01-30)` is 98.5 |
+| S10 | S1's rows under `legacyDisplay` and `legacyEstimate` | Unchanged from before R44: Lab Book is not consulted |
+| S11 | week 5 only: manual row 15.3 in the unit `stone` on Monday 2031-02-03 at 07:00; scan 97.0 on Wednesday 2031-02-05 at 12:00 | The manual row is not usable, so it does not outrank: the entry for 2031-02-05 is 97.0 and `resolve(asOf: 2031-02-05)` is 97.0 |
+| S12 | scan 98.0 with the stored `day` `2031-1-30` (not a canonical key) at 12:00 on that date | The row belongs to no week and is returned by the function untouched. What `series` then does with a non-canonical day is unchanged by R44 |
+| S13 | week 5 only: an Apple Health weight 97.4 on Monday 2031-02-03; scan 97.0 on Wednesday 2031-02-05 at 12:00 | The Apple Health value is not a manual weigh-in: both are in `series`, and `resolve(asOf: 2031-02-05)` is 97.0 |
+| S14 | S1's rows, plus a scan waist row 99.0 cm on Thursday 2031-01-30 at 12:00 and no manual waist row in week 4 | The scan weight is left out (97.6 stands); the scan waist stays: waist `resolve(asOf: 2031-01-30)` is 99.0 |
+| S15 | the function called on, in this order: the S1 scan, a `body_fat` row with source `MarkerCatalog.scanSource` on 2031-01-30, the week 4 manual row | Returns the `body_fat` row then the manual row, in that order; the `body_fat` row is untouched |
+| S16 | the function called with `asOf: 2031-02-05` on S4's rows | Returns all of them, the scan included and the Friday manual row included: the Friday row is after the as-of day, so it neither outranks nor is removed |
+
 ## 14. Work packages and file ownership
+
+Android: ruling R43 (§18) stops all Android work. Work package 1-5 is closed as it stands; nothing
+below orders a Kotlin change.
 
 A package edits only the files listed for it. WP 1-8 is the sole writer of the String Catalog.
 
@@ -1551,17 +1986,49 @@ A package edits only the files listed for it. WP 1-8 is the sole writer of the S
 |---|---|---|
 | 1-3 | Test author | `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/CutScorecardTests.swift`, `.../CutScorecardFixture.swift`; `Packages/WhoopStore/Tests/WhoopStoreTests/WeighInLabMarkerTests.swift`; additions to `Packages/WhoopStore/Tests/WhoopStoreTests/BackupSettingsTests.swift`; `StrandTests/BodyMeasurementResolverTests.swift`, `BodyMeasurementSingleSourceTests.swift`, `WeighInStoreTests.swift`, `CutScorecardSettingsTests.swift`, `CutScorecardInputBuilderTests.swift`, `CutScorecardPresenterTests.swift`, `WeighInReminderTests.swift`; additions to `StrandTests/TodayCardResolverTests.swift`; `Tools/test_body_measurement_single_resolver.py` |
 | 1-4 | Implementer A | `Packages/StrandAnalytics/Sources/StrandAnalytics/CutScorecard.swift` |
-| 1-5 | Parity agent | `android/app/src/main/java/com/noop/analytics/CutScorecard.kt`; `android/app/src/test/java/com/noop/analytics/CutScorecardTest.kt`, `CutScorecardParityOracleTest.kt`; `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/CutScorecardOracleTests.swift`; `android/app/src/main/java/com/noop/data/BackupSettings.kt`; `android/app/src/test/java/com/noop/data/BackupSettingsCodecTest.kt`. The oracle `main.swift` is scratch and is not committed |
+| 1-5 | Parity agent. **Closed (R43)**: done before the ruling, never executed, no further work | `android/app/src/main/java/com/noop/analytics/CutScorecard.kt`; `android/app/src/test/java/com/noop/analytics/CutScorecardTest.kt`, `CutScorecardParityOracleTest.kt`; `Packages/StrandAnalytics/Tests/StrandAnalyticsTests/CutScorecardOracleTests.swift`; `android/app/src/main/java/com/noop/data/BackupSettings.kt`; `android/app/src/test/java/com/noop/data/BackupSettingsCodecTest.kt`. The oracle `main.swift` is scratch and is not committed |
 | 1-6 | Implementer B | New: `Strand/Data/BodyMeasurementResolver.swift`, `BodyMeasurementProvider.swift`, `WeighInStore.swift`, `CutScorecardSettings.swift`, `CutScorecardInputBuilder.swift`. Edited, reader migration only: `Strand/Data/IntelligenceEngine.swift`, `Strand/App/AppModel.swift`, `Strand/Screens/HealthView.swift`, `Strand/Screens/TestCentreView.swift`, `Strand/Liquid/LiquidTodayView.swift`, `Strand/Screens/TodayView.swift`, `StrandiOS/Redesign/RedesignTodayView.swift` (the weight row only), `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` |
 | 1-7 | Implementer C, after G1 and after 1-4 and 1-6 merge | New: `Strand/Data/CutScorecardModel.swift`, `CutScorecardPresenter.swift`; `StrandiOS/Scorecard/ScorecardView.swift`, `WeighInSheet.swift`, `WeighInHistoryView.swift`, `ScorecardPhaseSheet.swift`. Edited: `Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, `Strand/Screens/TodayCustomizationMetadata.swift`, `Strand/Screens/TodayCustomizationSheet.swift`, `Strand/Data/TodayCardsEditorPresentation.swift`, `StrandiOS/Redesign/YourCardsSection.swift`, `StrandiOS/Redesign/RedesignRoute.swift`, `StrandiOS/Redesign/RedesignTodayView.swift` (card inputs), `StrandiOS/Redesign/RedesignHealthView.swift` (the Health row), `Strand/Screens/SettingsView.swift` (flag toggle and body-metrics rows); `Strand/Screens/TodayView.swift` and `Strand/Liquid/LiquidTodayView.swift` only to make their `DashboardCard` switches exhaustive and to filter the new case out |
 | 1-8 | Localiser | `Strand/Resources/Localizable.xcstrings` |
 | 1-9 | Implementer C | `Strand/System/WeighInReminder.swift`; the reminder row in `Strand/Screens/SettingsView.swift` |
+| 1-10 | Reconciliation, protein floor and phase wording (R45, R46, R47). Test author first, then one implementer; runs in the serialised step "stage 1 follow-up", after the Lab Book ownership change has merged and before stage 2 | Tests: additions to `StrandTests/CutScorecardSettingsTests.swift`, `CutScorecardInputBuilderTests.swift`, `CutScorecardPresenterTests.swift`; `test_protein_floor_has_one_stored_home` in `Tools/test_body_measurement_single_resolver.py`. Source: `Strand/Data/CutScorecardSettings.swift` (the four new members of §9.2, normalisation in the `parameters` getter and setter); `Strand/Data/CutScorecardModel.swift` and `Strand/Data/CutScorecardPresenter.swift` (the "Daily floor" field becomes a whole-number field validated by `isWholeGramProteinFloor`, and its printed form; the projection row and protein row read as §10 says); `StrandiOS/Scorecard/ScorecardPhaseSheet.swift` (the line beside the kind control). Then the Localiser adds the one new string to `Strand/Resources/Localizable.xcstrings` |
+| 1-11 | Reconciliation, manual weigh-in outranks a scan (R44, §8.7). Test author first, then one implementer; runs inside stage 4's serialised step, after stage 4's catalogue package has declared `MarkerCatalog.scanSource` and before stage 4's scan writer and before any stage 4 edit of the files listed here | Tests: additions to `StrandTests/BodyMeasurementResolverTests.swift`, `BodyMeasurementSingleSourceTests.swift`, `CutScorecardInputBuilderTests.swift`, `CutScorecardPresenterTests.swift`; `test_outranking_rule_has_two_callers` in `Tools/test_body_measurement_single_resolver.py`. Source: `Strand/Data/BodyMeasurementResolver.swift` (`weighInSource`, `withoutOutrankedScans(_:asOf:)`, the `asOf` parameter of `series`, the call inside `series`, `import StrandImport`), `Strand/Data/BodyMeasurementProvider.swift` (`series(_:consumer:asOf:)` forwarding only), `Strand/Data/CutScorecardInputBuilder.swift` (passes `asOf: today`), `Strand/Data/CutScorecardPresenter.swift` (`history` gains `today:` and its week mark calls the function), `Strand/Data/CutScorecardModel.swift` (passes `today` to `history`, one argument). No string changes |
 
 Shared-file order: `LiquidTodayView.swift`, `TodayView.swift` and `RedesignTodayView.swift` are edited
 by 1-6 and then by 1-7, in that order, never in parallel. `SettingsView.swift` is edited by 1-7 and
 then 1-9. `Packages/WhoopStore/.../BackupSettingsTests.swift` and
 `Packages/StrandAnalytics/Tests/` receive files from 1-3 and from 1-5; they add separate files or
 separate test methods and do not edit each other's.
+
+**Hotspot table: this stage's position on each shared file.** The one order for every shared file
+is Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage 6, then packet v2. This stage's
+original packages (1-3 to 1-9) are merged before any of them. Its two follow-up packages sit in
+that order as follows, and the table says nothing about what any other stage does to a file.
+
+| File | Stage 1 package | Position |
+|---|---|---|
+| The nine Today files (`Strand/Screens/DashboardCards.swift`, `Strand/Data/TodayCardReadout.swift`, `TodayCustomizationMetadata.swift`, `TodayCustomizationSheet.swift`, `TodayCardsEditorPresentation.swift`, `YourCardsSection.swift`, `RedesignTodayView.swift`, `TodayView.swift`, `LiquidTodayView.swift`) | 1-6, 1-7 and the R40 follow-up | Complete and merged before Lab Book ownership. Not edited by 1-10 or 1-11 |
+| `Strand/Data/CutScorecardSettings.swift` | 1-10 | After Lab Book ownership, before stage 2 |
+| `StrandiOS/Scorecard/ScorecardPhaseSheet.swift` | 1-10 | After Lab Book ownership, before stage 2 |
+| `Strand/Data/CutScorecardModel.swift` | 1-10, then 1-11 | 1-10 after Lab Book ownership and before stage 2. 1-11 after stage 3 and before stage 4's own edits (one argument) |
+| `Strand/Data/CutScorecardPresenter.swift` | 1-10, then 1-11 | 1-10 after Lab Book ownership and before stage 2. 1-11 after stage 3, first in stage 4's step, before stage 4's own edit of the file |
+| `Strand/Data/CutScorecardInputBuilder.swift` | 1-11 | After stage 3, first in stage 4's step. 1-10 does not edit it |
+| `Strand/Data/BodyMeasurementResolver.swift` | 1-11 | After stage 3, in stage 4's step after its catalogue package. This stage is the file's only editor |
+| `Strand/Data/BodyMeasurementProvider.swift` | 1-11 | After Lab Book ownership's edits, in stage 4's step: the one forwarding parameter |
+| `Strand/Data/WeighInStore.swift` | none | Not edited by 1-10 or 1-11 |
+| `StrandTests/CutScorecardInputBuilderTests.swift`, `CutScorecardPresenterTests.swift` | 1-10, then 1-11 | New test methods only, at the same two positions as the source files |
+| `Tools/test_body_measurement_single_resolver.py` | 1-10, then 1-11 | One new test function each, at the same two positions |
+| `Strand/Resources/Localizable.xcstrings` | 1-10's Localiser pass | One writer at any moment: after Lab Book ownership's Localiser, before stage 2's. 1-11 adds no string |
+| `StrandiOS/App/StrandiOSApp.swift` (debug demo registry) | none | The orchestrator's step 0 adds the registry with this stage's element, `ScorecardDemo.screen(named:)`. Neither follow-up package edits the file |
+| `StrandiOS/Scorecard/ScorecardDemo.swift` | none | This stage's demo file. Not edited by 1-10 or 1-11, and by no other stage |
+| `StrandiOS/Scorecard/ScorecardView.swift` | none | Not edited by 1-10 or 1-11 |
+| `Strand/Screens/SettingsView.swift`, `StrandiOS/Redesign/RedesignHealthView.swift` | none | This stage's card and row are merged and are first in the list of §10.6 and §10.9. Not edited by 1-10 or 1-11 |
+| `Strand/AI/AICoach.swift` | none | This stage does not edit it, in any package |
+| `Packages/WhoopStore/Sources/WhoopStore/BackupSettings.swift` | none | This stage's two keys are merged. Not edited by 1-10 or 1-11 |
+
+Each follow-up package is written against the file as it stands at its position. In particular,
+after stage 2 the evaluation funnel has moved inside `CutScorecardInputBuilder`, and 1-11's builder
+test and its `asOf: today` argument use whichever name is in the tree at its step.
 
 `project.yml` needs no change: `Strand`, `StrandiOS` and `StrandTests` are included by directory
 (`project.yml:87-91`, `:220-244`, `:170`). Run `xcodegen generate` after adding files.
@@ -1574,7 +2041,10 @@ defaulted parameter), `Tools/test_home_i18n.py:96-100` (pins Android card ids; A
 Parity governance: new public declarations in `Packages/StrandAnalytics` are inventoried by
 `Tools/parity_ledger.py`. Each carries a twin claim in the existing form ("Kotlin twin: `CutScorecard`."
 on the type, "The Kotlin twin is `CutScorecard.evaluate`." on a function). Whether the ledger can be
-refreshed at all is the open item of 0B-9; this stage does not attempt it.
+refreshed at all is the open item of 0B-9; this stage does not attempt it. Work packages 1-10 and
+1-11 add no public declaration to a package, so they add nothing to the ledger; under R43 their
+pull requests carry the written disposition of §12.7 item 8 and the Kotlin lines of the parity
+ratchet stay as recorded debt.
 
 ## 15. Open questions for the owner
 
@@ -1595,12 +2065,17 @@ Work proceeds on each recommendation. None of these leaves the algorithm undecid
 | S11 | Should reaching the target silence the verdict? | No. The screen leads with "Target reached" and the rules keep reporting until the owner ends the phase |
 | S12 | With the flag on, may Settings stop offering a stepper for weight and waist once a dated reading exists? | Yes. It is what keeps Settings and the scorecard from disagreeing |
 | S13 | May a weekly weigh-in change the weight used by the calorie estimates, and a waist reading change the VO₂max estimate, from that week on? | Yes. It is the stage's stated aim, and it is the same effect as editing the profile today |
-| S14 | Should phases and rules be included in backups? | Yes, as two string keys on both platforms. The flag and the reminder are not |
+| S14 | Should phases and rules be included in backups? | Yes, as two string keys. The flag and the reminder are not. (Both keys also reached the Kotlin whitelist before R43; nothing further is done there) |
 | S15 | Stage 1 supports cut phases only. Is "no verdict outside a cut" acceptable until a later stage? | Yes |
 | S16 | Which protein source feeds the protein signal before stage 3? | The existing nutrition CSV series if present; otherwise the signal is "no protein data". The signal never affects the verdict |
 | S17 | Lab Book reads only the active strap id. After a strap is removed and added again the active id changes, and readings saved under the earlier id are no longer listed (`LabBookView.swift:468`, `MarkerEditorView.swift:431`, `Repository.swift:144-158`, `AppModel.swift:693-700`). The rows stay in the database unless the owner chose to delete that device's data; adopting a serial identity does move them (`DeviceRegistryStore.swift:162-173`, `:263-268`). Confirmed by reading on 10 November 2026, not by a test. How should weigh-ins behave? | Write under the active id as Lab Book does, and have the weigh-in store and the resolver read weight and waist rows across the same ids the repository already unions for imported history (active strap first, then the canonical id and other registered straps), de-duplicated by marker, instant and source, with a test that re-points the id and still sees every reading. Fix Lab Book's own listing in a separate pull request. Work package 1-6 waits for the owner's answer, because this concerns existing data |
 | S18 | Review, 10 November 2026: a strap's "Delete data" or "Forget" deletes every row stored under that strap id, Lab Book readings included (`DeviceRegistryStore.swift:162-173`). Because weigh-ins are written under the active strap id (R25), deleting an old strap's data would delete the weigh-ins logged while it was active. This is existing, deliberate behaviour for Lab Book. Should weigh-ins be exempt? | Keep R25 for stage 1 and state the consequence on the delete confirmation in the separate Lab Book change. The alternative is to store weigh-ins under the canonical id, which Lab Book does not read, so the two screens would list different rows |
 | S19 | Review, 10 November 2026: when the flag is switched on, the profile mirror replaces the Settings weight with the newest dated reading however old it is (§8.2 has no age limit), and switching the flag off does not restore the earlier Settings value. | Accept: it is the specified meaning of "newest dated reading wins", and a first weigh-in supersedes any old reading. The alternative is an age limit on dated readings |
+| S20 | Cross-stage check X10, **decided by default** on its recommendation. Stage 6 lets a timeline checkpoint carry a weight. Is that a second target? | No. The one target weight stays in the active phase and is the only weight the scorecard projects to (R47). A checkpoint weight is a waypoint, labelled so, and stage 6 refuses one equal to or beyond the phase target. A dated target is a checkpoint with no weight. **If the owner says otherwise** (a dated target the scorecard should project to): the phase element gains a target day, which is a change to the stored `cutScorecard.phases` shape, to §7.8 and to the pure function, with its own specification |
+| S21 | Cross-stage check X11, **decided by default** on its recommendation. When a week has both a manual weigh-in and a body scan, which does the scorecard judge? | The manual weigh-in, in that week only; a scan alone in a week is used (R44, §8.7). One stored number per reading still (R41). **If the owner says otherwise** (the later instant wins, the scan included): §8.7, rule 3 of §8.2, `withoutOutrankedScans` and its two call sites, `test_outranking_rule_has_two_callers`, the §13.5 cases, faults F29 to F35 and F40 to F43, and work package 1-11 are dropped; the stage 4 specification then drops its notice on the scan sheet; nothing else in this document changes |
+| S22 | Cross-stage check X14, **decided by default** on its recommendation. Is a diet break or a deload a phase or an event? | An event (stage 5). Phases are only the long blocks. The scorecard keeps giving its verdict during the event and stage 5 shows the event's note under it (R46). **If the owner says otherwise** (the scorecard should be silent during a break): that is a new input to the pure function saying an event is running and a new verdict reason, specified separately; entering the break as a phase of kind `other` would also reset every rule's baseline when the cut resumes, which is why it is not the recommended route |
+| S23 | Cross-stage check X12, binding on the stages and reported here because it limits what can be typed. The protein floor is whole grams. | In force (R45). A fractional floor cannot be entered, nor one above 100 000 g; one stored earlier as a fraction reads as the nearest whole gram. **If the owner wants a fractional floor**: every surface must then agree on one rounding for display, which is a change in stages 1, 2 and 3 together |
+| S24 | Raised by this reconciliation. A scan imported from a markers CSV carries the source `lab-csv` (stage 4), not `body-scan`, so the rule of §8.7 does not treat it as a scan: it is not outranked, and within a week it competes with a manual weigh-in by instant, as any other reading does. Settled for this pass by the orchestrator's ruling (§19, second pass); the owner may still say otherwise. | Leave it so. The rule is keyed on the one source id a scan sheet writes; widening it to imported rows needs stage 4's scan identity inside the resolver. **If the owner says otherwise**: the resolver asks stage 4's scan grouping which `weight` rows are scans, and S7 in §13.5 changes |
 
 ## 16. Not determined
 
@@ -1609,21 +2084,26 @@ Work proceeds on each recommendation. None of these leaves the algorithm undecid
   updates after the device changes zone while the app is running was not established by reading.
   The weigh-in path avoids the question by passing the zone explicitly (§9.1), and
   `testDayKeyAgreesWithLabBookFormat` records the agreement for the current zone only.
-- **Whether the owner's Lab Book already holds weight or waist rows**, and in which unit. The
-  rehearsal in 0B-7 will show it. The resolver handles `kg`, `lb`, `cm` and `in`.
+- **Which units existing Lab Book weight or waist rows carry on a given install.** The resolver
+  handles `kg`, `lb`, `cm` and `in`; a row in any other unit is left out and counted (§10.4).
 - **Readings and a changed strap id.** Lab Book rows are stored under `repo.deviceId`, which is
   re-pointed when a strap is removed and added again (`Repository.swift:131-138`, `:261`). Rows saved
   under the earlier id are then not returned by `labMarkers(deviceId:markerKey:)`. This is existing
   Lab Book behaviour, it would apply to weigh-ins equally, and it was not tested. It needs the
   owner's decision before G8: fix Lab Book and the scorecard together in a separate pull request, or
-  accept it. Whether the owner's strap id has ever changed is not known.
+  accept it. Since decided: rulings R25, R29 and R42, and the Lab Book ownership specification.
 - **The size of the re-estimation window** that a changed weight triggers in the scoring pass (§8.4).
   The mechanism was read; the number of days was not traced.
 - **Parity ledger state.** Whether new `StrandAnalytics` declarations can be registered depends on
   0B-9. The claim syntax in §14 follows the existing files and was not run through the ledger.
 - **The pre-existing whitelist difference** (C10) was observed in the two source files. Whether it is
   known upstream was not checked.
-- **Android.** Nothing on the Kotlin side was compiled or run.
+- **Android.** Nothing on the Kotlin side was compiled or run, and under R43 nothing will be.
+- **Whether `MarkerCatalog.scanSource` is the only source a scan sheet writes** is stage 4's
+  statement, taken as given for §8.7. See S24 for the imported case.
+- **The rules sheet's typed-text entry point.** §12.3 describes the rules-sheet tests by their two
+  outputs. The name of the draft function a typed string goes through is the implementation's
+  (`CutScorecardModel.swift`, `CutScorecardPresenter.swift`) and was read, not specified, here.
 - **Row values in §13.3** come from a scratch model, as stated there.
 
 ## 17. Design approval record (G1)
@@ -1663,7 +2143,9 @@ session could not see the Figma window).
 The tests (WP 1-3) and the implementation (WP 1-4) were written by separate agents from §6 and §7.
 Where they found this document ambiguous or self-contradictory, the orchestrator ruled as below.
 These rulings are binding on the tests, the Swift implementation and the Kotlin twin, and they
-override the earlier section they name.
+override the earlier section they name. Since R43 the Kotlin twin is frozen as written: where a
+ruling from R1 to R24 says what the twin does, it describes that file and orders no further work.
+Rulings R44 to R48 were added on 11 November 2026 from the cross-stage check (§19).
 
 | # | Section | Ruling |
 |---|---|---|
@@ -1710,9 +2192,105 @@ override the earlier section they name.
 | R41 | S19, §8, §10.7 | Owner decision, 11 November 2026. The owner wants **one number per variable throughout the app**: today the profile shows one weight and the home screen another (from Apple Health). With the flag on, every surface that shows or uses the *current* weight or waist shows the resolver's value and nothing else: Today (all three variants), Profile, Settings, the estimates, Health readiness, the scorecard and the Coach context. A surface that lists one source's history (the Apple Health page, the Lab Book list, Compare charts) may show that source's series, labelled as that source, and never as "current". The profile mirror may replace the Settings value when the flag goes on (S19 accepted). Every place that shows the current value offers a way to correct it: it opens the weigh-in sheet or the history. A flag-on audit of every surface, with a test per surface, is part of stage 1. |
 | R42 | S18, R25, R29 | Owner decision, 11 November 2026: **a strap being disconnected, removed or gone must not delete the owner's readings.** Weight, waist and every other Lab Book reading the owner entered are the owner's data, not the strap's. Removing, forgetting or deleting a strap's data must leave them in place and still listed. This reverses, for this fork, the earlier decision to include `labMarker` in the tables a strap delete clears (`DeviceRegistryStore.swift:162-173`). It is a stored-data change with its own specification, tests, data-safety review and pull request ("Lab Book ownership"), and it also takes the items R29 deferred: Lab Book's listing across strap ids and the per-id re-projection. Erasing all of the app's data on purpose is a different action and still removes them. |
 | R43 | Q3 | Owner decision, 11 November 2026: the owner has no Android device and Android work is skipped. The Kotlin twins already written (the scorecard, its oracle test, the two backup keys) stay in the tree as written and never executed. From here on a change to shared logic records a written disposition in its pull request instead of a Kotlin twin, and the gate script's Android rows are waived by flag and reported as waived, never as passed. The parity ratchet's Kotlin lines stay as recorded debt. |
+| R44 | §7.1, §8.1, §8.2, §8.7, R41 | Cross-stage check X11, owner decision in force by default (S21), 11 November 2026; restated in the second reconciliation pass, where the orchestrator ruled that this is the rule's one home. A ruling on `BodyMeasurementResolver`. Within one Monday week, a usable row with source `manual` outranks every row of the same marker key (`weight` or `waist`) with source `MarkerCatalog.scanSource` (`body-scan`): the scan rows of that week are not readings for the resolver, not for the weekly point, the current value, the profile mirror or the estimates. A scan alone in its week is a reading like any other. No other source outranks or is outranked; a scan imported by CSV is not outranked and competes by instant. Only rows dated on or before the as-of day are judged or can outrank: a row after the as-of day never suppresses. The rule is one function, `BodyMeasurementResolver.withoutOutrankedScans(_:asOf:)` in `Strand/Data/BodyMeasurementResolver.swift`, with exactly two callers: `BodyMeasurementResolver.series` under the `unified` policy, before the newest-day and same-day rules, and `CutScorecardPresenter.history` for the week mark. `BodyMeasurementResolver.series` and `BodyMeasurementProvider.series` gain `asOf: String? = nil`; `resolve(asOf:)` is the last element of `series(asOf:)`; the input builder passes `asOf: today`. The pure function, its Kotlin twin and every stored row are unchanged, and R41 stands: one stored number per reading, one resolver. §8.7 is the full text. It is implemented by work package 1-11 in stage 4's serialised step, after stage 4's catalogue package declares the scan source constant. |
+| R45 | §9.2, §10.5, §11 | Cross-stage check X12, binding, 11 November 2026; restated in the second reconciliation pass, where the orchestrator ruled that this is the rule's one home. The protein floor has one home, `proteinFloorGrams` in `cutScorecard.rules`, and is stored and edited as a whole number of grams, from 1 to 100 000, or absent. One function, `CutScorecardSettings.isWholeGramProteinFloor`, decides what an editor may save; the rules sheet is the first editor and stage 3's intake settings the second, writing the same stored value through the same setter with no rule of their own. Neither editor rounds a typed fraction. `CutScorecardSettings.parameters` normalises on write and on read through `normalizedProteinFloorGrams` (nearest whole, halves away from zero, never below 1; invalid values pass through to validation); a read never rewrites the stored string (R30). No reader sees a fraction, so no surface has a state for one. Every surface prints `proteinFloorWholeGrams` followed by `g` with no decimals. `CutScorecardParameters.proteinFloorGrams` stays `Double?`. |
+| R46 | §1, §7.2, §9.2, §10.2, §10.5 | Cross-stage check X14, owner decision in force by default (S22), 11 November 2026. A diet break or a deload is a stage 5 event and is never entered as a phase; phases are only the long blocks. The pure function receives the same active phase throughout an event and reports as in any other week: no rule, window or count pauses. Stage 5 shows the event's note under the verdict. The phase sheet says beside its kind control that a break or deload is added as an event. Kind `other` keeps its existing meaning and behaviour. |
+| R47 | §1, §7.7, §7.8, §9.2, §10.2, §10.5 | Cross-stage check X10, owner decision in force by default (S20), 11 November 2026. The active phase's `targetWeightKg` is the only target weight in the app and the only weight the projection runs to. A phase element has no target date and gains none. A stage 6 checkpoint that carries a weight is a waypoint, labelled so, never read by this stage, and refused by stage 6 when equal to or beyond the phase target; a dated target is a checkpoint with no weight, attached to the phase. |
+| R48 | §13, R31 | Cross-stage check X20, binding, 11 November 2026. The Fixture Person of §13 is the one fixture person of the workstream. Demo, simulator and app-target fixtures in every stage take their phase, weigh-in weekday, weights, waists, missed week, lifts, protein days and protein floor (100 g) from §13, shifted by whole weeks where R31 requires real-clock dates. A pure-logic golden elsewhere may keep its own values. This stage's own fixture and `ScorecardDemo` do not change. |
 
 Fault injection on 10 November 2026 ran 198 single mutations of the implementation. Three were not
 caught by any test and are covered by tests added afterwards: the heaviest set when one exercise has
 several sets on one day; the prior lift window ending at `a − 8`, not `a − 7`; and the `dropped >= 1`
 condition when `liftDropShare` quantizes to zero. Seven mutations were equivalent (they cannot change
 any output).
+
+## 19. Reconciliation (11 November 2026)
+
+Applied from the cross-stage check (`build/superapp-coordination/cross-check.md`, an ignored local
+file). One line per conflict that names this stage, then what is expected from elsewhere.
+
+| Conflict | Decided by | What changed in this file |
+|---|---|---|
+| X10 | Owner, in force by default (S20) | §1, §7.7, §9.2, §10.2, §10.5: the phase's `targetWeightKg` is stated as the only target weight; a stage 6 checkpoint weight is a waypoint and a dated target is a checkpoint with no weight. Test `testAStoredPhaseHasNoTargetDateOrEndDateKey`. Ruling R47 |
+| X11 | Owner, in force by default (S21) | §7.1, §8.1, §8.2 (new rule 3; the profile fallback is now rule 4), §8.6, §10.2 to §10.4, §12.3, §12.6 (F29 to F35), §13.5, §14 (work package 1-11): a manual weigh-in outranks a body scan within its Monday week; `series` gains `asOf`. Ruling R44 |
+| X12 | Orchestrator, binding | §5, §9.2, §10.5, §11, §12.3, §12.4, §12.6 (F36 to F39), §14 (work package 1-10): the floor has one home, is whole grams at both editors, normalised on read and write, and printed one way. Ruling R45; S23 |
+| X14 | Owner, in force by default (S22) | §1, §7.2, §9.2, §10.2, §10.5, §11: a diet break or deload is an event, never a phase; the scorecard keeps reporting; one new line on the phase sheet. Ruling R46 |
+| X20 | Orchestrator, binding | §13: this fixture is declared the one Fixture Person for every stage, with its base values listed and the whole-week shift under R31. Ruling R48 |
+| X23 | Orchestrator, binding | Pointers to R43 at the top of §1 and §14. Beyond the resolution's minimum, as the reconciliation brief required: the header, §1, §4.4, §5, §7.1, §8.5, §9.3, §12.4, §12.7, §14, S14, §16 and the §18 preamble no longer instruct anyone to write or run Kotlin; work package 1-5 is marked closed; §9.3 states the drift |
+
+Not applied here, because the conflict does not name this stage: X1 to X9, X13, X15 to X19, X21,
+X22, X24. Three of them touch files this stage created, and §14 records the order only: X18 (model
+and builder), X22 (the scorecard screen's additions) and the shared-file row for the nine Today
+files.
+
+Privacy: the cross-check lists no finding against this file. On re-reading, three sentences that
+spoke about the state of a real install were reworded to speak about the build (§8.2, and two items
+of §16). No value, date or product was involved.
+
+**Shared scaffolding this stage expects from the orchestrator's step 0** (one commit on the
+integration branch, before any stage builds):
+
+- **The demo registry line** in `StrandiOS/App/StrandiOSApp.swift`, added by step 0. This stage's
+  demo file is `StrandiOS/Scorecard/ScorecardDemo.swift` and its one registry element is
+  `ScorecardDemo.screen(named:)`. Its reserved names are the existing unprefixed set in that file
+  (they predate the registry and are not renamed); any scorecard demo name added later takes the
+  prefix `scorecard-`. It returns nil for every other name. Work packages 1-10 and 1-11 add no demo
+  name.
+- **The plugin import commands and stage-named design folders** (`importS2` to `importS6`,
+  `design/round-sN-…`). This stage's approved frames stay where §17 records them
+  (`design/round6-scorecard/`); it needs no new command. The combined frame for the scorecard
+  screen, the Health card and Settings (cross-check X22) is drawn over this stage's approved frames
+  and does not replace them.
+- **`ObservableDefaultsFlag`.** `CutScorecardFlag.shared` is the type the other flags copied. After
+  step 0 it is expected to be one static instance of `ObservableDefaultsFlag` over
+  `noop.cutScorecardEnabled`, with the same observable `isEnabled` and no change at its call sites
+  (`TodayView`, `LiquidTodayView`, `SettingsView`, `LabBookView`, `CompareView`,
+  `TodayCustomizationSheet`). The R40 behaviour (a Today view that stays mounted picks up a flag
+  change) must hold after the swap; its existing tests are the check.
+- **`CanonicalDay`**, the one implementation of ruling R5's day-key rule outside the package, with
+  the test that pins it to `CutScorecard.weekStart(containing:)`. `CutScorecard`'s own private rule
+  is not removed. Work package 1-11 groups rows by `CutScorecard.weekStart(containing:)` directly.
+- **`ChargeTypicalBand`.** Not used by this stage; listed so that nothing here is read as needing
+  it.
+- **The fork-only backup keys comment** above `BackupSettings.whitelist`. This stage's two keys are
+  on both whitelists and are not fork-only; the comment should say so in one line, so that a reader
+  does not take them for keys the Kotlin side lacks.
+
+### Second pass
+
+Applied from the independent re-check of the first pass (`build/superapp-coordination/recheck.md`,
+an ignored local file) and the orchestrator's rulings for this pass. One line per item that names
+this file or touches this stage.
+
+| Item | Decided by | What changed in this file |
+|---|---|---|
+| X11, and the new conflict "specified and implemented twice" (ruling a) | Orchestrator, binding | The rule has its one home here. New §8.7 holds the whole rule; §8.2 rule 3 is now a pointer to it. The rule's shape is one function, `BodyMeasurementResolver.withoutOutrankedScans(_:asOf:)`, with `weighInSource`, and exactly two callers: `series` and `CutScorecardPresenter.history` (§5, §8.1, §8.7, §10.4). Kept from the first pass: the `asOf` parameter and "a row after the as-of day never suppresses"; the rule per marker key, for weight and for waist. Added: a manual row must be usable to outrank; a row with a non-canonical day belongs to no week; a scan imported by CSV is not outranked and competes by instant, stated as a rule and no longer only as an open question (S24). `history` gains `today:`. New tests in §12.3, the source scan `test_outranking_rule_has_two_callers` in §12.4 (the first pass had said no source scan), faults F40 to F43, cases S7b and S11 to S16 in §13.5. R44 restated; S21 lists what is dropped if the owner decides otherwise. Work package 1-11 stays the implementer, in stage 4's serialised step after stage 4's catalogue package; it now also edits `CutScorecardModel.swift` (one argument) and the Python source-scan file |
+| X12, and the new conflict "two whole-gram rules" (ruling b) | Orchestrator, binding | The rule has its one home here (§9.2, R45). Added the one editor predicate `CutScorecardSettings.isWholeGramProteinFloor` and `proteinFloorMaximumGrams` (100 000 g, the bound the intake field already used, so the two editors accept the same range). §9.2 now states that both editors write through the `parameters` setter, that no reader sees a fraction and that no "needs whole grams" state exists anywhere. The clause about a stored value too large to print, which no path could reach through an editor, is replaced by the one statement of what a hand-edited out-of-range value does. §10.5, two tests, one presenter test, fault F44, S23 |
+| X10 | Re-check | §9.2: the stage 6 names are now `weightWaypoint` with `waypointWeightKg` for a waypoint, and category `targetDate` attached by `phaseStartDay` for a dated target. `weightTarget` no longer appears |
+| Shared-file order includes stage 3 (ruling c), and the new conflict "stage 3 became an editor" | Orchestrator, binding | §14: the list "order against the other stages" is replaced by a hotspot table that gives this stage's own position on each shared file in the one order (Lab Book ownership, stage 2, stage 3, stage 4, stage 5, stage 6, packet v2) and no other stage's. The orders it used to quote for the model, builder, presenter and view are removed. Work package 1-10 is placed after Lab Book ownership and before stage 2; 1-11 after stage 3, first in stage 4's step |
+| Settings and Health order (ruling d; X22) | Orchestrator, binding | §10.6 and §10.9 state this stage's position only: Scorecard is first. §10.2 no longer lists what later stages add to the scorecard screen |
+| Debug demo registry (ruling h; X6) | Orchestrator, binding | §5 and the scaffolding list above: this stage's file (`ScorecardDemo.swift`), its one registry element and its names (the existing unprefixed set; `scorecard-` for any later name). The sentence about the order of the registry is removed |
+| `AICoach.swift` order (ruling i; X17) | Orchestrator, binding | §14 hotspot table: this stage does not edit the file |
+| Privacy (ruling k) | Orchestrator | Ruling R43 is left exactly as it was. Nothing else in this file was named |
+
+Rulings (e), (f), (g) and (j) name no text of this stage and changed nothing here.
+
+What this pass expects from the other specifications, so that the texts agree:
+
+- **Stage 4** refers to §8.7 and R44 and specifies no resolver code: no second declaration of
+  `withoutOutrankedScans` or `weighInSource`, no source scan of its callers, and no edit of
+  `BodyMeasurementResolver.swift`. Its variants assert through `series(…, asOf:)` or through the
+  function as declared in §8.1, with the `asOf` parameter. Its statement that the rule covers weight
+  rows only is superseded by "per marker key, weight and waist" here; the two agree for every row a
+  scan sheet writes while no scan writes a waist row.
+- **Stage 3** validates its floor field with `isWholeGramProteinFloor` (or a predicate tested equal
+  to it), writes through `CutScorecardSettings.parameters`, and prints `proteinFloorWholeGrams`.
+- **Stage 6** uses the checkpoint names quoted in §9.2.
+
+Not made consistent from this file alone:
+
+- `CutScorecardModel.swift` gains one argument in work package 1-11 (`today` passed to `history`).
+  The re-check's proposed order for that file did not include 1-11; the position is stated in §14.
+- Whether work package 1-10 runs before or after the Lab Book ownership change was not fixed by the
+  cross-check. §14 places it after, because both add to the String Catalog and ownership is first
+  in the one order. The two packages share no other file.
