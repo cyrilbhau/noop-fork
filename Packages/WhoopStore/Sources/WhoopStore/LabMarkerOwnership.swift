@@ -149,11 +149,14 @@ extension WhoopStore {
 
     // MARK: - Owner-scope writes
 
-    /// Upsert readings at owner scope, then recompute every touched projection cell, in one
-    /// transaction. A reading already stored at the same (`markerKey`, `takenAt`, `source`) under ANY
-    /// device id is updated where it is, keeping its `id` and `deviceId`; otherwise the row is
-    /// inserted as given. So re-importing a file after the active strap changed updates and does not
-    /// double. Returns the number of stored rows inserted or updated.
+    /// Upsert readings at owner scope, then re-derive the cells of the readings written, in one
+    /// transaction. With no stored row at the same (`markerKey`, `takenAt`, `source`) under ANY
+    /// device id the row is inserted as given. Otherwise the write lands on ONE stored reading: the
+    /// row with the incoming `id`, else the row under the incoming `deviceId`, else the only reading
+    /// stored there. That row and its copies are updated where they are, keeping their `id` and
+    /// `deviceId`, so re-importing a file after the active strap changed updates and does not
+    /// double. A different reading at the same instant is never changed (ruling A10); see
+    /// `ownerUpsert`. Returns the number of stored rows inserted or updated.
     @discardableResult
     public func upsertOwnerLabMarkers(_ rows: [LabMarkerRow]) async throws -> Int {
         guard !rows.isEmpty else { return 0 }
