@@ -277,7 +277,8 @@ struct CoachPacketSheet: View {
                     .foregroundStyle(NoopTheme.textSecondary)
                     .accessibilityHidden(true)
                 Text(verbatim: message)
-                    .noopFont(.body)
+                    .noopFont(.body, color: false)
+                    .foregroundStyle(NoopTheme.textPrimary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
