@@ -295,13 +295,17 @@ public enum CoachPacket {
         return String(cleaned)
     }
 
-    /// Every owner-typed or imported string the renderer passes through `sanitize`, as given: the
-    /// phase name when the scorecard is evaluated with a phase, then every workout's sport in input
-    /// order. A later section that prints free text adds its fields here (ruling A20).
+    /// Every owner-typed or imported string the renderer passes through `sanitize`, as given, for
+    /// the sections that are on: the phase name when the scorecard section is on and evaluated with
+    /// a phase, then every workout's sport in input order when the activity section is on. A text
+    /// whose section is off does not leave, so it is not scanned. A later section that prints free
+    /// text adds its fields here (ruling A20).
     public static func freeText(of input: CoachPacketInput) -> [String] {
         var texts: [String] = []
-        if case let .evaluated(phase?, _) = input.scorecard { texts.append(phase.name) }
-        texts += input.workouts.map(\.sport)
+        if input.sections.contains(.scorecard), case let .evaluated(phase?, _) = input.scorecard {
+            texts.append(phase.name)
+        }
+        if input.sections.contains(.activity) { texts += input.workouts.map(\.sport) }
         return texts
     }
 

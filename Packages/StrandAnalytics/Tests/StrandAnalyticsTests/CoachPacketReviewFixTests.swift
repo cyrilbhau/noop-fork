@@ -189,6 +189,11 @@ final class CoachPacketReviewFixTests: XCTestCase {
         XCTAssertEqual(CoachPacket.freeText(of: packet), [long, "rowing", "Fixture \"FP\"\nStrap"])
         XCTAssertEqual(CoachPacket.freeText(of: F.full { $0.scorecard = .switchedOff; $0.workouts = [] }.input), [])
         XCTAssertEqual(CoachPacket.freeText(of: F.full { $0.setResult(F.result(), phase: nil); $0.workouts = [] }.input), [])
+        // A text whose section is off does not leave, so it is not scanned.
+        let noScorecard = F.full { $0.sections.remove(.scorecard) }.input
+        XCTAssertEqual(CoachPacket.freeText(of: noScorecard), F.workouts.map(\.sport))
+        let noActivity = F.full { $0.sections.remove(.activity) }.input
+        XCTAssertEqual(CoachPacket.freeText(of: noActivity), [F.phase.name])
     }
 
     func testASensitiveValueCutByTheFreeTextLimitIsFound() {
