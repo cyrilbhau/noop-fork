@@ -209,6 +209,32 @@ final class LabMarkerProjectionValueTests: XCTestCase {
                        "no reading holds 3.4 any more; z-a is the latest reading of the day")
     }
 
+    /// The boundary of A14 that `LabMarkerOwnershipStoreTests.testGeneratedHistoriesKeepRowsAndProjectionConsistent`
+    /// fixes: the deleted reading was the LATEST of the day, so the cell holding its number projected
+    /// that reading, not the earlier one that shares the number. The cell follows the reading that
+    /// is the latest now.
+    func testDeletingTheLatestReadingMovesTheCellEvenWhenAnEarlierReadingSharesItsNumber() async throws {
+        for perId in [false, true] {
+            let store = try await Fx.emptyStoreWithRegistry()
+            let latest = Self.reading("z-a", Fx.a, Fx.t3, 3.4)
+            let sameInstant = Self.reading("b", Fx.n, Fx.t3, 3.0)
+            try Fx.insertRaw([latest, sameInstant, Self.e()], into: store)
+            try Fx.setCell(Fx.cell(Self.marker, Fx.day3, 3.4), in: store)
+
+            if perId {
+                let deleted = try await store.deleteLabMarker(id: "z-a")
+                XCTAssertTrue(deleted)
+            } else {
+                let deleted = try await store.deleteLabMarkerAndCopies(id: "z-a")
+                XCTAssertEqual(deleted, ["z-a"])
+            }
+
+            XCTAssertEqual(try ids(store), ["b", "e"])
+            XCTAssertEqual(try cells(store), [Fx.cell(Self.marker, Fx.day3, 3.0)],
+                           "per-id delete: \(perId): b is now the latest reading of the day")
+        }
+    }
+
     // MARK: - A13: an explicit write supersedes a trace
 
     /// A cell no stored row backs is a trace (ruling A11). A reading the owner adds for that marker

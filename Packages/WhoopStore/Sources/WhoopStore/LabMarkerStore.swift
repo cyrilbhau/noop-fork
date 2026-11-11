@@ -253,7 +253,12 @@ extension WhoopStore {
     /// - Day and value both as they were: nothing, unless the reading's cell is missing.
     /// - A number that left a cell (delete, another day, another value, or no longer a number): the
     ///   cell, when it is missing or holds that number. A cell holding anything else did not project
-    ///   this reading and is left as stored.
+    ///   this reading and is left as stored. The number has NOT left a cell that holds it while
+    ///   another stored reading of the marker and day still holds it (ruling A14): that cell is left
+    ///   as stored too, so removing a reading that merely shares the number of the projected one
+    ///   never flips a conflict day's cell to the other reading. The exception is the reading that
+    ///   was the latest of its marker and day: a cell holding its number projected THAT reading, so
+    ///   the cell is re-derived and follows the reading that is the latest now.
     /// - A number that arrived in a cell: the cell, when it is missing or this reading is now the
     ///   latest of its marker and day (§7.2). An earlier reading of the day does not disturb the
     ///   cell, so a cell holding one of two conflicting readings keeps the value already there.
@@ -272,7 +277,21 @@ extension WhoopStore {
         }
         if let before, let gone = before.value {
             let have = try stored(before.markerKey, before.day)
-            if have == nil || have == gone {
+            // Both read after the write: the reading itself no longer holds `gone` on that day.
+            // Ruling A14: another reading of the marker and day still holds the number.
+            let stillHeld = try have == gone && Bool.fetchOne(db, sql: """
+                SELECT EXISTS(SELECT 1 FROM labMarker WHERE markerKey = ? AND day = ? AND value = ?)
+                """, arguments: [before.markerKey, before.day, gone]) == true
+            // No other numeric reading of the marker and day came after this one (§7.2 order), so
+            // this was the reading a cell holding its number projected.
+            let wasLatest = try stillHeld && Bool.fetchOne(db, sql: """
+                SELECT NOT EXISTS(
+                    SELECT 1 FROM labMarker
+                    WHERE markerKey = ? AND day = ? AND value IS NOT NULL AND id <> ?
+                      AND (takenAt > ? OR (takenAt = ? AND id > ?)))
+                """, arguments: [before.markerKey, before.day, before.id,
+                                 before.takenAt, before.takenAt, before.id]) == true
+            if have == nil || (have == gone && (!stillHeld || wasLatest)) {
                 touched.insert(LabBookDayCell(markerKey: before.markerKey, day: before.day, vacated: gone))
             }
         }
