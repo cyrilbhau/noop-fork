@@ -704,13 +704,18 @@ public enum CoachPacket {
 
     private static func currentLine(_ kind: CoachPacketBodyKind, _ label: String, unit: String,
                                     _ body: [CoachPacketBodyReading]) -> String {
-        // SPEC-NOTE: §6.2 says which of two rows wins for days and steps and is silent for body
-        // readings. The same rule is used: the last reading of a kind is the current one, and a
-        // value that is not a positive finite number makes it absent.
-        guard let reading = body.last(where: { $0.kind == kind }), let value = positive(reading.value)
+        // Ruling A17: a reading whose day is not a canonical key is ignored and never printed, and
+        // the later of the remaining readings of a kind wins, as for days and steps. A reading with
+        // no day at all (the undated profile value) is kept and printed without one.
+        // SPEC-NOTE: a winning value that is not a positive finite number makes the item absent.
+        let usable = body.last(where: { reading in
+            guard reading.kind == kind else { return false }
+            guard let day = reading.day else { return true }
+            return CanonicalDay.number(day) != nil
+        })
+        guard let reading = usable, let value = positive(reading.value)
         else { return "current \(label): \(dash)" }
-        // SPEC-NOTE: a day that is not a canonical key is left out, as the undated profile value's is.
-        let day = reading.day.flatMap { CanonicalDay.number($0) != nil ? ", \($0)" : nil } ?? ""
+        let day = reading.day.map { ", \($0)" } ?? ""
         return "current \(label): \(fixed(value, 1)) \(unit) (\(reading.source.rawValue)\(day))"
     }
 
