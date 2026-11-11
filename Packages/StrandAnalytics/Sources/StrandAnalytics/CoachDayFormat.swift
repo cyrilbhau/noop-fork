@@ -5,7 +5,7 @@ import WhoopStore
 // coach packet both print a day through this type, so the two cannot drift: the packet differs only in
 // its `CoachDayStyle` (labels, the separator after the day key, and the strain scale).
 //
-// Pure: no store, no clock, no `Calendar`, no `TimeZone`, no `Date`, no `Locale`. Every function is
+// Pure: no store, no clock, no calendar, time-zone, date or locale object. Every function is
 // total. No Kotlin twin: the owner has skipped Android for the personal fork (stage 1 ruling R43).
 
 /// How one day is worded: the three labels that differ between the in-app Coach and the packet, the

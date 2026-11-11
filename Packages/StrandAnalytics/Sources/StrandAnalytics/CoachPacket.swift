@@ -5,7 +5,7 @@ import WhoopStore
 // owner's recent numbers to a coach outside the app. This file is the renderer and its input types.
 // What goes into the input is decided by the app-side assembler; nothing here reads a store.
 //
-// Pure: no store, no clock, no `Calendar`, no `TimeZone`, no `Date`, no `Locale`. Every function is
+// Pure: no store, no clock, no calendar, time-zone, date or locale object. Every function is
 // total. Day keys are validated and stepped through `CanonicalDay.` and nowhere else. The per-day
 // line and its averages are `CoachDayFormat`'s, the formatter the in-app Coach context uses.
 //
