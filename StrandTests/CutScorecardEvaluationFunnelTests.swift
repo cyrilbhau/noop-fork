@@ -36,6 +36,7 @@ final class CutScorecardEvaluationFunnelTests: XCTestCase {
 
     private func builder(_ h: CoachPacketHarness) -> CutScorecardInputBuilder {
         CutScorecardInputBuilder(repository: h.repo, provider: h.provider, settings: h.scorecardSettings,
+                                 intake: IntakeProvider(repository: h.repo, settings: IntakeSettings(defaults: h.defaults)),
                                  timeZone: { H.utc })
     }
 

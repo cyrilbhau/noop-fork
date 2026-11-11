@@ -144,6 +144,7 @@ final class BodyMeasurementSingleSourceTests: XCTestCase {
         let weighIns = WeighInStore(repository: repo, provider: provider, timeZone: { zone }, now: { now })
         let settings = CutScorecardSettings(defaults: defaults)
         let builder = CutScorecardInputBuilder(repository: repo, provider: provider, settings: settings,
+                                               intake: IntakeProvider(repository: repo, settings: IntakeSettings(defaults: defaults)),
                                                timeZone: { zone })
         defaults.written = []
         return Harness(store: store, repo: repo, defaults: defaults, provider: provider, weighIns: weighIns,

@@ -319,7 +319,7 @@ final class TodayCardResolverTests: XCTestCase {
         XCTAssertEqual(DashboardCard.scorecard.subtitle, "Weight and this week's verdict", "frame P1.2")
         XCTAssertFalse(DashboardCard.scorecard.icon.isEmpty)
         XCTAssertTrue(DashboardCard.scorecard.isRedesignOnly)
-        XCTAssertEqual(DashboardCard.allCases.filter(\.isRedesignOnly), [.scorecard],
+        XCTAssertEqual(Set(DashboardCard.allCases.filter(\.isRedesignOnly)), [.scorecard, .protein],
                        "no existing card is taken away from classic or Liquid Today")
     }
 

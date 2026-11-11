@@ -104,6 +104,7 @@ final class CutScorecardInputBuilderTests: XCTestCase {
         let weighIns = WeighInStore(repository: repo, provider: provider, timeZone: { utcZone }, now: { now })
         let settings = CutScorecardSettings(defaults: defaults)
         let builder = CutScorecardInputBuilder(repository: repo, provider: provider, settings: settings,
+                                               intake: IntakeProvider(repository: repo, settings: IntakeSettings(defaults: defaults)),
                                                timeZone: { builderZone })
         return Harness(store: store, repo: repo, defaults: defaults, provider: provider, weighIns: weighIns,
                        settings: settings, builder: builder)
