@@ -26,9 +26,10 @@ import StrandAnalytics
 // Behaviour assumed of the provider:
 //
 //  1. `refresh()` fetches the candidates through `repository.storeHandle()`:
-//       - Lab Book rows of `weight` and `waist` across every id of ruling R25 (the active id, every
-//         other registered WHOOP, the canonical id; `Repository.rawWhoopSourceIds`), de-duplicated by
-//         marker, instant and source with the active id's copy winning;
+//       - Lab Book rows of `weight` and `waist` under every device id present in `labMarker`,
+//         registered or not (ruling R42 and labbook-ownership.md §6.2, superseding the union of
+//         R25), read through `LabBookRows.marker`: rows equal in content are one reading with the
+//         active id's row standing for it, and rows that differ are both candidates;
 //       - Apple Health weight from `appleDaily.weightKg` and from `metricSeries` key `weight` under
 //         `apple-health`, merged per day, the daily column winning;
 //       - the profile value from `defaults`: key `profile.weightKg` (absent: 75, `profileIsSet`
@@ -619,14 +620,17 @@ final class BodyMeasurementSingleSourceTests: XCTestCase {
         XCTAssertEqual(weightOld.map(\.takenAt), [week2], "nothing was re-keyed to the active id")
     }
 
-    /// The same reading under two ids (same marker, instant and source) is one reading, and the
-    /// active id's copy is the one used. Both rows stay in the database.
+    /// The same reading under two ids (same marker, instant, source and value) is one reading, and
+    /// the active id's copy is the one used. Both rows stay in the database. Superseded by ruling R42
+    /// and labbook-ownership.md §7.1 where this test held two DIFFERENT values at one instant: those
+    /// are two readings, both reach the resolver, and its same-day rule (the greatest instant, then
+    /// the greatest id) chooses between them.
     func testDuplicateAcrossStrapIdsIsCountedOnceWithTheActiveCopy() async throws {
         let now = Date(timeIntervalSince1970: Double(week3 + 3_600))
         let h = try await makeHarness(today: "2031-01-22", now: now, flag: true, deviceId: "whoop-new")
         try register(h.store, "whoop-new", status: .active)
         try await h.store.upsertLabMarkers([
-            labRow("weight", deviceId: "my-whoop", day: "2031-01-08", takenAt: week1, value: 100.4, suffix: "CCCCCCCC"),
+            labRow("weight", deviceId: "my-whoop", day: "2031-01-08", takenAt: week1, value: 100.0, suffix: "CCCCCCCC"),
             labRow("weight", deviceId: "whoop-new", day: "2031-01-08", takenAt: week1, value: 100.0, suffix: "AAAAAAAA"),
             // Not a duplicate: another instant under the canonical id.
             labRow("weight", deviceId: "my-whoop", day: "2031-01-15", takenAt: week2, value: 99.2),
@@ -634,15 +638,33 @@ final class BodyMeasurementSingleSourceTests: XCTestCase {
         await h.provider.refresh()
 
         let series = h.provider.series(.weight, consumer: .display)
-        XCTAssertEqual(series.map(\.value), [100.0, 99.2], "the active id's copy wins, though its id sorts lower")
-        XCTAssertEqual(series.first?.rowId, "weight-\(week1)-AAAAAAAA")
+        XCTAssertEqual(series.map(\.value), [100.0, 99.2])
+        XCTAssertEqual(series.first?.rowId, "weight-\(week1)-AAAAAAAA", "the active id's copy stands, though its id sorts lower")
         XCTAssertEqual(h.provider.candidates(.weight).labBook.count, 2, "the duplicate is collapsed before the resolver sees it")
         XCTAssertEqual(h.provider.resolve(.weight, asOf: "2031-01-08", consumer: .estimate)?.value, 100.0)
 
         let canonical = try await bodyRowCount(h.store, "my-whoop")
         let active = try await bodyRowCount(h.store, "whoop-new")
-        XCTAssertEqual(canonical, 2, "the losing copy is not deleted")
+        XCTAssertEqual(canonical, 2, "the copy that is not listed is not deleted")
         XCTAssertEqual(active, 1)
+
+        // The data this test held before ruling R42: different values at one instant under two ids.
+        let h2 = try await makeHarness(today: "2031-01-22", now: now, flag: true, deviceId: "whoop-new")
+        try register(h2.store, "whoop-new", status: .active)
+        try await h2.store.upsertLabMarkers([
+            labRow("weight", deviceId: "my-whoop", day: "2031-01-08", takenAt: week1, value: 100.4, suffix: "CCCCCCCC"),
+            labRow("weight", deviceId: "whoop-new", day: "2031-01-08", takenAt: week1, value: 100.0, suffix: "AAAAAAAA"),
+            labRow("weight", deviceId: "my-whoop", day: "2031-01-15", takenAt: week2, value: 99.2),
+        ])
+        await h2.provider.refresh()
+
+        XCTAssertEqual(h2.provider.candidates(.weight).labBook.count, 3, "neither reading is hidden from the resolver")
+        let series2 = h2.provider.series(.weight, consumer: .display)
+        XCTAssertEqual(series2.map(\.value), [100.4, 99.2], "one point per day: the same instant, then the greatest id")
+        XCTAssertEqual(series2.first?.rowId, "weight-\(week1)-CCCCCCCC")
+        XCTAssertEqual(h2.provider.resolve(.weight, asOf: "2031-01-08", consumer: .estimate)?.value, 100.4)
+        let listed = await h2.weighIns.readings(.weight)
+        XCTAssertEqual(listed.map(\.value), [100.0, 100.4, 99.2], "the history lists both readings of 2031-01-08")
     }
 
     /// Two readouts of one fact: the rows the history list is built from and the rows the resolver is
@@ -661,7 +683,9 @@ final class BodyMeasurementSingleSourceTests: XCTestCase {
         ])
         await h.provider.refresh()
 
-        for (kind, expected) in [(BodyMeasurementKind.weight, 3), (BodyMeasurementKind.waist, 1)] {
+        // Ruling R42 and labbook-ownership.md §7.1: the two weights of 2031-01-08 differ in value, so
+        // they are two readings and both are listed and fed (four weights; before R42, three).
+        for (kind, expected) in [(BodyMeasurementKind.weight, 4), (BodyMeasurementKind.waist, 1)] {
             let listed = await h.weighIns.readings(kind)
             let fed = h.provider.candidates(kind).labBook
             XCTAssertEqual(listed.count, expected)
