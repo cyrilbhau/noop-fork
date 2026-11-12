@@ -1787,6 +1787,10 @@
       "Today's coaching brief"
     ],
     [
+      "StrandiOS/Events/PersonalEventsView.swift",
+      "\\n"
+    ],
+    [
       "StrandiOSWidgets/StressWidget.swift",
       "Stress \\(now) of 3, average \\(meanText), peak \\(peakText)"
     ],
