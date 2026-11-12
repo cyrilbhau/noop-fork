@@ -23,8 +23,9 @@ import WhoopStore
 // shown back verbatim — NOOP defines no ranges and asserts no normality.
 
 struct MarkerEditorView: View {
-    /// Persist the validated draft row(s). Async so the caller can write + refresh.
-    let onSave: (_ drafts: [LabMarkerRow]) async -> Void
+    /// Persist the validated draft row(s). Async so the caller can write + refresh. False when
+    /// nothing was saved.
+    let onSave: (_ drafts: [LabMarkerRow]) async -> Bool
 
     @EnvironmentObject var repo: Repository
     @Environment(\.dismiss) private var dismiss
@@ -46,6 +47,14 @@ struct MarkerEditorView: View {
     @State private var referenceText = ""
 
     @State private var saving = false
+
+    // Stage 4 (4B, laboratory units): the switch, the chosen option's label and the "Saved …" line.
+    @ObservedObject private var reportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
+    @State private var reportUnitLabel = ""
+    @State private var savedLine: String?
+    // Stage 4: the readings saved in this sitting, and the line while a save failed.
+    @State private var savedReadings: Set<String> = []
+    @State private var saveFailedLine: String?
 
     private enum Field: Hashable { case value, diastolic, note, reference, customName, customUnit }
     @FocusState private var focused: Field?
@@ -81,6 +90,11 @@ struct MarkerEditorView: View {
             SectionHeader("Marker", overline: "what are you logging?")
             NoopCard {
                 VStack(alignment: .leading, spacing: 12) {
+                    if let savedLine, selection == nil, !addingCustom {
+                        Text(verbatim: savedLine)
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textSecondary)
+                    }
                     if addingCustom {
                         customMarkerFields
                     } else if let selection {
@@ -257,7 +271,50 @@ struct MarkerEditorView: View {
         }
     }
 
+    @ViewBuilder
     private var valueField: some View {
+        if let entryDraft {
+            reportUnitsValueField(entryDraft)
+        } else {
+            legacyValueField
+        }
+    }
+
+    /// 4B, flag on (§10.6 L1 to L4): every option of the unit table, and what a save stores.
+    private func reportUnitsValueField(_ draft: LabMarkerEntryDraft) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Value").strandOverline()
+                Spacer()
+                if draft.unitOptions.count > 1 {
+                    SegmentedPillControl(draft.unitOptions, selection: $reportUnitLabel) { $0 }
+                        .accessibilityLabel("Unit")
+                }
+            }
+            HStack(spacing: 8) {
+                TextField("e.g. 3.1", text: $valueText)
+                    .textFieldStyle(.plain)
+                    .font(StrandFont.bodyNumber)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                    .numericKeyboard()
+                    .focused($focused, equals: .value)
+                Text(verbatim: draft.unitLabel).font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(StrandPalette.surfaceInset, in: inputShape)
+            .overlay(inputShape.strokeBorder(StrandPalette.hairline, lineWidth: 1))
+            ForEach([saveFailedLine,
+                     draft.replaceNotice(markerName: selection?.displayName ?? "", savedReadings: savedReadings),
+                     draft.errorLine, draft.conversionLine, draft.formulaLine].compactMap { $0 }, id: \.self) { line in
+                Text(verbatim: line)
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var legacyValueField: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Value").strandOverline()
@@ -338,6 +395,11 @@ struct MarkerEditorView: View {
                 .font(StrandFont.body)
                 .foregroundStyle(StrandPalette.textSecondary)
             Spacer()
+            if entryDraft?.offersSaveAndAddAnother == true {
+                Button("Save and add another") { saveAndAddAnother() }
+                    .buttonStyle(.noopGhost)
+                    .disabled(drafts.isEmpty || saving)
+            }
             Button("Save") { save() }
                 .buttonStyle(.noopPrimary)
                 .frame(maxWidth: 160)
@@ -352,6 +414,9 @@ struct MarkerEditorView: View {
         selection = def
         unit = def.canonicalUnit
         unitChoice = 0
+        reportUnitLabel = def.canonicalUnit
+        savedLine = nil
+        saveFailedLine = nil
         focused = .value
     }
 
@@ -415,6 +480,11 @@ struct MarkerEditorView: View {
                 row(key: LabBookProjection.bpDiastolicKey, category: .bloodPressure, value: dia, unit: "mmHg"),
             ]
         }
+        if let entryDraft {
+            guard entryDraft.canSave, let stored = entryDraft.storedValue else { return [] }
+            return [row(key: markerKey, category: category, value: stored, unit: entryDraft.storedUnit,
+                        valueText: entryDraft.annotation)]
+        }
         guard let raw = parsed(valueText) else { return [] }
         // Convert the entered value to the canonical stored unit if a switcher is in use.
         let canonical = MarkerUnits.canonicalUnit(for: markerKey, fallback: unit)
@@ -422,7 +492,8 @@ struct MarkerEditorView: View {
         return [row(key: markerKey, category: category, value: stored, unit: canonical)]
     }
 
-    private func row(key: String, category: LabMarkerCategory, value: Double, unit: String) -> LabMarkerRow {
+    private func row(key: String, category: LabMarkerCategory, value: Double, unit: String,
+                     valueText: String? = nil) -> LabMarkerRow {
         let trimmedNote = note.trimmingCharacters(in: .whitespaces)
         let trimmedRef = referenceText.trimmingCharacters(in: .whitespaces)
         let epoch = Int(takenAt.timeIntervalSince1970)
@@ -434,7 +505,7 @@ struct MarkerEditorView: View {
             day: LabBookFormat.dayKey(takenAt),
             takenAt: epoch,
             value: value,
-            valueText: nil,
+            valueText: valueText,
             unit: unit,
             source: "manual",
             note: trimmedNote.isEmpty ? nil : trimmedNote,
@@ -446,12 +517,47 @@ struct MarkerEditorView: View {
         Double(s.trimmingCharacters(in: .whitespaces))
     }
 
+    /// 4B, flag on: the draft of a catalogue marker with one value field. Nil while the flag is off,
+    /// for blood pressure and for a custom marker, which keep the editor as it was.
+    private var entryDraft: LabMarkerEntryDraft? {
+        guard reportUnitsFlag.isEnabled, let selection, !addingCustom, !isBloodPressure else { return nil }
+        var draft = LabMarkerEntryDraft(markerKey: selection.key, reportUnitsEnabled: true,
+                                        decimalSeparator: Character(Locale.current.decimalSeparator ?? "."),
+                                        takenAt: takenAt)
+        if draft.unitOptions.contains(reportUnitLabel) { draft.unitLabel = reportUnitLabel }
+        draft.text = valueText
+        return draft
+    }
+
+    /// L5: saves, then returns to the marker list with the date kept and says what was saved.
+    private func saveAndAddAnother() {
+        let rows = drafts
+        guard !rows.isEmpty, let entryDraft, let selection else { return }
+        saving = true
+        Task {
+            let saved = await onSave(rows)
+            saving = false
+            guard let next = entryDraft.afterSaveAndAddAnother(markerName: selection.displayName, saved: saved,
+                                                               savedReadings: savedReadings) else {
+                saveFailedLine = LabMarkerEntryDraft.saveFailedLine
+                return
+            }
+            reset()
+            saveFailedLine = nil
+            takenAt = next.takenAt
+            note = next.note
+            referenceText = next.referenceText
+            savedReadings = next.savedReadings
+            savedLine = next.savedLine
+        }
+    }
+
     private func save() {
         let rows = drafts
         guard !rows.isEmpty else { return }
         saving = true
         Task {
-            await onSave(rows)
+            _ = await onSave(rows)
             dismiss()
         }
     }
@@ -531,7 +637,7 @@ private func markerEditorPreviewRepo() -> Repository {
 }
 
 #Preview("Marker Editor") {
-    MarkerEditorView { _ in }
+    MarkerEditorView { _ in true }
         .environmentObject(markerEditorPreviewRepo())
         .frame(width: 520, height: 720)
         .preferredColorScheme(.dark)

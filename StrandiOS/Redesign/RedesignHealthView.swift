@@ -23,6 +23,8 @@ struct RedesignHealthView: View {
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     /// The coach packet flag (stage 2 specification §10.1): its row shows only while on.
     @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
+    // Stage 4: the body record flag (stage-4.md §10.1): its row shows only while on.
+    @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
@@ -484,9 +486,14 @@ struct RedesignHealthView: View {
                 if coachPacketFlag.isEnabled {
                     HealthCoachPacketRow(showsDivider: scorecardFlag.isEnabled)
                 }
+                // Stage 4: fourth in the one order (ruling A1), after the rows of stages 1 to 3.
+                if bodyRecordFlag.isEnabled {
+                    BodyRecordHealthRowView(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled)
+                }
                 NavigationLink(value: MoreDestination.live) {
                     NoopListRow("Live heart rate", systemImage: "waveform.path.ecg", color: NoopTheme.heart,
-                                showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled)
+                                showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                    || bodyRecordFlag.isEnabled) // Stage 4: the divider follows the row above.
                 }
                 NavigationLink(value: MoreDestination.explore) {
                     NoopListRow("All metrics", systemImage: "square.grid.2x2", color: NoopTheme.hrv)

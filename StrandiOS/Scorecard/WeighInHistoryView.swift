@@ -100,7 +100,14 @@ struct WeighInHistoryScreen: View {
         List {
             Section {
                 ForEach(history.rows) { row in
-                    rowView(row, history: history)
+                    // Stage 4: a scan's row opens its scan while the body record is on (stage-4.md §10.7).
+                    Group {
+                        if let scanId = row.scanId {
+                            NavigationLink(value: RedesignRoute.bodyScan(id: scanId)) { rowView(row, history: history) }
+                        } else {
+                            rowView(row, history: history)
+                        }
+                    }
                         .listRowBackground(NoopTheme.card)
                         .listRowSeparatorTint(NoopTheme.separator)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

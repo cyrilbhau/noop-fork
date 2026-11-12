@@ -637,6 +637,9 @@ enum DemoScreens {
             // The stage 2 packet sheet in each state of design/round-s2-coach-packet, on synthetic
             // data: packet-b1 … b17, and packet-live.
             .init(prefixes: DemoScreenPrefixes.packet, resolve: CoachPacketDemo.screen(named:)),
+            // Stage 4: the body record in each state of design/round-s4-body-record, on synthetic
+            // data: bodyrecord-…, scan-…, compare-…, bench-… and labunits-… (stage-4.md §12.10).
+            .init(prefixes: DemoScreenPrefixes.bodyRecord, resolve: BodyRecordDemo.screen(named:)),
         ])
         assert(registry.conflicts.isEmpty, "demo prefixes overlap: \(registry.conflicts)")
         return registry

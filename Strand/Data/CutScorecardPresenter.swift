@@ -211,6 +211,8 @@ struct WeighInHistoryRow: Equatable, Identifiable {
     /// The stored rows an edit or a delete acts on.
     var weightRow: LabMarkerRow?
     var waistRow: LabMarkerRow?
+    // Stage 4: the body scan a tap opens; nil unless the body record is on and the row is a scan's.
+    var scanId: String? = nil
 }
 
 /// The weigh-in history list, newest first.
@@ -819,9 +821,16 @@ enum CutScorecardPresenter {
 
     /// The history list. `weights` and `waists` are `WeighInStore.readings(_:)`, the union across
     /// strap ids of ruling R25; `appleHealth` is the provider's Apple Health weight per day.
+    ///
+    /// `today` (stage 1 work package 1-11, ruling R44): a scan's weight row outranked by a manual
+    /// weigh-in of its week as of `today` is listed without the week's mark; nil judges every row.
+    /// `bodyRecordEnabled` (stage 4 §10.7): a scan's row is captioned as a scan, is read-only here
+    /// and opens its scan. Stage 4: `scanIds` are the stored scans' ids; a body-scan row whose scan
+    /// does not exist (§7.6) is then an ordinary Lab Book row. Nil does not check.
     static func history(weights: [LabMarkerRow], waists: [LabMarkerRow],
                         appleHealth: [(day: String, value: Double)],
-                        unitSystem: UnitSystem, locale: Locale) -> WeighInHistory {
+                        unitSystem: UnitSystem, locale: Locale, today: String? = nil,
+                        bodyRecordEnabled: Bool = false, scanIds: Set<String>? = nil) -> WeighInHistory {
         let words = Wording(unitSystem: unitSystem, locale: locale)
         var unlisted = 0
         var entries: [HistoryEntry] = []
@@ -861,8 +870,11 @@ enum CutScorecardPresenter {
 
         // The reading that represents a week is its latest weight: the newest day, a Lab Book reading
         // before an Apple Health value on one day, then the latest instant.
+        // Stage 4 (stage 1 work package 1-11, R44): an outranked scan row stays listed without the mark.
+        let markable = Set(BodyMeasurementResolver.withoutOutrankedScans(weights, asOf: today).map(\.id))
         var representative: [String: Int] = [:]
         for (index, entry) in entries.enumerated() where entry.weightKg != nil {
+            if let row = entry.weightRow, !markable.contains(row.id) { continue }
             guard let week = CutScorecard.weekStart(containing: entry.day) else { continue }
             representative[week] = index
         }
@@ -880,13 +892,19 @@ enum CutScorecardPresenter {
             }
             let stored = entry.weightRow ?? entry.waistRow
             let isLabBook = entry.source == .labBook
+            // Stage 4: while the body record is on a scan's row names the scan and opens it.
+            let scanId = bodyRecordEnabled && entry.labSource == MarkerCatalog.scanSource
+                ? stored.map { BodyScan.id(source: $0.source, takenAt: $0.takenAt) }
+                    .flatMap { scanIds?.contains($0) == false ? nil : $0 } : nil
+            let shownOrigin = scanId == nil ? origin : String(localized: "Lab Book · body scan")
             return WeighInHistoryRow(
                 id: stored.map { "\($0.deviceId)\u{1F}\($0.id)" } ?? "apple-health\u{1F}\(entry.day)",
                 day: entry.day, takenAt: entry.takenAt, dateText: words.date(entry.day),
                 weightText: entry.weightKg.map(words.weightNumber),
                 waistText: entry.waistCm.map(words.lengthNumber), source: entry.source,
-                caption: "\(lead) · \(origin)", representsWeek: represents,
-                canEdit: isLabBook, canDelete: isLabBook, weightRow: entry.weightRow, waistRow: entry.waistRow)
+                caption: "\(lead) · \(shownOrigin)", representsWeek: represents,
+                canEdit: isLabBook && scanId == nil, canDelete: isLabBook && scanId == nil,
+                weightRow: entry.weightRow, waistRow: entry.waistRow, scanId: scanId)
         }
 
         var note: String?

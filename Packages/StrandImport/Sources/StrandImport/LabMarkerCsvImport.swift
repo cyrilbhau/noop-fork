@@ -113,23 +113,26 @@ public enum LabMarkerCsvImport {
 
     /// Parse raw CSV bytes (UTF-8, BOM-tolerant, latin-1 fallback — same as `CSVTable`).
     /// Files over `maxBytes` are rejected outright (`fileTooLarge`).
-    public static func parse(data: Data) -> LabMarkerCsvResult {
+    /// `scope` (stage 4 specification §7.1): `.builtIn`, the default, resolves names exactly as before;
+    /// `.withBodyRecord` also resolves the body-record markers. No Kotlin twin of the scope (ruling R43).
+    public static func parse(data: Data, scope: MarkerCatalogScope = .builtIn) -> LabMarkerCsvResult {
         guard data.count <= maxBytes else {
             return LabMarkerCsvResult(rows: [], skippedRows: 0, customMarkerKeys: [],
                                       earliestDay: nil, latestDay: nil,
                                       truncated: false, fileTooLarge: true)
         }
-        return parseTable(CSVTable(data: data), maxRows: maxRows)
+        return parseTable(CSVTable(data: data), maxRows: maxRows, scope: scope)
     }
 
-    /// Parse CSV text.
-    public static func parse(text: String) -> LabMarkerCsvResult {
-        parseTable(CSVTable(text: text), maxRows: maxRows)
+    /// Parse CSV text. `scope` as for `parse(data:scope:)`.
+    public static func parse(text: String, scope: MarkerCatalogScope = .builtIn) -> LabMarkerCsvResult {
+        parseTable(CSVTable(text: text), maxRows: maxRows, scope: scope)
     }
 
     // MARK: - Core (row cap injectable for tests)
 
-    static func parseTable(_ table: CSVTable, maxRows: Int) -> LabMarkerCsvResult {
+    static func parseTable(_ table: CSVTable, maxRows: Int,
+                           scope: MarkerCatalogScope = .builtIn) -> LabMarkerCsvResult {
         let headers = table.normalizedHeaders
 
         // Which normalized column feeds each field. Exact matches first, then a
@@ -175,7 +178,7 @@ public enum LabMarkerCsvImport {
             // Blood pressure: a combined "120/80" cell (under any bp-family name) becomes
             // the systolic/diastolic PAIR — a one-row-one-marker mapping would silently
             // drop diastolic (spec §"Blood pressure modelling").
-            let resolved = resolveMarker(rawName)
+            let resolved = resolveMarker(rawName, scope: scope)
             if resolved.isBloodPressureFamily, let pair = bloodPressurePair(rawValue) {
                 let unit = rawUnit ?? "mmHg"
                 store(&byCell, LabMarkerCsvRow(markerKey: bpSystolicKey, category: .bloodPressure,
@@ -264,13 +267,19 @@ public enum LabMarkerCsvImport {
     /// Resolve a raw marker-name cell to a stable key: catalog key, catalog display
     /// name, alias, or (fallback) a `custom_<slug>` key identical to the one the manual
     /// editor mints — so CSV customs and hand-added customs fold onto one history.
-    static func resolveMarker(_ rawName: String) -> ResolvedMarker {
+    ///
+    /// `scope` `.withBodyRecord` consults `bodyRecordAliasTable` when the built-in table has no
+    /// entry, before the custom-key fallback (stage 4 specification §7.1).
+    static func resolveMarker(_ rawName: String, scope: MarkerCatalogScope = .builtIn) -> ResolvedMarker {
         let norm = matchNorm(rawName)
         if norm.isEmpty { return ResolvedMarker(key: nil, isBloodPressureFamily: false) }
         if let mapped = aliasTable[norm] {
             if mapped == bpCombined { return ResolvedMarker(key: nil, isBloodPressureFamily: true) }
             return ResolvedMarker(key: mapped,
                                   isBloodPressureFamily: mapped == bpSystolicKey || mapped == bpDiastolicKey)
+        }
+        if scope == .withBodyRecord, let mapped = bodyRecordAliasTable[norm] {
+            return ResolvedMarker(key: mapped, isBloodPressureFamily: false)
         }
         let key = customKey(rawName)
         guard !key.isEmpty else { return ResolvedMarker(key: nil, isBloodPressureFamily: false) }
@@ -317,6 +326,58 @@ public enum LabMarkerCsvImport {
         for (k, v) in extras { t[k] = v }
         return t
     }()
+
+    /// The second table of the wide scope (stage 4 specification §7.1): every body-record key and
+    /// display name, then the extras of §7.1, in `matchNorm` form. Consulted only after the built-in
+    /// table, so it can never shadow one of its entries. `lean_mass` is deliberately not an alias: a
+    /// scale's lean mass includes bone and a scan's does not.
+    /// No Kotlin twin, by ruling R43 of the stage 1 specification.
+    static let bodyRecordAliasTable: [String: String] = {
+        var t: [String: String] = [:]
+        for def in MarkerCatalog.bodyRecord {
+            t[matchNorm(def.key)] = def.key
+            t[matchNorm(def.displayName)] = def.key
+        }
+        let extras: [String: String] = [
+            "total_mass": "weight", "total_body_mass": "weight", "scan_total_mass": "weight",
+            "scan_body_fat": "body_fat", "body_fat_scan": "body_fat", "total_body_fat_pct": "body_fat",
+            "fat_mass": "scan_fat_mass", "total_fat_mass": "scan_fat_mass",
+            "lean_tissue_mass": "scan_lean_mass", "lean_soft_tissue_mass": "scan_lean_mass",
+            "lean_mass_scan": "scan_lean_mass",
+            "bmc": "scan_bone_mass", "bone_mineral_content": "scan_bone_mass", "bone_mass": "scan_bone_mass",
+            "fat_free_mass": "scan_fat_free_mass", "ffm": "scan_fat_free_mass",
+            "visceral_fat_mass": "scan_visceral_fat_mass", "vat_mass": "scan_visceral_fat_mass",
+            "visceral_fat_area": "scan_visceral_fat_area", "vat_area": "scan_visceral_fat_area",
+            "android_fat": "scan_android_fat_pct", "android_fat_pct": "scan_android_fat_pct",
+            "gynoid_fat": "scan_gynoid_fat_pct", "gynoid_fat_pct": "scan_gynoid_fat_pct",
+            "android_gynoid_ratio": "scan_android_gynoid_ratio", "a_g_ratio": "scan_android_gynoid_ratio",
+            "ag_ratio": "scan_android_gynoid_ratio",
+            "arms_lean_mass": "scan_arms_lean_mass", "arms_lean": "scan_arms_lean_mass",
+            "left_arm_lean_mass": "scan_arm_left_lean_mass", "left_arm_lean": "scan_arm_left_lean_mass",
+            "right_arm_lean_mass": "scan_arm_right_lean_mass", "right_arm_lean": "scan_arm_right_lean_mass",
+            "legs_lean_mass": "scan_legs_lean_mass", "legs_lean": "scan_legs_lean_mass",
+            "left_leg_lean_mass": "scan_leg_left_lean_mass", "left_leg_lean": "scan_leg_left_lean_mass",
+            "right_leg_lean_mass": "scan_leg_right_lean_mass", "right_leg_lean": "scan_leg_right_lean_mass",
+            "trunk_lean_mass": "scan_trunk_lean_mass", "trunk_lean": "scan_trunk_lean_mass",
+            "bmd": "scan_bmd", "bone_mineral_density": "scan_bmd",
+            "t_score": "scan_bmd_t_score",
+            "z_score": "scan_bmd_z_score",
+            "rmr": "scan_rmr_lab_estimate", "resting_metabolic_rate": "scan_rmr_lab_estimate",
+            "push_ups": "bench_pushup_reps", "pushups": "bench_pushup_reps",
+            "incline_push_ups": "bench_incline_pushup_reps", "incline_pushups": "bench_incline_pushup_reps",
+            "knee_push_ups": "bench_knee_pushup_reps", "knee_pushups": "bench_knee_pushup_reps",
+            "pull_ups": "bench_pullup_reps", "pullups": "bench_pullup_reps",
+            "dead_hang": "bench_dead_hang_s",
+            "plank": "bench_plank_s",
+            "wall_sit": "bench_wall_sit_s",
+            "grip_strength": "bench_grip_kg",
+        ]
+        for (k, v) in extras { t[k] = v }
+        return t
+    }()
+
+    /// The built-in table's keys, for the test that the second table shadows none of them.
+    static var builtInAliasKeys: Set<String> { Set(aliasTable.keys) }
 
     /// Full-collapse normal form for alias matching: lowercase, diacritic-folded,
     /// every non-alphanumeric RUN → one `_`, trimmed. (Deliberately NOT

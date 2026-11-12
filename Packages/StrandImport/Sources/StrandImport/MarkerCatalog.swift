@@ -121,9 +121,10 @@ public enum MarkerCatalog {
         return m
     }()
 
-    /// The built-in definition for `key`, or `nil` if it's a custom marker.
+    /// The catalogue definition for `key`, or `nil` if it's a custom marker. `builtIn` is consulted
+    /// first and `bodyRecord` second, in every scope (stage 4 specification §6.1).
     public static func definition(for key: String) -> MarkerDefinition? {
-        byKey[key]
+        byKey[key] ?? bodyRecordByKey[key]
     }
 
     /// Build a definition for a user-added custom marker. Categorised as `.other`
@@ -139,5 +140,111 @@ public enum MarkerCatalog {
             referenceTextHint: nil,
             higherIsBetter: nil
         )
+    }
+}
+
+// MARK: - Body record (stage 4)
+//
+// The second catalogue list: the figures a generic whole-body composition report can print and a
+// generic set of bodyweight and grip benchmarks (stage 4 specification §5.2, §5.3, §6.1). It is a
+// separate list and a separate scope so that `builtIn` stays byte-identical to the Kotlin catalogue.
+// Not mirrored on Android, by the owner's decision (ruling R43 of the stage 1 specification).
+//
+// A scan's total mass and body-fat percentage have NO entry here: they are ordinary `weight` and
+// `body_fat` readings, so neither variable gains a second number (ruling R41).
+
+/// Which catalogue lists a name lookup may resolve against.
+/// No Kotlin twin, by ruling R43 of the stage 1 specification.
+public enum MarkerCatalogScope: Sendable {
+    /// The 30 built-in markers only. Byte-identical to the Kotlin catalogue.
+    case builtIn
+    /// The built-in markers and `MarkerCatalog.bodyRecord`.
+    case withBodyRecord
+}
+
+extension MarkerCatalog {
+
+    /// The 21 scan markers of §5.2, in the order a report prints them. Category `imaging`: an older
+    /// build lists rows category by category over the enum's cases, so no new category is added.
+    private static let scanMarkers: [MarkerDefinition] = [
+        .init(key: "scan_fat_mass", displayName: "Fat mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 1),
+        .init(key: "scan_lean_mass", displayName: "Lean mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 1),
+        .init(key: "scan_bone_mass", displayName: "Bone mineral content (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_fat_free_mass", displayName: "Fat-free mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 1),
+        .init(key: "scan_visceral_fat_mass", displayName: "Visceral fat mass (scan)", category: .imaging, canonicalUnit: "g", decimals: 0),
+        .init(key: "scan_visceral_fat_area", displayName: "Visceral fat area (scan)", category: .imaging, canonicalUnit: "cm\u{00B2}", decimals: 0),
+        .init(key: "scan_android_fat_pct", displayName: "Android fat (scan)", category: .imaging, canonicalUnit: "%", decimals: 1),
+        .init(key: "scan_gynoid_fat_pct", displayName: "Gynoid fat (scan)", category: .imaging, canonicalUnit: "%", decimals: 1),
+        .init(key: "scan_android_gynoid_ratio", displayName: "Android to gynoid ratio (scan)", category: .imaging, canonicalUnit: "ratio", decimals: 2),
+        .init(key: "scan_arms_lean_mass", displayName: "Arms lean mass, total (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_arm_left_lean_mass", displayName: "Left arm lean mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_arm_right_lean_mass", displayName: "Right arm lean mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_legs_lean_mass", displayName: "Legs lean mass, total (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_leg_left_lean_mass", displayName: "Left leg lean mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_leg_right_lean_mass", displayName: "Right leg lean mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_trunk_lean_mass", displayName: "Trunk lean mass (scan)", category: .imaging, canonicalUnit: "kg", decimals: 2),
+        .init(key: "scan_bmd", displayName: "Bone mineral density (scan)", category: .imaging, canonicalUnit: "g/cm\u{00B2}", decimals: 3),
+        .init(key: "scan_bmd_t_score", displayName: "Bone density T-score (scan)", category: .imaging, canonicalUnit: "SD", decimals: 1),
+        .init(key: "scan_bmd_z_score", displayName: "Bone density Z-score (scan)", category: .imaging, canonicalUnit: "SD", decimals: 1),
+        .init(key: "scan_rmr_lab_estimate", displayName: "Resting metabolic rate (laboratory estimate)", category: .imaging, canonicalUnit: "kcal/day", decimals: 0),
+        .init(key: "scan_note", displayName: "Scan note", category: .imaging, canonicalUnit: "", decimals: 0),
+    ]
+
+    /// The 8 benchmark markers of §5.3. Category `other`, for the same reason as above.
+    private static let benchmarkMarkers: [MarkerDefinition] = [
+        .init(key: "bench_pushup_reps", displayName: "Push-ups, most in one set", category: .other, canonicalUnit: "reps", decimals: 0),
+        .init(key: "bench_incline_pushup_reps", displayName: "Incline push-ups, most in one set", category: .other, canonicalUnit: "reps", decimals: 0),
+        .init(key: "bench_knee_pushup_reps", displayName: "Knee push-ups, most in one set", category: .other, canonicalUnit: "reps", decimals: 0),
+        .init(key: "bench_pullup_reps", displayName: "Pull-ups, most in one set", category: .other, canonicalUnit: "reps", decimals: 0),
+        .init(key: "bench_dead_hang_s", displayName: "Dead hang, longest hold", category: .other, canonicalUnit: "s", decimals: 0),
+        .init(key: "bench_plank_s", displayName: "Plank, longest hold", category: .other, canonicalUnit: "s", decimals: 0),
+        .init(key: "bench_wall_sit_s", displayName: "Wall sit, longest hold", category: .other, canonicalUnit: "s", decimals: 0),
+        .init(key: "bench_grip_kg", displayName: "Grip strength", category: .other, canonicalUnit: "kg", decimals: 1),
+    ]
+
+    /// Scan and benchmark markers (stage 4 specification §5.2, §5.3), in that order. No reference
+    /// hint and no direction on any entry.
+    /// Not updated on Android, by the owner's decision (ruling R43).
+    public static let bodyRecord: [MarkerDefinition] = scanMarkers + benchmarkMarkers
+
+    /// The `source` column of every row a scan sheet writes.
+    public static let scanSource = "body-scan"
+    /// The key a scan's total mass is stored under: the ordinary weight reading (ruling R41).
+    public static let scanTotalMassKey = "weight"
+    /// The key a scan's body-fat percentage is stored under: the ordinary body-fat reading (R41).
+    public static let scanBodyFatKey = "body_fat"
+    /// The key of a scan's note row (nil `value`, the note in `valueText`).
+    public static let scanNoteKey = "scan_note"
+    /// The prefix of every custom benchmark key, as `LabMarkerCsvImport.customKey("bench " + name)`
+    /// produces it.
+    public static let customBenchmarkPrefix = "custom_bench_"
+
+    /// Fast lookup by key. Built once from `bodyRecord`.
+    fileprivate static let bodyRecordByKey: [String: MarkerDefinition] = {
+        var m: [String: MarkerDefinition] = [:]
+        for d in bodyRecord { m[d.key] = d }
+        return m
+    }()
+
+    private static let scanOnlyKeys: Set<String> = Set(scanMarkers.map(\.key))
+    private static let benchmarkKeys: Set<String> = Set(benchmarkMarkers.map(\.key))
+
+    /// `builtIn`, or `builtIn + bodyRecord`.
+    public static func definitions(in scope: MarkerCatalogScope) -> [MarkerDefinition] {
+        switch scope {
+        case .builtIn: return builtIn
+        case .withBodyRecord: return builtIn + bodyRecord
+        }
+    }
+
+    /// True for the 21 keys of §5.2 and for no other key. False for `weight` and `body_fat`: a
+    /// manual weigh-in must never be grouped as a scan.
+    public static func isScanOnlyMarker(_ key: String) -> Bool {
+        scanOnlyKeys.contains(key)
+    }
+
+    /// True for the 8 keys of §5.3 and for any key with the prefix `custom_bench_`.
+    public static func isBenchmark(_ key: String) -> Bool {
+        benchmarkKeys.contains(key) || key.hasPrefix(customBenchmarkPrefix)
     }
 }

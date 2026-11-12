@@ -1,4 +1,6 @@
 import Foundation
+import StrandAnalytics
+import StrandImport
 import WhoopStore
 
 // The one place a body weight or a waist is chosen from the stores that can hold one
@@ -94,27 +96,33 @@ enum BodyMeasurementResolver {
     /// Lab Book beats Apple Health, and within Lab Book the greatest `takenAt` wins, then the greatest
     /// `id`. `legacyDisplay`: the Apple Health values exactly as given, the later of two entries that
     /// share a day standing for it. `legacyEstimate`: nothing.
+    ///
+    /// `asOf` nil: every candidate. `asOf` set: candidates dated after it are left out before any rule
+    /// runs, so a later reading can never change which earlier one is admitted. Under `unified` the
+    /// Lab Book rows first pass through `withoutOutrankedScans` (stage 1 ruling R44, §8.7).
     static func series(_ kind: BodyMeasurementKind, candidates: BodyMeasurementCandidates,
-                       policy: BodyMeasurementPolicy) -> [DatedBodyMeasurement] {
+                       policy: BodyMeasurementPolicy, asOf: String? = nil) -> [DatedBodyMeasurement] {
+        func admitted(_ day: String) -> Bool { asOf.map { day <= $0 } ?? true }
         var byDay: [String: DatedBodyMeasurement] = [:]
         switch policy {
         case .legacyEstimate:
             return []
         case .legacyDisplay:
             guard kind == .weight else { return [] }
-            for entry in candidates.appleHealth {
+            for entry in candidates.appleHealth where admitted(entry.day) {
                 byDay[entry.day] = DatedBodyMeasurement(day: entry.day, takenAt: nil, value: entry.value,
                                                         source: .appleHealth, rowId: nil)
             }
         case .unified:
             if kind == .weight {
-                for entry in candidates.appleHealth where isUsable(entry.value) {
+                for entry in candidates.appleHealth where isUsable(entry.value) && admitted(entry.day) {
                     byDay[entry.day] = DatedBodyMeasurement(day: entry.day, takenAt: nil, value: entry.value,
                                                             source: .appleHealth, rowId: nil)
                 }
             }
             var labByDay: [String: (row: LabMarkerRow, value: Double)] = [:]
-            for row in candidates.labBook where row.markerKey == kind.markerKey {
+            for row in withoutOutrankedScans(candidates.labBook, asOf: asOf)
+            where row.markerKey == kind.markerKey && admitted(row.day) {
                 guard let value = normalizedValue(of: row, as: kind) else { continue }
                 if let held = labByDay[row.day],
                    (held.row.takenAt, held.row.id) >= (row.takenAt, row.id) { continue }
@@ -133,7 +141,7 @@ enum BodyMeasurementResolver {
     static func resolve(_ kind: BodyMeasurementKind, asOf day: String,
                         candidates: BodyMeasurementCandidates,
                         policy: BodyMeasurementPolicy) -> ResolvedBodyMeasurement? {
-        if let reading = series(kind, candidates: candidates, policy: policy).last(where: { $0.day <= day }) {
+        if let reading = series(kind, candidates: candidates, policy: policy, asOf: day).last {
             return ResolvedBodyMeasurement(kind: kind, value: reading.value, source: reading.source,
                                            day: reading.day)
         }
@@ -158,6 +166,36 @@ enum BodyMeasurementResolver {
         default: return nil
         }
         return isUsable(value) ? value : nil
+    }
+
+    /// R44 (stage-1.md §8.7). The source the weigh-in sheet and the Lab Book editor write.
+    static let weighInSource = "manual"
+
+    /// R44 (stage-1.md §8.7). `rows` in their given order, without each `weight` or `waist` row whose
+    /// source is `MarkerCatalog.scanSource` and whose Monday week also holds a usable row of the same
+    /// marker key with source `weighInSource`. Only rows dated on or before `asOf` are judged or can
+    /// outrank; nil judges every row. A row whose day is not a canonical key belongs to no week.
+    /// Every other row is returned untouched; nothing is copied, changed or deleted.
+    ///
+    /// Two callers, and only two: `series` above and `CutScorecardPresenter.history`.
+    static func withoutOutrankedScans(_ rows: [LabMarkerRow], asOf: String? = nil) -> [LabMarkerRow] {
+        func judged(_ row: LabMarkerRow) -> Bool { asOf.map { row.day <= $0 } ?? true }
+        func weekKey(_ row: LabMarkerRow) -> String? {
+            guard BodyMeasurementKind(markerKey: row.markerKey) != nil, judged(row),
+                  let week = CutScorecard.weekStart(containing: row.day) else { return nil }
+            return "\(row.markerKey)\u{1F}\(week)"
+        }
+        var manualWeeks: Set<String> = []
+        for row in rows where row.source == weighInSource {
+            guard let kind = BodyMeasurementKind(markerKey: row.markerKey),
+                  normalizedValue(of: row, as: kind) != nil, let key = weekKey(row) else { continue }
+            manualWeeks.insert(key)
+        }
+        guard !manualWeeks.isEmpty else { return rows }
+        return rows.filter { row in
+            guard row.source == MarkerCatalog.scanSource, let key = weekKey(row) else { return true }
+            return !manualWeeks.contains(key)
+        }
     }
 
     private static func isUsable(_ value: Double) -> Bool {

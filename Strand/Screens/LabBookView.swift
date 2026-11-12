@@ -238,8 +238,10 @@ struct LabBookView: View {
                 // packed units, US 2-digit dates, a Status column carried into note; any other file
                 // takes the generic (date,marker,value,unit) path.
                 let isWhoop = WhoopBiomarkerExportParser.matches(data: data)
+                // Stage 4: while the body record is on, scan and benchmark names resolve to their keys.
+                let scope = BodyRecordSettings.csvScope(bodyRecordEnabled: BodyRecordSettings.enabledFlag.isEnabled)
                 let result = isWhoop ? WhoopBiomarkerExportParser.parse(data: data)
-                                     : LabMarkerCsvImport.parse(data: data)
+                                     : LabMarkerCsvImport.parse(data: data, scope: scope)
                 let sourceId = isWhoop ? WhoopBiomarkerExportParser.sourceId : LabMarkerCsvImport.sourceId
                 guard !result.fileTooLarge else {
                     csvSummary = String(localized: "That file is too large for a markers CSV import.")
@@ -480,15 +482,17 @@ struct LabBookView: View {
         loaded = true
     }
 
-    private func save(_ drafts: [LabMarkerRow]) async {
-        guard !drafts.isEmpty, let store = await repo.storeHandle() else { return }
+    /// False when nothing was saved (Stage 4: the editor's "Save and add another" reports it).
+    private func save(_ drafts: [LabMarkerRow]) async -> Bool {
+        guard !drafts.isEmpty, let store = await repo.storeHandle() else { return false }
         // Owner-scope upsert: saving a reading that is already stored (same marker, instant and
         // source, under any strap id) updates it where it is. Drafts still carry the active id,
         // which is where a new reading is written, and which names the row a save lands on when
         // the instant holds two different readings (ruling A10: the other one is never changed).
-        try? await store.upsertOwnerLabMarkers(drafts)
+        let saved = (try? await store.upsertOwnerLabMarkers(drafts)) != nil
         await repo.refresh()   // re-resolves the lab-book projection into Compare/Explore/Coach
         await load()
+        return saved
     }
 
     private func delete(_ id: String) async {
@@ -616,6 +620,8 @@ private struct MarkerDetailView: View {
 
     @EnvironmentObject var repo: Repository
     @Environment(\.dismiss) private var dismiss
+    /// Stage 4 (4B): the "Entered as" line is shown while laboratory units are on.
+    @ObservedObject private var reportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
 
     /// The wearable metric chosen to correlate against (nil until the user picks one).
     @State private var signal: MetricDescriptor?
@@ -874,6 +880,13 @@ private struct MarkerDetailView: View {
                 Text(valueLabel(row))
                     .font(StrandFont.number(16))
                     .foregroundStyle(StrandPalette.textPrimary)
+                // Stage 4 (4B, L6): the value and unit the report printed, under the stored ones.
+                if reportUnitsFlag.isEnabled, let enteredAs = LabMarkerEntryDraft.enteredAsLine(for: row) {
+                    Text(verbatim: enteredAs)
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(LabBookFormat.dayFromKey(row.day))
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)

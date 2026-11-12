@@ -156,6 +156,31 @@ extension WhoopStore {
         }
     }
 
+    /// In one transaction: delete the rows with these ids and every copy of each, upsert `rows` by
+    /// the owner-scope rule, then re-project every touched (markerKey, day) cell over all device ids.
+    /// An id that is not stored is skipped. Returns the number of stored rows inserted or updated by
+    /// the upsert. If anything throws, nothing is changed.
+    ///
+    /// Stage 4 (body record, docs/personal/superapp/specs/stage-4.md §9.2): a scan's rows must appear,
+    /// move and disappear together, so an edit or a delete is this one call. It is composed only of
+    /// the ownership steps `deleteWithCopies`, `ownerUpsert` and `reprojectCells` and writes no SQL of
+    /// its own. The deletes run first, so the upserts are evaluated against the table they left.
+    /// No Kotlin twin, by ruling R43 of the stage 1 specification.
+    @discardableResult
+    public func replaceLabMarkers(deleteIds: [String], upsert rows: [LabMarkerRow]) async throws -> Int {
+        guard !deleteIds.isEmpty || !rows.isEmpty else { return 0 }
+        return try syncWrite { db in
+            var touched: Set<LabBookDayCell> = []
+            for id in deleteIds {
+                touched.formUnion(try deleteWithCopies(db, id: id).touched)
+            }
+            let step = try ownerUpsert(db, rows: rows)
+            touched.formUnion(step.touched)
+            try reprojectCells(db, cells: touched)
+            return step.written
+        }
+    }
+
     // MARK: - Reads
 
     /// All readings in a category, oldest first (by takenAt). Served by
