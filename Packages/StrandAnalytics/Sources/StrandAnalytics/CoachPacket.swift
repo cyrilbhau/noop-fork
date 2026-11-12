@@ -252,13 +252,11 @@ public enum CoachPacket {
 
     /// The fixed part of the size budget, in UTF-8 bytes.
     static let budgetBaseBytes = 8000
-    /// The per-day part of the size budget, in UTF-8 bytes: version 1's 220 and the widest intake
-    /// row, 70 with its line break.
+    /// The per-day part of the size budget, in UTF-8 bytes: version 1's 220 and an intake row of
+    /// five-digit amounts, 70 with its line break. Like a step count, a larger amount is printed in
+    /// full rather than dropped (ruling A25); a packet it widens past the budget is reported as over
+    /// budget, never shortened by turning a value into absence.
     static let budgetBytesPerDay = 290
-    /// The largest whole number of grams or kilocalories an intake row prints. A day's value that
-    /// rounds above it is not a plausible logged amount and is absent, which also gives the row its
-    /// fixed widest form.
-    static let intakeValueLimit = 99_999
     /// The longest events row printed, in UTF-8 bytes: stage 5's widest row with its line break.
     static let eventRowByteLimit = 141
     /// The trailing window of the trends section's second mean, in calendar days.
@@ -832,35 +830,55 @@ public enum CoachPacket {
     static let intakeLead = "per day, oldest first, as the owner logged it; "
         + "the source is \"mixed\" when protein and energy came from different sources:"
 
-    private static func intakeLines(_ intake: CoachPacketIntake, _ range: PacketRange) -> [String] {
-        guard case let .days(days) = intake else {
-            return ["not available: intake is switched off in the app"]
+    /// Whether the rendered packet prints at least one intake amount (ruling A26: an intake value is
+    /// a measurement, so the sheet does not say nothing was measured). False while the Intake section
+    /// is not selected or the feature is off. Read from the same rows `render` prints.
+    public static func printsIntakeAmount(_ input: CoachPacketInput) -> Bool {
+        guard input.sections.contains(.intake), let first = CanonicalDay.number(input.rangeStartDay) else {
+            return false
         }
+        let keys = dayKeys(from: input.rangeStartDay, to: input.rangeEndDay)
+        guard !keys.isEmpty else { return false }
+        let rows = intakeRows(input.intake, PacketRange(firstNumber: first, keys: keys)) ?? []
+        return rows.contains { $0.protein != nil || $0.energy != nil }
+    }
+
+    /// One printed intake row per day of the range; nil while the feature is off in the app.
+    private static func intakeRows(_ intake: CoachPacketIntake, _ range: PacketRange)
+        -> [(key: String, protein: Int?, energy: Int?, source: CoachPacketIntakeSource?)]? {
+        guard case let .days(days) = intake else { return nil }
         // Two entries for one day: the last wins, as for days and steps.
         var byDay: [Int: CoachPacketIntakeDay] = [:]
         for day in days {
             if let number = range.number(of: day.day) { byDay[number] = day }
         }
-        var lines = [intakeLead]
-        for (offset, key) in range.keys.enumerated() {
+        return range.keys.enumerated().map { offset, key in
             let day = byDay[range.firstNumber + offset]
-            let protein = day.flatMap { intakeAmount($0.proteinGrams) }
-            let energy = day.flatMap { intakeAmount($0.energyKcal) }
-            var line = "  \(key): protein \(protein.map { "\($0) g" } ?? dash), "
-                + "energy \(energy.map { "\($0) kcal" } ?? dash)"
+            return (key: key, protein: day.flatMap { intakeAmount($0.proteinGrams) },
+                    energy: day.flatMap { intakeAmount($0.energyKcal) }, source: day?.source)
+        }
+    }
+
+    private static func intakeLines(_ intake: CoachPacketIntake, _ range: PacketRange) -> [String] {
+        guard let rows = intakeRows(intake, range) else {
+            return ["not available: intake is switched off in the app"]
+        }
+        var lines = [intakeLead]
+        for row in rows {
+            var line = "  \(row.key): protein \(row.protein.map { "\($0) g" } ?? dash), "
+                + "energy \(row.energy.map { "\($0) kcal" } ?? dash)"
             // The source says where a printed value came from, so a day with none prints no source.
-            if protein != nil || energy != nil, let source = day?.source { line += " [\(source.rawValue)]" }
+            if row.protein != nil || row.energy != nil, let source = row.source { line += " [\(source.rawValue)]" }
             lines.append(line)
         }
         return lines
     }
 
-    /// A logged amount as a whole number, or nil when it is not a plausible day's amount: not a
-    /// finite number, below zero, or rounding above `intakeValueLimit`.
+    /// A logged amount as a whole number, or nil when it is no number at all: not finite or above
+    /// rule F1's limit, or below zero. Ruling A25: the packet adds no limit of its own, so every
+    /// amount the app accepted, and a day's sum past the store's per-entry limit, is printed.
     private static func intakeAmount(_ value: Double?) -> Int? {
-        guard let amount = nonNegative(value) else { return nil }
-        let whole = rounded(amount)
-        return whole <= intakeValueLimit ? whole : nil
+        nonNegative(value).map(rounded)
     }
 
     // MARK: - Events (§7.12)

@@ -221,7 +221,7 @@ final class CoachPacketV2Tests: XCTestCase {
     func testIntakeValuesThatAreNotAPlausibleDayAreAbsentAndNothingTraps() {
         let cases: [(Double?, String)] = [
             (.nan, "—"), (.infinity, "—"), (-.infinity, "—"), (-1, "—"), (-0.0, "0 g"),
-            (1e300, "—"), (100_000, "—"), (99_999.5, "—"), (99_999.4, "99999 g"), (0, "0 g"),
+            (1e300, "—"), (100_000, "100000 g"), (99_999.5, "100000 g"), (99_999.4, "99999 g"), (0, "0 g"),
         ]
         for (value, printed) in cases {
             let text = V.full { $0.intake = .days([V.intakeDay("2031-03-05", value, nil, .quickAdd)]) }.text

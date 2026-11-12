@@ -209,7 +209,9 @@ struct CoachPacketAssembler {
             steps: steps, workouts: workouts, intake: intakeSection, events: eventsSection)
         guard await storeReadable() else { return nil }
 
+        // Ruling A26: an intake amount the packet prints is a measurement; an event is not.
         let nothingMeasured = rows.isEmpty && steps.isEmpty && workouts.isEmpty && body.isEmpty && !hasWeeklyPoint
+            && !CoachPacket.printsIntakeAmount(input)
         return Gathered(input: input, generatedAt: instant, rangeDays: rangeDays, nothingMeasured: nothingMeasured,
                         privateEventsIncluded: eventsEnabled ? includeSensitive : nil, eventFreeText: eventFreeText)
     }
