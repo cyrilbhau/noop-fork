@@ -211,13 +211,11 @@ final class CutScorecardModel: ObservableObject {
                 }
             }
         }
-        // Ruling A29: a rules or floor write from any editor reloads the model. The notification is
-        // posted for every defaults write, so only a changed rules fingerprint costs a load.
-        rulesObserver = NotificationCenter.default
-            .publisher(for: UserDefaults.didChangeNotification, object: settings.observedDefaults)
-            .sink { [weak self] _ in
-                Task { @MainActor [weak self] in self?.followRules() }
-            }
+        // Ruling A29: a rules or floor write from any editor reloads the model, through the app's one
+        // defaults observation. It reports every write, so only a changed rules fingerprint costs a load.
+        rulesObserver = ObservableDefaultsFlag.observeWrites(to: settings.observedDefaults) { [weak self] in
+            self?.followRules()
+        }
     }
 
     /// Ruling A29: reloads when the stored rules differ from those the latest load read.
