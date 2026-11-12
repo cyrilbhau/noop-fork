@@ -48,6 +48,7 @@ final class CutScorecardModel: ObservableObject {
     private let timeZone: () -> TimeZone
     private let locale: () -> Locale
     private let evaluate: (@MainActor (_ today: String) async -> CutScorecardEvaluation)?
+    private let intake: IntakeProvider? // Stage 3: the protein days' funnel; nil is the live one
     /// Counts loads. A load publishes only while it is still the latest one.
     private var generation = 0
     private var revisionObserver: AnyCancellable?
@@ -62,7 +63,9 @@ final class CutScorecardModel: ObservableObject {
          now: @escaping () -> Date = { Date() },
          timeZone: @escaping () -> TimeZone = { TimeZone.current },
          locale: @escaping () -> Locale = { AppLanguage.activeLocale },
+         intake: IntakeProvider? = nil, // Stage 3: nil is IntakeProvider.live(repository:)
          evaluate: (@MainActor (_ today: String) async -> CutScorecardEvaluation)? = nil) {
+        self.intake = intake // Stage 3
         self.repository = repository
         self.provider = provider
         self.settings = settings
@@ -126,7 +129,9 @@ final class CutScorecardModel: ObservableObject {
             evaluation = await evaluate(today)
         } else {
             evaluation = await CutScorecardInputBuilder(repository: repository, provider: provider,
-                                                        settings: settings, timeZone: timeZone)
+                                                        settings: settings,
+                                                        intake: intake ?? .live(repository: repository), // Stage 3
+                                                        timeZone: timeZone)
                 .evaluation(today: today)
         }
         guard request == generation else { return }
@@ -798,7 +803,10 @@ struct ScorecardPhaseDraft: Equatable {
             if p.rateWindowWeeks < 1 { invalid.insert(.rateWindowWeeks) }
             if p.maxProjectionWeeks < 1 { invalid.insert(.maxProjectionWeeks) }
             if !amount(p.targetToleranceKg) { invalid.insert(.targetToleranceKg) }
-            if let floor = p.proteinFloorGrams, !(amount(floor) && floor > 0) { invalid.insert(.proteinFloorGrams) }
+            // Stage 3 (R45, the rules-sheet part of 1-10): the one whole-gram rule both editors use.
+            if let floor = p.proteinFloorGrams, !CutScorecardSettings.isWholeGramProteinFloor(floor) {
+                invalid.insert(.proteinFloorGrams)
+            }
             if !(1...7).contains(p.proteinMinDaysPerWeek) { invalid.insert(.proteinMinDaysPerWeek) }
             if p.maxWeighInAgeWeeks < 0 { invalid.insert(.maxWeighInAgeWeeks) }
         }

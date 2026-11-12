@@ -2695,7 +2695,7 @@ struct TodayView: View {
             // would take you off Today, which is the discoverability problem this card exists to solve.
             pinnedCardActionRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
                                 value: dashboardValue(card)) { showCoachLauncher = true }
-        case .scorecard:
+        case .scorecard, .protein: // Stage 3: protein, as the scorecard
             // Drawn by the iPhone redesign only; `enabledDashboardCards` never lists it here.
             EmptyView()
         }
@@ -2720,7 +2720,7 @@ struct TodayView: View {
         case .hydration:   return StrandPalette.metricCyan
         case .coupled:     return StrandPalette.chargeColor
         case .coach:       return StrandPalette.accent
-        case .scorecard:   return card.customizationTint
+        case .scorecard, .protein: return card.customizationTint // Stage 3: protein
         }
     }
 
@@ -2836,7 +2836,7 @@ struct TodayView: View {
             // #1862: likewise a launcher row. Empty rather than "—" for the same reason — there is no
             // missing measurement here, there is no measurement at all.
             return ""
-        case .scorecard:
+        case .scorecard, .protein: // Stage 3: protein, as the scorecard
             // Never rendered here (see `dashboardCardRow`): no value to resolve.
             return ""
         }

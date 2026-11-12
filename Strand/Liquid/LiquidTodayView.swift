@@ -963,7 +963,7 @@ struct LiquidTodayView: View {
             // leaving Today.
             cardAction(title: card.title, sub: card.subtitle, value: "",
                        tint: StrandPalette.accent, frac: 0.5) { showCoachLauncher = true }
-        case .scorecard:
+        case .scorecard, .protein: // Stage 3: protein, as the scorecard
             // Drawn by the iPhone redesign only; the list above never contains it.
             EmptyView()
         }

@@ -467,6 +467,7 @@ struct SettingsView: View {
             #if os(iOS)
             scorecardCard.staggeredAppear(index: 5)
             coachPacketCard.staggeredAppear(index: 5)
+            intakeCard.staggeredAppear(index: 5) // Stage 3: third in the one order (ruling A1)
             syncCard.staggeredAppear(index: 6)
             #endif
 
@@ -1995,6 +1996,16 @@ struct SettingsView: View {
             }
             .toggleStyle(.switch)
             .tint(StrandPalette.accent)
+        }
+    }
+
+    // Stage 3: the Intake card (stage 3 specification §10.5), directly after Coach packet (ruling A1).
+    // Always drawn on iPhone, because it holds the flag's switch; every other row exists only while
+    // `noop.intakeEnabled` is on. Its content is `IntakeSettingsSection`.
+    private var intakeCard: some View {
+        SettingsSection(icon: "fork.knife", title: LocalizedStringKey(IntakePresenter.settingsTitle),
+                        blurb: LocalizedStringKey(IntakePresenter.settingsBlurb)) {
+            IntakeSettingsSection()
         }
     }
 

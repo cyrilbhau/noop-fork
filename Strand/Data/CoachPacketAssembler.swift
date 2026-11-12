@@ -39,6 +39,7 @@ struct CoachPacketAssembler {
     private let timeZone: () -> TimeZone
     private let effortScale: () -> EffortScale
     private let identifiers: () -> [String]?
+    private let intake: IntakeProvider? // Stage 3: the protein days' funnel; nil is the live one
 
     /// `identifiers` is read once per `assemble()`, at scan time. Nil means the list of known
     /// identifiers could not be read, and the packet is blocked: the scan fails closed and is never
@@ -48,7 +49,9 @@ struct CoachPacketAssembler {
          now: @escaping () -> Date = { Date() },
          timeZone: @escaping () -> TimeZone = { TimeZone.current },
          effortScale: @escaping () -> EffortScale,
-         identifiers: @escaping () -> [String]?) {
+         identifiers: @escaping () -> [String]?,
+         intake: IntakeProvider? = nil) { // Stage 3: nil is IntakeProvider.live(repository:)
+        self.intake = intake // Stage 3
         self.repository = repository
         self.provider = provider
         self.scorecardSettings = scorecardSettings
@@ -113,7 +116,9 @@ struct CoachPacketAssembler {
         var hasWeeklyPoint = false
         if scorecardEnabled {
             let evaluation = await CutScorecardInputBuilder(repository: repository, provider: provider,
-                                                            settings: scorecardSettings, timeZone: { zone })
+                                                            settings: scorecardSettings,
+                                                            intake: intake ?? .live(repository: repository), // Stage 3
+                                                            timeZone: { zone })
                 .evaluation(today: today)
             let phase = evaluation.input.phase.map {
                 CoachPacketPhase(name: $0.name, startDay: $0.startDay, targetWeightKg: $0.targetWeightKg,

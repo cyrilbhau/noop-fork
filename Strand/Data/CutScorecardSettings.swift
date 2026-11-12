@@ -163,11 +163,46 @@ final class CutScorecardSettings {
     /// The stored rules, with the generic default for every missing key. `.generic` when no rules
     /// are stored, and also when the stored string cannot be used (see `rulesNeedAttention`).
     var parameters: CutScorecardParameters {
-        get { storedParameters() ?? .generic }
+        get {
+            // R45: a floor stored as a fraction before the ruling reads as the nearest whole gram.
+            // The stored string is not rewritten by a read (R30).
+            var read = storedParameters() ?? .generic
+            read.proteinFloorGrams = Self.normalizedProteinFloorGrams(read.proteinFloorGrams)
+            return read
+        }
         set {
-            guard let raw = Self.sortedJSON(StoredRules(newValue)) else { return }
+            // R45: whichever editor writes, the stored floor is whole.
+            var written = newValue
+            written.proteinFloorGrams = Self.normalizedProteinFloorGrams(newValue.proteinFloorGrams)
+            guard let raw = Self.sortedJSON(StoredRules(written)) else { return }
             defaults.set(raw, forKey: Self.rulesKey)
         }
+    }
+
+    // MARK: - The protein floor (stage 1 ruling R45, work package 1-10)
+
+    /// R45. The greatest floor an editor accepts, in grams.
+    static let proteinFloorMaximumGrams = 100_000
+
+    /// R45. The one rule for a floor an editor may save: finite, at least 1, at most
+    /// `proteinFloorMaximumGrams`, and equal to its own rounded value. Both editors (the rules sheet
+    /// and the intake settings) decide with this function and nothing else.
+    static func isWholeGramProteinFloor(_ grams: Double) -> Bool {
+        grams.isFinite && grams >= 1 && grams <= Double(proteinFloorMaximumGrams) && grams == grams.rounded()
+    }
+
+    /// R45. The whole-gram form of a stored protein floor: nil for nil; for a finite value above zero
+    /// the nearest whole gram, halves away from zero, never below 1; any other value unchanged, so
+    /// the scorecard's own validation still rejects it.
+    static func normalizedProteinFloorGrams(_ grams: Double?) -> Double? {
+        guard let grams else { return nil }
+        guard grams.isFinite, grams > 0 else { return grams }
+        return max(1, grams.rounded(.toNearestOrAwayFromZero))
+    }
+
+    /// R45. The floor as every surface prints it; nil when no floor is set.
+    var proteinFloorWholeGrams: Int? {
+        parameters.proteinFloorGrams.flatMap { Int(exactly: $0) }
     }
 
     /// True when a rules string is stored and cannot be used: it does not parse, a value has the

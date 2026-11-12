@@ -51,13 +51,18 @@ enum DashboardCard: String, CaseIterable, Identifiable {
     /// `noop.cutScorecardEnabled` is on. No Android twin: the feature is iPhone-only.
     case scorecard
 
+    // Stage 3: optional, default-OFF (stage 3 specification §10.1): today's protein against the
+    // owner's floor. A value card tapping through to the intake screen; it renders only on the iPhone
+    // redesign's Today, only after the owner adds it, and only while `noop.intakeEnabled` is on.
+    case protein
+
     var id: String { rawValue }
 
     var isShortcut: Bool { self == .coupled || self == .coach }
 
     /// True for a card only the iPhone redesign's Today draws. Classic Today, Liquid Today and macOS
     /// filter such a card out, so what they can render is the list as it was before the card existed.
-    var isRedesignOnly: Bool { self == .scorecard }
+    var isRedesignOnly: Bool { self == .scorecard || self == .protein } // Stage 3: protein
 
     /// The card's display label (the UPPERCASE WHOOP metric-row label is derived from this). Localized via
     /// the String Catalog so the dashboard rows read in the user's language (the `.uppercased()` the row
@@ -81,6 +86,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .coupled:     return String(localized: "Coupled view")
         case .coach:       return String(localized: "Coach")
         case .scorecard:   return String(localized: "Scorecard")
+        case .protein:     return IntakePresenter.cardTitle // Stage 3
         }
     }
 
@@ -107,6 +113,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         // identically and no new copy needs translating into ten locales.
         case .coach:       return String(localized: "Ask about your charge, effort, rest and workouts, grounded in your own numbers.")
         case .scorecard:   return String(localized: "Weight and this week's verdict")
+        case .protein:     return IntakePresenter.cardSubtitle // Stage 3
         }
     }
 
@@ -129,6 +136,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .coupled:     return "circle.hexagongrid.fill"
         case .coach:       return "bubble.left.and.text.bubble.right.fill"
         case .scorecard:   return "scalemass"
+        case .protein:     return "fork.knife" // Stage 3
         }
     }
 
@@ -151,6 +159,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .coupled:     return ""    // a tap-through row, no value, so no unit
         case .coach:       return ""    // likewise: a launcher row, no metric of its own
         case .scorecard:   return ""    // the card's own readout carries kg or lb
+        case .protein:     return ""    // Stage 3: the card's own readout carries g
         }
     }
 

@@ -213,8 +213,27 @@ extension WidgetSnapshot {
         // progress, and absence of the estimate must not erase a target the user explicitly chose.
         return PersonalWidgetMetrics(
             steps: steps, sleep: sleep,
-            stepGoal: UserDefaults.standard.integer(forKey: PersonalWidgetMetrics.stepGoalKey)
+            stepGoal: UserDefaults.standard.integer(forKey: PersonalWidgetMetrics.stepGoalKey),
+            // Stage 3: nil, with no read at all, while Intake is off.
+            intake: await IntakeWidgetPublisher.reading(repository: model.repo, now: now)
         )
+    }
+
+    /// Stage 3 (§8.4): the intake fast path beside `publishLive`. Replaces `personal.intake` in the
+    /// stored snapshot and, when that changed what the widget draws, saves and reloads the protein
+    /// widget's timeline only. With no stored snapshot it does nothing; the next full publish carries
+    /// the reading.
+    @MainActor
+    static func publishIntake(_ reading: PersonalIntakeReading?) {
+        guard var snap = load() else { return }
+        let previous = snap
+        var personal = snap.personal ?? PersonalWidgetMetrics()
+        guard personal.intake != reading else { return }
+        personal.intake = reading
+        snap.personal = personal
+        guard renderedContentChanged(from: previous, to: snap) else { return }
+        snap.save(previousSeries: previous.hrSeries ?? [])
+        WidgetCenter.shared.reloadTimelines(ofKind: IntakeWidgetPublisher.widgetKind)
     }
 
     /// Publish fields that come directly from the live BLE state without re-reading the Rest metric
@@ -327,4 +346,41 @@ extension WidgetSnapshot {
         }
     }
 }
+/// Stage 3 (§8.4): builds the widget's protein reading through the same presenter function the card
+/// and the screen use, and publishes it.
+enum IntakeWidgetPublisher {
+    static let widgetKind = "PersonalProteinWidget"
+
+    /// Today's reading for the full publish, or nil while Intake is off (no provider, no read).
+    @MainActor
+    static func reading(repository: Repository, now: Date) async -> PersonalIntakeReading? {
+        let settings = IntakeSettings()
+        guard settings.isEnabled else { return nil }
+        let provider = IntakeProvider.live(repository: repository)
+        await provider.refresh()
+        return reading(provider: provider, clock: IntakeClock.current(settings: settings, now: now))
+    }
+
+    /// The reading for `clock.today`, from the provider's current snapshot.
+    @MainActor
+    static func reading(provider: IntakeProvider, clock: IntakeClock) -> PersonalIntakeReading? {
+        let input = IntakePresenterInput.gather(provider: provider, settings: provider.settings, day: clock.today)
+        guard let values = IntakePresenter.widgetReading(input, clock: clock,
+                                                         flagEnabled: provider.settings.isEnabled) else { return nil }
+        return PersonalIntakeReading.reading(
+            day: values.day,
+            progress: IntakeProteinValues(shownGrams: values.proteinGrams, shownFloorGrams: values.floorGrams,
+                                          remainingGrams: values.remainingGrams),
+            source: values.source.flatMap { PersonalIntakeReading.Source(rawValue: $0.rawValue) },
+            readAt: values.readAt)
+    }
+
+    /// Publishes after a change seen by the card or the screen. Only these call it, and both exist
+    /// only while Intake is on.
+    @MainActor
+    static func publish(provider: IntakeProvider, clock: IntakeClock) {
+        WidgetSnapshot.publishIntake(reading(provider: provider, clock: clock))
+    }
+}
 #endif
+

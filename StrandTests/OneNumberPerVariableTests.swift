@@ -175,6 +175,7 @@ private struct OneNumberHarness {
         let weighIns = WeighInStore(repository: repo, provider: provider, timeZone: { utc }, now: { now })
         let settings = CutScorecardSettings(defaults: defaults)
         let builder = CutScorecardInputBuilder(repository: repo, provider: provider, settings: settings,
+                                               intake: IntakeProvider(repository: repo, settings: IntakeSettings(defaults: defaults)),
                                                timeZone: { utc })
         return OneNumberHarness(store: store, repo: repo, defaults: defaults, provider: provider,
                                 weighIns: weighIns, settings: settings, builder: builder, clock: clock)

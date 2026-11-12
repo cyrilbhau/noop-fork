@@ -7,7 +7,8 @@ struct TodayCardReadout: Equatable {
     /// `neutral` is the primary text colour: body weight has no semantic colour in the palette.
     enum Tint: Equatable { case hrv, heart, breath, lift, stress, recovery, sleep, temp, coach, muted, neutral }
     /// `scorecard` pushes the scorecard screen (iPhone redesign only).
-    enum Tap: Equatable { case route(TabRoute), stepSources, coachSheet, scorecard, none }
+    /// `intake` pushes the intake screen (stage 3, iPhone redesign only).
+    enum Tap: Equatable { case route(TabRoute), stepSources, coachSheet, scorecard, intake, none } // Stage 3: intake
 
     var value: String? = nil
     var unit: String? = nil
@@ -53,6 +54,8 @@ struct TodayCardInputs {
     var rollingStepsAverage: RollingStepsAverage? = nil
     /// The scorecard card for today (stage 1 specification §10.1). Nil: not loaded yet.
     var scorecard: CutScorecardCard? = nil
+    /// Stage 3: the protein card for the shown day (§10.1). Nil: not loaded yet.
+    var intake: IntakeCard? = nil
 }
 
 /// Owns a completed value snapshot independently of the legacy loader's incrementally published fields.
@@ -114,10 +117,12 @@ enum TodayCardResolver {
     /// `scorecardEnabled` is the `noop.cutScorecardEnabled` flag. It defaults to off, so a call
     /// site that does not pass it renders the list as if the scorecard card had never been added.
     static func renderList(raw: String, hydrationEnabled: Bool, coachEnabled: Bool,
-                           visibleKeyMetrics: [KeyMetric]?, scorecardEnabled: Bool = false) -> [DashboardCard] {
+                           visibleKeyMetrics: [KeyMetric]?, scorecardEnabled: Bool = false,
+                           intakeEnabled: Bool = false) -> [DashboardCard] { // Stage 3: intakeEnabled
         selection(raw: raw, visibleKeyMetrics: visibleKeyMetrics).filter {
             ($0 != .hydration || hydrationEnabled) && ($0 != .coach || coachEnabled)
                 && ($0 != .scorecard || scorecardEnabled)
+                && ($0 != .protein || intakeEnabled) // Stage 3
         }
     }
 
@@ -125,9 +130,11 @@ enum TodayCardResolver {
     /// when no gate explains the empty list. Each gate that withholds a selected card is named, so
     /// a selection emptied by a gate never reads as missing data.
     static func gatedCaption(raw: String, hydrationEnabled: Bool, coachEnabled: Bool,
-                             scorecardEnabled: Bool, visibleKeyMetrics: [KeyMetric]?) -> String? {
+                             scorecardEnabled: Bool, visibleKeyMetrics: [KeyMetric]?,
+                             intakeEnabled: Bool = false) -> String? { // Stage 3: intakeEnabled
         guard renderList(raw: raw, hydrationEnabled: hydrationEnabled, coachEnabled: coachEnabled,
-                         visibleKeyMetrics: visibleKeyMetrics, scorecardEnabled: scorecardEnabled).isEmpty
+                         visibleKeyMetrics: visibleKeyMetrics, scorecardEnabled: scorecardEnabled,
+                         intakeEnabled: intakeEnabled).isEmpty
         else { return nil }
         let selected = selection(raw: raw, visibleKeyMetrics: visibleKeyMetrics)
         let hydrationOff = selected.contains(.hydration) && !hydrationEnabled
@@ -143,7 +150,10 @@ enum TodayCardResolver {
         case (true, false, false): return String(localized: "Nothing to show while Hydration is off.")
         case (false, true, false): return String(localized: "Nothing to show while Coach is off.")
         case (false, false, true): return String(localized: "Nothing to show while Scorecard is off.")
-        case (false, false, false): return nil
+        case (false, false, false):
+            // Stage 3: Intake alone withholding the only selected cards.
+            return selected.contains(.protein) && !intakeEnabled
+                ? String(localized: "Nothing to show while Intake is off.") : nil
         }
     }
 
@@ -166,6 +176,7 @@ enum TodayCardResolver {
         case .coupled: return String(localized: "Coupled view")
         case .coach: return String(localized: "Coach")
         case .scorecard: return CutScorecardPresenter.cardTitle
+        case .protein: return IntakePresenter.cardTitle // Stage 3
         }
     }
 
@@ -328,6 +339,14 @@ enum TodayCardResolver {
             }
             return TodayCardReadout(value: card.value, unit: card.unit, caption: card.caption, tint: .neutral,
                                     tap: card.opensScorecard ? .scorecard : .none,
+                                    valueIsDimmed: card.isDimmed, isLoading: card.status == .loading)
+        case .protein:
+            // Stage 3: a past day shows its closed total, unlike the scorecard (§9.5).
+            guard let card = inputs.intake else {
+                return TodayCardReadout(caption: String(localized: "No data"), tint: .neutral, isLoading: true)
+            }
+            return TodayCardReadout(value: card.value, unit: card.unit, caption: card.caption, tint: .neutral,
+                                    tap: card.opensIntake ? .intake : .none,
                                     valueIsDimmed: card.isDimmed, isLoading: card.status == .loading)
         case .hrv, .restingHr, .respiratory, .steps, .bloodOxygen, .skinTemp, .calories:
             preconditionFailure("Every twin is resolved before the card-only cases")

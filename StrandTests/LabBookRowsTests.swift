@@ -316,6 +316,7 @@ struct LabBookOwnershipAppHarness {
         let weighIns = WeighInStore(repository: repo, provider: provider, timeZone: { Fx.utc }, now: { Fx.later })
         let settings = CutScorecardSettings(defaults: defaults)
         let builder = CutScorecardInputBuilder(repository: repo, provider: provider, settings: settings,
+                                               intake: IntakeProvider(repository: repo, settings: IntakeSettings(defaults: defaults)),
                                                timeZone: { Fx.utc })
         let registry = DeviceRegistry(store: Fx.registry(store))
         registry.reload()
