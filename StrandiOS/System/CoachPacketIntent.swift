@@ -36,18 +36,23 @@ struct GetCoachPacketIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        guard CoachPacketSettings().isEnabled else { throw CoachPacketIntentError.switchedOff }
-        // A background launch hands the action its first tick before the app's model exists, its
-        // first refresh has finished or its device registry is open.
-        for _ in 0..<Self.waitSeconds {
-            if let app = AppModel.shared, app.repo.loaded, app.deviceRegistry != nil { break }
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-        }
-        guard AppModel.shared?.repo.loaded == true, let assembler = CoachPacketAssembler.live() else {
-            throw CoachPacketIntentError.notReady
-        }
-        switch await assembler.assemble() {
-        case .ready(let document): return .result(value: document.text)
+        let result = await CoachPacketShortcut.run(
+            settings: CoachPacketSettings(), attempts: Self.waitSeconds,
+            isReady: {
+                guard let app = AppModel.shared else { return false }
+                return app.repo.loaded && app.deviceRegistry != nil
+            },
+            pause: { try? await Task.sleep(nanoseconds: 1_000_000_000) },
+            assemble: {
+                guard AppModel.shared?.repo.loaded == true, let assembler = CoachPacketAssembler.live() else {
+                    return nil
+                }
+                return await assembler.assemble()
+            })
+        switch result {
+        case .text(let text): return .result(value: text)
+        case .switchedOff: throw CoachPacketIntentError.switchedOff
+        case .notReady: throw CoachPacketIntentError.notReady
         case .blocked: throw CoachPacketIntentError.blocked
         case .unavailable: throw CoachPacketIntentError.unavailable
         }
