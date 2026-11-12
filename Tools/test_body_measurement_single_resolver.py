@@ -361,6 +361,14 @@ R41_ALLOWLIST: dict[str, tuple[frozenset[str], str, str | None]] = {
         (frozenset({"lab-category-read"}),
          "the Coach roll-up of the OTHER markers; weight and waist come from the provider",
          "bodyMeasurements"),
+    # Ruling A22: the body record lists scan and benchmark rows by Lab Book category. It is a
+    # source-history page (R41), not a current-value reader, so it is allowed category reads only. A
+    # scan's total mass still reaches every current-weight surface through the resolver (R44).
+    "Strand/Data/BodyRecordStore.swift":
+        (frozenset({"lab-category-read"}),
+         "the body record's scan and benchmark history (ruling A22): a source-history page, not a "
+         "current-value reader",
+         None),
 }
 
 CORRECTION_SURFACES: dict[str, tuple[str, ...]] = {
