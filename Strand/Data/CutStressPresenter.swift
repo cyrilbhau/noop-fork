@@ -47,8 +47,11 @@ enum CutStressPresenter {
     static func present(_ result: CutStressResult, restingHrBaseline: BaselineState?, hrvBaseline: BaselineState?,
                         firstWeekStart: String?, locale: Locale) -> CutStressPresentation {
         let words = CutScorecardPresenter.Wording(unitSystem: .metric, locale: locale)
-        let period = firstWeekStart.map { String(localized: "Since \(words.shortDate($0))") }
-            ?? String(localized: "Last 12 weeks")
+        // "Since" names the first week the curve shows, which the 26-week cap may move past the
+        // phase's own first week, so the header and the curve's first label cannot disagree.
+        let period = firstWeekStart.map { phaseWeek in
+            String(localized: "Since \(words.shortDate(result.weeks.first?.weekStart ?? phaseWeek))")
+        } ?? String(localized: "Last 12 weeks")
         return CutStressPresentation(
             framing: String(localized: "Weekly averages of your nightly resting heart rate and HRV, as context for your coach. They are not a score and no score uses them."),
             periodText: period,
