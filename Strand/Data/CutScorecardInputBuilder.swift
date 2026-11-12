@@ -64,8 +64,9 @@ struct CutScorecardInputBuilder {
     /// a set with no load has no observation and an unlogged day has no protein entry.
     func build(today: String) async -> CutScorecardInput {
         // Captured before the first suspension, so one build describes one moment.
-        let weights = readings(.weight)
-        let waists = readings(.waist)
+        // Stage 4 (stage 1 work package 1-11): the series as of `today` (ruling R44).
+        let weights = readings(.weight, asOf: today)
+        let waists = readings(.waist, asOf: today)
         let phase = settings.evaluationPhase(on: today)
         let parameters = settings.parameters
         let activeDeviceId = repository.deviceId
@@ -83,8 +84,8 @@ struct CutScorecardInputBuilder {
 
     /// One reading per day of the provider's series. An Apple Health value has no instant; it is
     /// the only reading of its day in the series, so the 0 it is given orders nothing.
-    private func readings(_ kind: BodyMeasurementKind) -> [CutScorecardReading] {
-        provider.series(kind, consumer: .display).map {
+    private func readings(_ kind: BodyMeasurementKind, asOf today: String) -> [CutScorecardReading] {
+        provider.series(kind, consumer: .display, asOf: today).map {
             CutScorecardReading(day: $0.day, takenAt: $0.takenAt ?? 0, value: $0.value)
         }
     }

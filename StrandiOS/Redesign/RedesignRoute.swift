@@ -14,6 +14,11 @@ enum RedesignRoute: Hashable {
     // Stage 3: the intake screen (stage 3 specification §10.2), pushed from the protein card, the
     // Health tab's row and the scorecard's protein row while `noop.intakeEnabled` is on.
     case intake
+    // Stage 4: the body record (stage-4.md §5.1), reachable only while `noop.bodyRecordEnabled` is on.
+    case bodyRecord
+    case bodyScan(id: String)
+    case bodyScanCompare(earlierId: String?, laterId: String?)
+    case benchmark(key: String)
 
     @ViewBuilder var destination: some View {
         switch self {
@@ -22,6 +27,11 @@ enum RedesignRoute: Hashable {
         case .scorecard: ScorecardView()
         case .weighInHistory: WeighInHistoryView()
         case .intake: IntakeView() // Stage 3
+        // Stage 4: the body-record screens.
+        case .bodyRecord: BodyRecordView()
+        case .bodyScan(let id): BodyScanDetailView(scanId: id)
+        case .bodyScanCompare(let earlierId, let laterId): BodyScanCompareView(earlierId: earlierId, laterId: laterId)
+        case .benchmark(let key): BenchmarkDetailView(key: key)
         }
     }
 }

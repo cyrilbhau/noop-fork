@@ -257,8 +257,10 @@ final class BodyMeasurementProvider: ObservableObject {
     }
 
     /// Every dated reading the consumer's policy admits, ascending, one per day.
-    func series(_ kind: BodyMeasurementKind, consumer: BodyMeasurementConsumer) -> [DatedBodyMeasurement] {
-        BodyMeasurementResolver.series(kind, candidates: candidates(kind), policy: policy(consumer))
+    /// `asOf` is forwarded to the resolver unchanged (stage 1 work package 1-11).
+    func series(_ kind: BodyMeasurementKind, consumer: BodyMeasurementConsumer,
+                asOf: String? = nil) -> [DatedBodyMeasurement] {
+        BodyMeasurementResolver.series(kind, candidates: candidates(kind), policy: policy(consumer), asOf: asOf)
     }
 
     /// The value in force today.

@@ -575,16 +575,24 @@ final class WeighInHistoryModel: ObservableObject {
     private let provider: BodyMeasurementProvider
     private let unitSystem: () -> UnitSystem
     private let locale: () -> Locale
+    // Stage 4: the local day the week mark is judged on (stage 1 work package 1-11, ruling R44), and
+    // whether the body record is on (stage 4 §10.7).
+    private let today: () -> String
+    private let bodyRecordEnabled: @MainActor () -> Bool
     private var generation = 0
     private var revisionObserver: AnyCancellable?
 
     init(weighIns: WeighInStore, provider: BodyMeasurementProvider,
          unitSystem: @escaping () -> UnitSystem,
-         locale: @escaping () -> Locale = { AppLanguage.activeLocale }) {
+         locale: @escaping () -> Locale = { AppLanguage.activeLocale },
+         today: @escaping () -> String = { Repository.localDayKey(Date()) },
+         bodyRecordEnabled: @escaping @MainActor () -> Bool = { BodyRecordSettings.enabledFlag.isEnabled }) {
         self.weighIns = weighIns
         self.provider = provider
         self.unitSystem = unitSystem
         self.locale = locale
+        self.today = today
+        self.bodyRecordEnabled = bodyRecordEnabled
     }
 
     func load() async {
@@ -594,11 +602,15 @@ final class WeighInHistoryModel: ObservableObject {
         let system = unitSystem()
         let shownLocale = locale()
         let apple = provider.candidates(.weight).appleHealth
+        // Stage 4: the flag is read before the reads suspend, and the scans are read only while it is on.
+        let bodyRecordOn = bodyRecordEnabled()
         let weights = await weighIns.readings(.weight)
         let waists = await weighIns.readings(.waist)
+        let scanIds = bodyRecordOn ? await weighIns.bodyScanIds() : nil
         guard request == generation else { return }
         let history = CutScorecardPresenter.history(weights: weights, waists: waists, appleHealth: apple,
-                                                    unitSystem: system, locale: shownLocale)
+                                                    unitSystem: system, locale: shownLocale, today: today(),
+                                                    bodyRecordEnabled: bodyRecordOn, scanIds: scanIds)
         if state != .loaded(history) { state = .loaded(history) }
         if revisionObserver == nil {
             // A write made elsewhere reaches the list when the provider's snapshot changes.

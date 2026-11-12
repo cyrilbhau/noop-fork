@@ -1292,6 +1292,8 @@ final class AICoachEngine: ObservableObject {
                 for (key, kRows) in byKey {
                     // The Lab Book's own weight and waist rows are one source of the value stated below.
                     if currentBody != nil, BodyMeasurementKind(markerKey: key) != nil { continue }
+                    // Stage 4: scan and benchmark figures are not sent to the Coach (stage-4.md §4.5).
+                    if MarkerCatalog.isScanOnlyMarker(key) || MarkerCatalog.isBenchmark(key) { continue }
                     // Greatest instant, then greatest id: the reading the projection and the
                     // resolver name when two share an instant.
                     guard let latest = kRows.max(by: { ($0.takenAt, $0.id) < ($1.takenAt, $1.id) }) else { continue }

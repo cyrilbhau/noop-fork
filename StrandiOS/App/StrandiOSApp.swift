@@ -640,6 +640,9 @@ enum DemoScreens {
             // Stage 3: the intake card, screen, sheet and Settings card in each state of
             // design/round-s3-intake, on synthetic data: intake-a1 …, intake-b1 …, intake-d1 …, intake-e1 ….
             .init(prefixes: DemoScreenPrefixes.intake, resolve: IntakeDemo.screen(named:)),
+            // Stage 4: the body record in each state of design/round-s4-body-record, on synthetic
+            // data: bodyrecord-…, scan-…, compare-…, bench-… and labunits-… (stage-4.md §12.10).
+            .init(prefixes: DemoScreenPrefixes.bodyRecord, resolve: BodyRecordDemo.screen(named:)),
         ])
         assert(registry.conflicts.isEmpty, "demo prefixes overlap: \(registry.conflicts)")
         return registry

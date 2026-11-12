@@ -116,6 +116,9 @@ struct SettingsView: View {
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     /// Stage 2 (coach packet): the one observable copy of its flag. An iPhone feature as well.
     @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
+    // Stage 4 (body record): the two observable flags, laboratory units first (stage-4.md §10.8).
+    @ObservedObject private var labReportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
+    @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
     @State private var weighInReminderStatus: WeighInReminderStatus = .off
     @State private var weighInReminderWeekday = 7
     @State private var weighInReminderMinute = 480
@@ -468,6 +471,7 @@ struct SettingsView: View {
             scorecardCard.staggeredAppear(index: 5)
             coachPacketCard.staggeredAppear(index: 5)
             intakeCard.staggeredAppear(index: 5) // Stage 3: third in the one order (ruling A1)
+            bodyRecordCard.staggeredAppear(index: 5) // Stage 4: fourth in the one order (ruling A1).
             syncCard.staggeredAppear(index: 6)
             #endif
 
@@ -2007,6 +2011,42 @@ struct SettingsView: View {
                         blurb: LocalizedStringKey(IntakePresenter.settingsBlurb)) {
             IntakeSettingsSection()
         }
+    }
+
+    // Stage 4: the body-record card (stage-4.md §10.8), after the coach packet card (ruling A1). Always
+    // drawn on iPhone, because it holds both switches; both are off by default, and switching either
+    // off hides its surfaces and deletes nothing. Every string comes from `BodyRecordPresenter`.
+    private var bodyRecordCard: some View {
+        SettingsSection(
+            icon: "figure.stand",
+            title: LocalizedStringKey(BodyRecordPresenter.title),
+            blurb: LocalizedStringKey(BodyRecordPresenter.settingsBlurb)
+        ) {
+            VStack(alignment: .leading, spacing: NoopMetrics.space2 + 2) {
+                bodyRecordToggle(BodyRecordPresenter.labUnitsSettingTitle, detail: BodyRecordPresenter.labUnitsSettingDetail,
+                                 flag: labReportUnitsFlag)
+                rowDivider
+                bodyRecordToggle(BodyRecordPresenter.title, detail: BodyRecordPresenter.bodyRecordSettingDetail,
+                                 flag: bodyRecordFlag)
+            }
+        }
+    }
+
+    // Stage 4: one switch of the body-record card, with its line beneath.
+    private func bodyRecordToggle(_ title: String, detail: String, flag: ObservableDefaultsFlag) -> some View {
+        Toggle(isOn: Binding(get: { flag.isEnabled }, set: { flag.set($0) })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: title)
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                Text(verbatim: detail)
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(StrandPalette.accent)
     }
 
     /// The feature switch moved. On: the readings the flag now admits are read, so every screen
