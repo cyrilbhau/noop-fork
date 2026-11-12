@@ -153,4 +153,81 @@ final class CodexReviewRound3Tests: XCTestCase {
         XCTAssertEqual(model.evaluation?.input.parameters.proteinFloorGrams, 130,
                        "the overtaken load must not publish its result")
     }
+
+    // MARK: - C19: the intake history chart
+
+    func testTheChartSummarySaysTheMeasuredDaysTheFloorStateAndTheGaps() {
+        let points: [IntakeScreenModel.ChartPoint] = [
+            .init(day: "2031-01-01", grams: nil, meetsFloor: nil),
+            .init(day: "2031-01-02", grams: 120, meetsFloor: true),
+            .init(day: "2031-01-03", grams: 80.4, meetsFloor: false),
+            .init(day: "2031-01-04", grams: nil, meetsFloor: nil),
+            .init(day: "2031-01-05", grams: 100, meetsFloor: true),
+        ]
+        XCTAssertEqual(IntakePresenter.chartAccessibilitySummary(points),
+                       "Days measured: 3 of 5. Days at or above your floor: 2. Days below your floor: 1. "
+                       + "Lowest 80 g, highest 120 g. Shown day: 100 g")
+    }
+
+    func testTheChartSummaryWithNoFloorAndAnUnmeasuredShownDay() {
+        let points: [IntakeScreenModel.ChartPoint] = [
+            .init(day: "2031-01-01", grams: 95, meetsFloor: nil),
+            .init(day: "2031-01-02", grams: nil, meetsFloor: nil),
+        ]
+        XCTAssertEqual(IntakePresenter.chartAccessibilitySummary(points),
+                       "Days measured: 1 of 2. No floor set. Lowest 95 g, highest 95 g. Shown day: not measured")
+        XCTAssertEqual(IntakePresenter.chartAccessibilitySummary([.init(day: "2031-01-01", grams: nil, meetsFloor: nil)]),
+                       "Days measured: 0 of 1. Shown day: not measured")
+    }
+
+    // MARK: - C19: the scan comparison
+
+    func testAComparisonRowNamesEachFigureWhateverTheLayout() {
+        let row = BodyScanComparisonRow(key: "weight", label: "Weight", earlierText: "98.4", laterText: "97.6",
+                                        unit: "kg", changeText: "−0.8", directionText: "Down", percentText: "−0.8%")
+        XCTAssertEqual(BodyRecordPresenter.comparisonAccessibilityValue(row),
+                       "kg, Earlier: 98.4, Later: 97.6, Change: −0.8, Down, −0.8%")
+        let oneSide = BodyScanComparisonRow(key: "waist", label: "Waist", earlierText: "not entered", laterText: "99.0",
+                                            unit: "cm", changeText: nil, directionText: nil, percentText: nil)
+        XCTAssertEqual(BodyRecordPresenter.comparisonAccessibilityValue(oneSide),
+                       "cm, Earlier: not entered, Later: 99.0")
+    }
+
+    // MARK: - C19: the circular protein widget
+
+    func testTheCircularWidgetSaysItsStateAndItsTime() {
+        XCTAssertEqual(PersonalIntakeWidgetState.below(grams: 60, floorGrams: 100, remainingGrams: 40)
+                        .spokenDescription(time: "14:05", stale: false),
+                       "60 g of 100 g, 40 g to go, as of 14:05")
+        XCTAssertEqual(PersonalIntakeWidgetState.atFloor(grams: 100, floorGrams: 100)
+                        .spokenDescription(time: "14:05", stale: false),
+                       "100 g of 100 g, Floor met, as of 14:05")
+        XCTAssertEqual(PersonalIntakeWidgetState.above(grams: 130, floorGrams: 100, overGrams: 30)
+                        .spokenDescription(time: "09:10", stale: true),
+                       "130 g of 100 g, Floor met, +30 g over, Last read 09:10, Open NOOP to refresh")
+        XCTAssertEqual(PersonalIntakeWidgetState.noFloor(grams: 75).spokenDescription(time: nil, stale: false),
+                       "75 g logged, No floor set, Time not known")
+        XCTAssertEqual(PersonalIntakeWidgetState.nothingLogged(floorGrams: 100).spokenDescription(time: nil, stale: false),
+                       "Nothing logged today, Floor 100 g")
+        XCTAssertEqual(PersonalIntakeWidgetState.nothingLogged(floorGrams: nil).spokenDescription(time: nil, stale: false),
+                       "Nothing logged today")
+        XCTAssertEqual(PersonalIntakeWidgetState.notSetUp.spokenDescription(time: "14:05", stale: false),
+                       "Set up in NOOP")
+    }
+
+    // MARK: - C19: the views use these words, and name every control
+
+    private func source(_ path: String) throws -> String {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        return try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+    }
+
+    func testTheViewsSpeakThePresentersWords() throws {
+        XCTAssertTrue(try source("StrandiOS/Intake/IntakeView.swift")
+            .contains(".accessibilityValue(Text(verbatim: IntakePresenter.chartAccessibilitySummary(points)))"))
+        XCTAssertTrue(try source("StrandiOS/BodyRecord/BodyScanCompareView.swift")
+            .contains("BodyRecordPresenter.comparisonAccessibilityValue(row)"))
+        XCTAssertTrue(try source("StrandiOSWidgets/PersonalProteinWidget.swift")
+            .contains(".accessibilityValue(Text(verbatim: state.spokenDescription(time: time, stale: stale)))"))
+    }
 }

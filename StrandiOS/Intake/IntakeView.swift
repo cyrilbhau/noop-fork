@@ -545,6 +545,8 @@ struct IntakeHistoryChart: View {
         .chartYAxis(.hidden)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Last 28 days"))
+        // Codex C19: the curve's data in words, gaps and floor state included.
+        .accessibilityValue(Text(verbatim: IntakePresenter.chartAccessibilitySummary(points)))
     }
 }
 
