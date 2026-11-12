@@ -134,12 +134,20 @@ final class IntakeSettings {
     /// `scorecard.parameters.proteinFloorGrams`: whole grams by stage 1 R45, or nil.
     var proteinFloorGrams: Double? { scorecard.parameters.proteinFloorGrams }
 
+    /// True when the stored scorecard rules cannot be used. The floor is then repaired in the rules
+    /// sheet, which shows every rule; this editor writes nothing over them.
+    var floorRulesNeedAttention: Bool { scorecard.rulesNeedAttention }
+
     /// Nil clears the floor. Otherwise assigns `grams` through the scorecard's `parameters` setter.
     /// Returns false and writes nothing when `CutScorecardSettings.isWholeGramProteinFloor` refuses
-    /// it. No other check is made.
+    /// it, or when the stored rules cannot be used (writing would replace every other rule with the
+    /// generic defaults). A floor equal to the one read writes nothing (R30: the stored string is
+    /// not rewritten for no change).
     @discardableResult
     func setProteinFloorGrams(_ grams: Double?) -> Bool {
         if let grams, !CutScorecardSettings.isWholeGramProteinFloor(grams) { return false }
+        guard !scorecard.rulesNeedAttention else { return false }
+        if grams == scorecard.parameters.proteinFloorGrams { return true }
         var parameters = scorecard.parameters
         parameters.proteinFloorGrams = grams
         scorecard.parameters = parameters
@@ -264,11 +272,12 @@ final class IntakeSettings {
     }
 
     /// Journal rows the in-app Coach may read (§10.6.1): `entries` without every row whose question
-    /// is listed in `intake.supplement.questions`. Order is preserved. With no list stored, an empty
-    /// list or an unreadable one, the input is returned unchanged. The exclusion follows the list,
-    /// not the feature flag.
+    /// is listed in `intake.supplement.questions`, however many entries the stored list holds (a
+    /// restored settings file may hold more than the four the editor allows). Order is preserved.
+    /// With no list stored, an empty list or an unreadable one, the input is returned unchanged. The
+    /// exclusion follows the list, not the feature flag.
     static func coachVisible(_ entries: [JournalEntry], defaults: UserDefaults = .standard) -> [JournalEntry] {
-        let listed = storedQuestions(defaults).prefix(maxSupplements)
+        let listed = storedQuestions(defaults)
         guard !listed.isEmpty else { return entries }
         return entries.filter { entry in !listed.contains { sameQuestion($0, entry.question) } }
     }
