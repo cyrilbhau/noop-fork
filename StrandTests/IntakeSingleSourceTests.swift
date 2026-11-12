@@ -35,10 +35,14 @@ final class IntakeSingleSourceTests: XCTestCase {
         super.tearDown()
     }
 
-    /// The harness plus a weigh-in today and the scorecard builder over the intake provider.
+    /// The harness plus the scorecard switched on, a weigh-in today and the scorecard builder over the
+    /// intake provider.
     private func make(flag: Bool = true, source: IntakeSourceSetting = .appleHealth,
                       floor: Double? = 100) async throws -> (IntakeHarness, CutScorecardInputBuilder) {
         let h = try await IntakeHarness.make(flag: flag, source: source, floor: floor, suites: suites)
+        // The scorecard's own flag: only with it on does the body-measurement series admit the Lab
+        // Book weigh-in that anchors the judged week (stage 2, `BodyMeasurementResolver.policy`).
+        h.scorecard.isEnabled = true
         let takenAt = h.clock.epoch(0, hour: 7)
         try await h.store.upsertLabMarkers([
             LabMarkerRow(id: "weight-\(takenAt)-0A1B2C3D", deviceId: IntakeFixture.strapId, markerKey: "weight",
