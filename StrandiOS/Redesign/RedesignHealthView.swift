@@ -29,6 +29,9 @@ struct RedesignHealthView: View {
     @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
     // Stage 5: the personal events flag (stage 5 §10.1): its row shows only while on.
     @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
+    // Stage 6: the niggle log and timeline flags (stage 6 §10.1): each row shows only while on.
+    @ObservedObject private var niggleLogFlag = NiggleLogSettings.flag
+    @ObservedObject private var timelineFlag = CheckpointTimelineSettings.flag
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
@@ -507,12 +510,30 @@ struct RedesignHealthView: View {
                                                          || intakeFlag.isEnabled || bodyRecordFlag.isEnabled) // Integration
                     }
                 }
+                // Stage 6: Niggle log (sixth of the one order, ruling A1) and Timeline (eighth and last).
+                // Recovery context opens from the scorecard only (stage 6 §10.1), so it has no row here.
+                if niggleLogFlag.isEnabled {
+                    NavigationLink(value: RedesignRoute.niggleLog) {
+                        NiggleLogHealthRowLabel(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                                    || intakeFlag.isEnabled || bodyRecordFlag.isEnabled
+                                                    || personalEventsFlag.isEnabled,
+                                                refreshSequence: repo.refreshSeq)
+                    }
+                }
+                if timelineFlag.isEnabled {
+                    NavigationLink(value: RedesignRoute.checkpointTimeline) {
+                        CheckpointTimelineHealthRowLabel(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                                             || intakeFlag.isEnabled || bodyRecordFlag.isEnabled
+                                                             || personalEventsFlag.isEnabled || niggleLogFlag.isEnabled)
+                    }
+                }
                 NavigationLink(value: MoreDestination.live) {
                     NoopListRow("Live heart rate", systemImage: "waveform.path.ecg", color: NoopTheme.heart,
                                 showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
                                     || intakeFlag.isEnabled // Stage 3
                                     || bodyRecordFlag.isEnabled // Stage 4: the divider follows the row above.
-                                    || personalEventsFlag.isEnabled)   // Stage 5
+                                    || personalEventsFlag.isEnabled   // Stage 5
+                                    || niggleLogFlag.isEnabled || timelineFlag.isEnabled) // Stage 6
                 }
                 NavigationLink(value: MoreDestination.explore) {
                     NoopListRow("All metrics", systemImage: "square.grid.2x2", color: NoopTheme.hrv)
