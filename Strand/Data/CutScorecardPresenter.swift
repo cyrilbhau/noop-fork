@@ -148,6 +148,9 @@ struct CutScorecardPresentation: Equatable {
     var historyValue: String
     var phaseLinkValue: String
     var card: CutScorecardCard
+    // Stage 3: the judged weigh-in day the protein signal counts back from, so the intake source
+    // caption reads the same seven days as the row (§10.4). Nil with no judged week.
+    var proteinWindowAnchorDay: String? = nil
 }
 
 /// What the presenter needs beyond the result and its input.
@@ -522,7 +525,9 @@ enum CutScorecardPresenter {
             logWeighInIsPrimary: isDue || weightCurve == nil || reason == .weighInOverdue || status == .noReadings,
             historyValue: logged == 1 ? String(localized: "\(logged) weigh-in") : String(localized: "\(logged) weigh-ins"),
             phaseLinkValue: header?.name ?? context.storedPhaseName ?? String(localized: "Not set up"),
-            card: card)
+            card: card,
+            // Stage 3: the protein window's anchor, the judged week's weigh-in day.
+            proteinWindowAnchorDay: result.weeks.first { $0.weekStart == judged }?.weightDay)
     }
 
     /// The card while its first load is in flight: a skeleton, no number and no caption.
@@ -1315,7 +1320,9 @@ extension CutScorecardPresenter {
         case .targetToleranceKg:
             return row(decimal(words.weightValue(p.targetToleranceKg), 2), words.weightUnit, .decimal)
         case .proteinFloorGrams:
-            return row(p.proteinFloorGrams.map { decimal($0, 2) } ?? "", "g", .decimal, placeholder: notSet)
+            // Stage 3 (R45, the rules-sheet part of 1-10): a whole-number keypad; the typed value
+            // is shown as typed, never rounded.
+            return row(p.proteinFloorGrams.map { decimal($0, 2) } ?? "", "g", .whole, placeholder: notSet)
         case .proteinMinDaysPerWeek:
             return row(whole(p.proteinMinDaysPerWeek), String(localized: "of 7"), .whole)
         case .maxWeighInAgeWeeks:

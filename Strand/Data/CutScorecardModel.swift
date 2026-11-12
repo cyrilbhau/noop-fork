@@ -803,7 +803,10 @@ struct ScorecardPhaseDraft: Equatable {
             if p.rateWindowWeeks < 1 { invalid.insert(.rateWindowWeeks) }
             if p.maxProjectionWeeks < 1 { invalid.insert(.maxProjectionWeeks) }
             if !amount(p.targetToleranceKg) { invalid.insert(.targetToleranceKg) }
-            if let floor = p.proteinFloorGrams, !(amount(floor) && floor > 0) { invalid.insert(.proteinFloorGrams) }
+            // Stage 3 (R45, the rules-sheet part of 1-10): the one whole-gram rule both editors use.
+            if let floor = p.proteinFloorGrams, !CutScorecardSettings.isWholeGramProteinFloor(floor) {
+                invalid.insert(.proteinFloorGrams)
+            }
             if !(1...7).contains(p.proteinMinDaysPerWeek) { invalid.insert(.proteinMinDaysPerWeek) }
             if p.maxWeighInAgeWeeks < 0 { invalid.insert(.maxWeighInAgeWeeks) }
         }
