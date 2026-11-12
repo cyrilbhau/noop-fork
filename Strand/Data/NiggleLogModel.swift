@@ -115,10 +115,21 @@ final class NiggleLogModel: ObservableObject {
     }
     @discardableResult func delete(pausedId: String) async -> Bool { await after(settings.delete(pausedId: pausedId)) }
 
-    /// The owner's "Discard unreadable data": removes each list that cannot be read, and only those.
-    func discardUnreadable() async {
+    /// The owner's "Discard unreadable data" on the log's card (§9.1, §10.2): removes the entries
+    /// list, only while it cannot be read. The other lists are kept, readable or not.
+    func discardUnreadableEntries() async {
         settings.discardUnreadableEntries()
+        await load()
+    }
+
+    /// The same on the rules card: the rules list only.
+    func discardUnreadableRules() async {
         settings.discardUnreadableRules()
+        await load()
+    }
+
+    /// The same on the paused-exercises card: the paused list only.
+    func discardUnreadablePaused() async {
         settings.discardUnreadablePaused()
         await load()
     }

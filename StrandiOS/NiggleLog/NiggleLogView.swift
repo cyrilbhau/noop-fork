@@ -74,7 +74,7 @@ struct NiggleLogView: View {
             professionalSection(shown).noopEntrance(index: 0)
             if let attention = shown.entriesAttentionText {
                 Stage6AttentionCard(text: attention, actionTitle: shown.discardTitle) {
-                    Task { await model.discardUnreadable() }
+                    Task { await model.discardUnreadableEntries() }
                 }
                 .padding(.top, NoopTheme.Layout.l)
             }
@@ -136,7 +136,7 @@ struct NiggleLogView: View {
                                action: shown.professionalRule == nil ? nil : { sheet = .rules })
         if let attention = shown.rulesAttentionText {
             Stage6AttentionCard(text: attention, actionTitle: shown.discardTitle) {
-                Task { await model.discardUnreadable() }
+                Task { await model.discardUnreadableRules() }
             }
         } else {
             NoopGlassCard {
@@ -189,7 +189,7 @@ struct NiggleLogView: View {
         } else if shown.pausedNeedAttention {
             ScorecardSectionHeader(title: NiggleLogPresenter.pausedTitle)
             Stage6AttentionCard(text: nil, actionTitle: shown.discardTitle) {
-                Task { await model.discardUnreadable() }
+                Task { await model.discardUnreadablePaused() }
             }
         }
     }
