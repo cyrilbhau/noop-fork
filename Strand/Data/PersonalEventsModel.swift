@@ -23,6 +23,25 @@ struct PersonalEventDraft: Equatable {
     var isPrivate: Bool
 }
 
+/// One "Copy stored text": the raw stored list, when it was copied and when the system removes it.
+/// The text can hold private names and notes, so, like the coach packet's copy, it is never offered
+/// to another device; its lifetime is longer than the packet's, as the owner may need time to paste it
+/// somewhere safe before starting again.
+struct PersonalEventStoredTextCopyPlan: Equatable {
+    static let lifetimeSeconds: TimeInterval = 600
+    let text: String
+    let copiedAt: Date
+    var expiresAt: Date { copiedAt.addingTimeInterval(Self.lifetimeSeconds) }
+    /// Never offered to another device.
+    var localOnly: Bool { true }
+}
+
+/// Puts a copy plan on the system pasteboard. The iPhone's writer is
+/// `SystemPersonalEventStoredTextPasteboard`; tests pass a recorder.
+protocol PersonalEventStoredTextPasteboardWriting {
+    func write(_ plan: PersonalEventStoredTextCopyPlan)
+}
+
 /// The Events screen: its rows, the delete and end-today actions and the unreadable-store path.
 @MainActor
 final class PersonalEventsModel: ObservableObject {
@@ -33,12 +52,16 @@ final class PersonalEventsModel: ObservableObject {
     private let now: () -> Date
     private let timeZone: () -> TimeZone
     private let locale: Locale
+    private let pasteboard: PersonalEventStoredTextPasteboardWriting?
     private var revisionObserver: AnyCancellable?
 
+    /// `pasteboard` is nil where nothing is copied: the Health row, the debug demo and macOS.
     init(store: PersonalEventStore? = nil, now: @escaping () -> Date = Date.init,
          timeZone: @escaping () -> TimeZone = { .current }, locale: Locale = AppLanguage.activeLocale,
-         notificationCenter: NotificationCenter = .default) {
+         notificationCenter: NotificationCenter = .default,
+         pasteboard: PersonalEventStoredTextPasteboardWriting? = nil) {
         self.store = store ?? .shared
+        self.pasteboard = pasteboard
         self.now = now
         self.timeZone = timeZone
         self.locale = locale
@@ -101,6 +124,13 @@ final class PersonalEventsModel: ObservableObject {
 
     /// For "Copy stored text".
     var rawStoredText: String? { store.rawStoredText }
+
+    /// "Copy stored text": the raw stored list as a local-only item that expires. Nothing is written
+    /// when there is no stored text.
+    func copyStoredText() {
+        guard let text = store.rawStoredText else { return }
+        pasteboard?.write(PersonalEventStoredTextCopyPlan(text: text, copiedAt: now()))
+    }
 
     /// "Start again", after the one question. True when the unreadable value was removed.
     @discardableResult

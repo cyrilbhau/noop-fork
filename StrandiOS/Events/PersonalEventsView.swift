@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 import StrandAnalytics
 import StrandDesign
 
@@ -33,7 +34,7 @@ struct PersonalEventsView: View {
     init(store: PersonalEventStore? = nil, model: PersonalEventsModel? = nil, isLoading: Bool = false,
          opensSheet: SheetTarget? = nil, asksDelete: String? = nil, asksStartAgain: Bool = false) {
         let store = store ?? .shared
-        let shown = model ?? PersonalEventsModel(store: store)
+        let shown = model ?? PersonalEventsModel(store: store, pasteboard: SystemPersonalEventStoredTextPasteboard())
         self.store = store
         self.isLoading = isLoading
         _model = StateObject(wrappedValue: shown)
@@ -224,7 +225,7 @@ struct PersonalEventsView: View {
                 Text("Nothing has been changed. You can copy the stored text before starting again.")
                     .noopFont(.footnote)
                     .fixedSize(horizontal: false, vertical: true)
-                Button { UIPasteboard.general.string = model.rawStoredText } label: { Text("Copy stored text") }
+                Button { model.copyStoredText() } label: { Text("Copy stored text") }
                     .buttonStyle(NoopSecondaryButtonStyle())
                     .disabled(model.rawStoredText == nil)
                 Button { asksStartAgain = true } label: { Text("Start again") }
@@ -327,6 +328,17 @@ private struct PersonalEventRowView: View {
                 if row.isPrivate { FormKitBadge("Private", tint: NoopTheme.textSecondary) }
             }
         }
+    }
+}
+
+/// Writes "Copy stored text" to the general pasteboard as an item that stays on this iPhone and
+/// expires, as the coach packet's writer does: `localOnly` keeps the item out of Universal Clipboard
+/// and Handoff, and `expirationDate` has the system remove it at the plan's `expiresAt`.
+struct SystemPersonalEventStoredTextPasteboard: PersonalEventStoredTextPasteboardWriting {
+    func write(_ plan: PersonalEventStoredTextCopyPlan) {
+        UIPasteboard.general.setItems(
+            [[UTType.utf8PlainText.identifier: plan.text]],
+            options: [.localOnly: plan.localOnly, .expirationDate: plan.expiresAt])
     }
 }
 

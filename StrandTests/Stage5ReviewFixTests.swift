@@ -138,4 +138,42 @@ final class Stage5ReviewFixTests: XCTestCase {
         await eventually({ model.presentation.now.map(\.id) == [tomorrow.id] }, "the event has started here")
         XCTAssertEqual(model.presentation.upcoming, [])
     }
+
+    // MARK: 3. The rescue copy stays on this iPhone and expires
+
+    private final class PasteboardSpy: PersonalEventStoredTextPasteboardWriting {
+        var plans: [PersonalEventStoredTextCopyPlan] = []
+        func write(_ plan: PersonalEventStoredTextCopyPlan) { plans.append(plan) }
+    }
+
+    func testCopyStoredTextWritesALocalOnlyExpiringItem() throws {
+        let raw = #"[{"kind":"custom","note":"Fixture note","sensitive":true"#
+        let copiedAt = Fx.instant("2031-03-12T12:00:00Z")
+        let spy = PasteboardSpy()
+        let store = PersonalEventStore(defaults: try suite(raw: raw), now: { copiedAt })
+        let model = PersonalEventsModel(store: store, now: { copiedAt }, timeZone: { Fx.utc },
+                                        locale: Fx.british, pasteboard: spy)
+        XCTAssertEqual(model.presentation.state, .storeUnreadable)
+
+        model.copyStoredText()
+
+        XCTAssertEqual(spy.plans.count, 1)
+        let plan = try XCTUnwrap(spy.plans.first)
+        XCTAssertEqual(plan.text, raw)
+        XCTAssertTrue(plan.localOnly, "never offered to another device")
+        XCTAssertEqual(plan.copiedAt, copiedAt)
+        XCTAssertEqual(plan.expiresAt, copiedAt.addingTimeInterval(PersonalEventStoredTextCopyPlan.lifetimeSeconds))
+        XCTAssertGreaterThan(PersonalEventStoredTextCopyPlan.lifetimeSeconds, 0)
+    }
+
+    func testCopyStoredTextWritesNothingWhenThereIsNoStoredText() throws {
+        let spy = PasteboardSpy()
+        let defaults = try suite([trip])
+        defaults.set(false, forKey: PersonalEventStore.enabledKey)
+        let model = PersonalEventsModel(store: PersonalEventStore(defaults: defaults), timeZone: { Fx.utc },
+                                        locale: Fx.british, pasteboard: spy)
+        XCTAssertNil(model.rawStoredText)
+        model.copyStoredText()
+        XCTAssertEqual(spy.plans, [])
+    }
 }
