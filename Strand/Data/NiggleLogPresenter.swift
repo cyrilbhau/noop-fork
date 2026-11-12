@@ -147,7 +147,7 @@ enum NiggleLogPresenter {
                         notedText: String(localized: "noted \(words.shortDate(entry.onsetDay))")))
                 case .complaint:
                     let triage = self.triage(entry, rules: shownRules, today: today)
-                    if triage.status == .resolved {
+                    if !isListedOpen(triage) {
                         resolved.append(NiggleResolvedRow(
                             id: entry.id, location: entry.location, sideText: sideText(entry.side),
                             durationText: resolvedAfterText(triage.dayCount ?? 1),
@@ -232,7 +232,7 @@ enum NiggleLogPresenter {
             : nil
         let professional = rules.professionalRule.isEmpty || rulesNeedAttention ? nil : rules.professionalRule
         let note = entry.note.isEmpty ? nil : entry.note
-        if triage.status == .resolved {
+        if !isListedOpen(triage) {
             return NiggleDetailPresentation(
                 kind: .resolved, location: entry.location, sideText: sideText(entry.side),
                 dayCountText: resolvedAfterText(triage.dayCount ?? 1), label: nil, actionText: nil, ruleNote: nil,
@@ -264,7 +264,7 @@ enum NiggleLogPresenter {
     static func healthRow(enabled: Bool, entries: [StoredNiggle], today: String,
                           locale: Locale) -> NiggleLogHealthRow? {
         guard enabled else { return nil }
-        let open = entries.filter { $0.kind == .complaint && triage($0, rules: [], today: today).isOpen }.count
+        let open = entries.filter { $0.kind == .complaint && isListedOpen(triage($0, rules: [], today: today)) }.count
         return NiggleLogHealthRow(title: String(localized: "Niggle log"),
                                   detail: open > 0 ? String(localized: "\(open) open") : nil)
     }
@@ -420,6 +420,11 @@ enum NiggleLogPresenter {
     // MARK: Pieces
 
     /// The one call of the triage for a stored complaint (§8.1).
+    /// Whether the log lists a complaint under Open: every triage result but `.resolved`, an invalid
+    /// one included (a day ahead of "today" after a time-zone change). The Health row counts the
+    /// same set, so its count and the Open section cannot disagree.
+    private static func isListedOpen(_ triage: NiggleTriageResult) -> Bool { triage.status != .resolved }
+
     private static func triage(_ entry: StoredNiggle, rules: [StoredTriageRule], today: String) -> NiggleTriageResult {
         let complaint = NiggleComplaint(
             onsetDay: entry.onsetDay, resolvedDay: entry.resolvedDay, character: entry.character, trend: entry.trend,
