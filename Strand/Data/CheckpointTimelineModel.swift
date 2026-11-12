@@ -42,12 +42,16 @@ final class CheckpointTimelineModel: ObservableObject {
     let unitSystem: () -> UnitSystem
     /// Counts loads. A load publishes only while it is still the latest one.
     private var generation = 0
+    /// Set by the first load; a model no screen has loaded reads nothing on a day change.
+    private var hasLoaded = false
+    private var dayObserver: AnyCancellable?
 
     init(settings: CheckpointTimelineSettings, scorecardSettings: CutScorecardSettings, scorecard: CutScorecardModel,
          scans: TimelineScanSource, events: TimelineEventSource, now: @escaping () -> Date = Date.init,
          timeZone: @escaping () -> TimeZone = { .current },
          locale: @escaping () -> Locale = { AppLanguage.activeLocale },
-         unitSystem: @escaping () -> UnitSystem = { .metric }) {
+         unitSystem: @escaping () -> UnitSystem = { .metric },
+         notificationCenter: NotificationCenter = .default) {
         self.settings = settings
         self.scorecardSettings = scorecardSettings
         self.scorecard = scorecard
@@ -57,9 +61,16 @@ final class CheckpointTimelineModel: ObservableObject {
         self.timeZone = timeZone
         self.locale = locale
         self.unitSystem = unitSystem
+        // Ruling A27: once a screen has loaded it, a new local day (midnight, a new time zone, or a return
+        // to the foreground) reads again, so no day count or day-derived label stays on yesterday.
+        dayObserver = LocalDayChange.observe(notificationCenter) { [weak self] in
+            guard let self, self.hasLoaded else { return }
+            Task { await self.load() }
+        }
     }
 
     func load() async {
+        hasLoaded = true
         generation += 1
         let request = generation
         guard settings.isEnabled else {

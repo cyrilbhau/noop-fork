@@ -310,11 +310,14 @@ struct CheckpointTimelineHealthRowLabel: View {
     @EnvironmentObject private var repo: Repository
     @EnvironmentObject private var profile: ProfileStore
     @State private var row: CheckpointTimelineHealthRow?
+    /// Moves on each new local day, so the next upcoming item is taken against it (ruling A27).
+    @State private var dayTick = 0
 
     var body: some View {
         NoopListRow(LocalizedStringKey(row?.title ?? CheckpointTimelinePresenter.title), systemImage: "calendar.day.timeline.left",
                     color: NoopTheme.textPrimary, value: row?.detail, showsDivider: showsDivider)
-            .task(id: repo.refreshSeq) {
+            .onReceive(LocalDayChange.publisher()) { _ in dayTick += 1 }
+            .task(id: [repo.refreshSeq, dayTick]) {
                 let model = CheckpointTimelineModel.live(repository: repo, profile: profile)
                 await model.load()
                 row = CheckpointTimelinePresenter.healthRow(enabled: model.settings.isEnabled, result: model.result,
