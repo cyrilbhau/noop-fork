@@ -840,6 +840,12 @@ enum BodyRecordPresenter {
             + [BenchmarkChoice(key: nil, name: customBenchmarkTitle)]
     }
 
+    /// The unit an existing custom benchmark is kept in: its newest readable reading's, when that is one
+    /// of the custom units; nil for an empty history.
+    static func existingBenchmarkUnit(_ readings: [LabMarkerRow]) -> String? {
+        readings.last { $0.value?.isFinite == true && customBenchmarkUnits.contains($0.unit) }?.unit
+    }
+
     static func benchmarkEntry(_ entry: BenchmarkEntry, decimalSeparator: Character) -> BenchmarkEntryState {
         let custom = entry.key == nil
         let name = entry.customName.trimmingCharacters(in: .whitespacesAndNewlines)

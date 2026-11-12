@@ -283,6 +283,8 @@ final class BenchmarkSheetModel: ObservableObject {
     @Published var note = ""
     @Published private(set) var isSaving = false
     @Published private(set) var failed = false
+    /// False while the sheet adds to an existing custom benchmark whose stored unit is not read yet.
+    @Published private(set) var unitKnown: Bool
 
     private let store: BodyRecordStore
     private let decimalSeparator: Character
@@ -292,10 +294,29 @@ final class BenchmarkSheetModel: ObservableObject {
         self.decimalSeparator = decimalSeparator
         entry = BenchmarkEntry(key: key)
         takenAt = now
+        unitKnown = !Self.isExistingCustom(key)
+    }
+
+    /// A custom benchmark is kept in the unit it was recorded in (§5.3): before the entry can be saved,
+    /// that unit is read from its readings. Nothing to do for a catalogue or a new custom benchmark.
+    func prepare() async {
+        guard !unitKnown, let key = entry.key, Self.isExistingCustom(key) else { return }
+        let readings = await store.benchmarkReadings(key: key)
+        if entry.key == key, let unit = BodyRecordPresenter.existingBenchmarkUnit(readings) {
+            entry.customUnit = unit
+        }
+        unitKnown = true
     }
 
     var state: BenchmarkEntryState {
-        BodyRecordPresenter.benchmarkEntry(entry, decimalSeparator: decimalSeparator)
+        var shown = BodyRecordPresenter.benchmarkEntry(entry, decimalSeparator: decimalSeparator)
+        if !unitKnown, Self.isExistingCustom(entry.key) { shown.canSave = false }
+        return shown
+    }
+
+    /// A key outside the catalogue: a custom benchmark that already has a name, so a stored unit.
+    private static func isExistingCustom(_ key: String?) -> Bool {
+        key.map { MarkerCatalog.definition(for: $0) == nil } ?? false
     }
 
     /// The reading as saved, or nil when it could not be saved.

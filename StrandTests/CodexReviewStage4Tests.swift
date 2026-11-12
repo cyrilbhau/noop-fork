@@ -59,4 +59,53 @@ final class CodexReviewStage4Tests: XCTestCase {
             XCTAssertEqual(stored.count, 2, "round \(round): one figure and one note, nothing else")
         }
     }
+
+    // MARK: 2. Adding to an existing custom benchmark
+
+    func testAddingToAnExistingCustomTimedBenchmarkKeepsSeconds() async throws {
+        let h = try await harness()
+        try await h.seed([F.benchmarkRow(F.customCarryKey, value: 60, unit: "s", takenAt: F.jan06Noon,
+                                         day: "2031-01-06", deviceId: F.active)])
+        let model = BenchmarkSheetModel(store: h.records, key: F.customCarryKey, decimalSeparator: ".", now: F.later)
+        await model.prepare()
+        model.entry.text = "1:30"
+
+        let state = model.state
+        XCTAssertEqual(state.key, F.customCarryKey)
+        XCTAssertEqual(state.unit, "s", "the benchmark's stored unit, not the entry's default")
+        XCTAssertEqual(state.unitOptions, ["s"])
+        XCTAssertTrue(state.acceptsDuration)
+        XCTAssertEqual(state.value, 90)
+        XCTAssertTrue(state.canSave)
+
+        let saved = await model.save()
+        XCTAssertEqual(saved?.unit, "s")
+        let readings = await h.records.benchmarkReadings(key: F.customCarryKey)
+        XCTAssertEqual(readings.map(\.unit), ["s", "s"])
+    }
+
+    func testAnExistingCustomBenchmarkCannotBeSavedBeforeItsUnitIsKnown() async throws {
+        let h = try await harness()
+        try await h.seed([F.benchmarkRow(F.customCarryKey, value: 60, unit: "s", takenAt: F.jan06Noon,
+                                         day: "2031-01-06", deviceId: F.active)])
+        let model = BenchmarkSheetModel(store: h.records, key: F.customCarryKey, decimalSeparator: ".", now: F.later)
+        model.entry.text = "10"
+        XCTAssertFalse(model.state.canSave, "the unit is read from the benchmark's readings first")
+        let saved = await model.save()
+        XCTAssertNil(saved)
+        let readings = await h.records.benchmarkReadings(key: F.customCarryKey)
+        XCTAssertEqual(readings.map(\.unit), ["s"], "nothing was written")
+    }
+
+    func testANewCustomBenchmarkStillOffersEveryUnit() async throws {
+        let h = try await harness()
+        let model = BenchmarkSheetModel(store: h.records, key: nil, decimalSeparator: ".", now: F.later)
+        await model.prepare()
+        model.entry.customName = "Fixture carry"
+        model.entry.customUnit = "kg"
+        model.entry.text = "20"
+        XCTAssertEqual(model.state.unitOptions, P.customBenchmarkUnits)
+        XCTAssertEqual(model.state.unit, "kg")
+        XCTAssertTrue(model.state.canSave)
+    }
 }
