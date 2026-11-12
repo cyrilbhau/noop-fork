@@ -63,7 +63,7 @@ struct CoachPacketAssembler {
         self.timeZone = timeZone
         self.effortScale = effortScale
         self.identifiers = identifiers
-        self.storeReadable = storeReadable ?? { await repository.storeHandle() != nil }
+        self.storeReadable = storeReadable ?? { await repository.storeIsReadable() }
     }
 
     /// What one assembly gathered: the renderer's input and the moment and choices it belongs to.

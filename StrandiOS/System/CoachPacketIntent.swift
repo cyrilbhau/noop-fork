@@ -36,8 +36,12 @@ struct GetCoachPacketIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
+        let settings = CoachPacketSettings()
+        // Refused before any wait when the feature is off; the shared steps read the flag again
+        // after the waits and after assembly.
+        guard settings.isEnabled else { throw CoachPacketIntentError.switchedOff }
         let result = await CoachPacketShortcut.run(
-            settings: CoachPacketSettings(), attempts: Self.waitSeconds,
+            settings: settings, attempts: Self.waitSeconds,
             isReady: {
                 guard let app = AppModel.shared else { return false }
                 return app.repo.loaded && app.deviceRegistry != nil
