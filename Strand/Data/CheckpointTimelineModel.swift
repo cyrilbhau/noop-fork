@@ -65,6 +65,7 @@ final class CheckpointTimelineModel: ObservableObject {
         guard settings.isEnabled else {
             result = nil
             timelineEvents = []
+            latest = nil
             if state != .idle { state = .idle }
             return
         }
@@ -80,40 +81,93 @@ final class CheckpointTimelineModel: ObservableObject {
         let scorecardEnabled = scorecardSettings.isEnabled
         if state == .idle { state = .loading }
 
-        var projection: TimelineProjection?
         if scorecardEnabled {
+            followScorecard()
             await scorecard.load()
-            if let evaluated = scorecard.evaluation?.result.projection {
-                projection = TimelineProjection(status: evaluated.status, targetDay: evaluated.targetDay)
-            }
         }
         let scanRead = await scans.read()
         guard request == generation else { return }
         guard settings.isEnabled else {
             result = nil
             timelineEvents = []
+            latest = nil
             state = .idle
             return
         }
+        let inputs = Inputs(
+            phases: storedPhases, checkpoints: storedCheckpoints, events: eventRead, scanRead: scanRead,
+            scorecardEnabled: scorecardEnabled, phasesNeedAttention: phasesNeedAttention,
+            checkpointsNeedAttention: checkpointsNeedAttention, today: day, unitSystem: system, locale: shownLocale)
+        latest = inputs
+        publishedGeneration = request
+        publish(inputs)
+    }
+
+    /// What a load read, kept so a later scorecard result can be shown without reading anything again.
+    private struct Inputs {
+        let phases: [CutScorecardStoredPhase]
+        let checkpoints: [StoredCheckpoint]
+        let events: (state: TimelineSourceState, events: [PersonalEvent])
+        let scanRead: (state: TimelineSourceState, days: [String])
+        let scorecardEnabled: Bool
+        let phasesNeedAttention: Bool
+        let checkpointsNeedAttention: Bool
+        let today: String
+        let unitSystem: UnitSystem
+        let locale: Locale
+    }
+
+    /// The inputs of the latest load that published; nil while idle or before the first one.
+    private var latest: Inputs?
+    /// The load `latest` came from; a timeline load is in flight while it is not `generation`.
+    private var publishedGeneration = 0
+    private var scorecardObserver: AnyCancellable?
+
+    /// Builds and publishes from `inputs` and the shared scorecard model's evaluation as it stands now
+    /// (§8.3): the projection is read in the same step that publishes, never across a suspension.
+    private func publish(_ inputs: Inputs) {
+        var projection: TimelineProjection?
+        if inputs.scorecardEnabled, let evaluated = scorecard.evaluation?.result.projection {
+            projection = TimelineProjection(status: evaluated.status, targetDay: evaluated.targetDay)
+        }
         let built = CheckpointTimeline.build(CheckpointTimelineInput(
-            phases: CheckpointTimelineSettings.timelinePhases(storedPhases),
-            checkpoints: storedCheckpoints.map {
+            phases: CheckpointTimelineSettings.timelinePhases(inputs.phases),
+            checkpoints: inputs.checkpoints.map {
                 TimelineCheckpoint(day: $0.day, isApproximate: $0.approximate, category: $0.category,
                                    waypointWeightKg: $0.waypointWeightKg, phaseStartDay: $0.phaseStartDay,
                                    isDone: $0.done)
             },
-            scanDays: scanRead.days, spans: eventRead.events.map(TimelineEventSource.span), projection: projection,
-            scans: scanRead.state, events: eventRead.state, today: day))
+            scanDays: inputs.scanRead.days, spans: inputs.events.events.map(TimelineEventSource.span),
+            projection: projection, scans: inputs.scanRead.state, events: inputs.events.state, today: inputs.today))
         result = built
-        timelineEvents = eventRead.events
-        phases = storedPhases
-        checkpoints = storedCheckpoints
-        today = day
+        timelineEvents = inputs.events.events
+        phases = inputs.phases
+        checkpoints = inputs.checkpoints
+        today = inputs.today
         let presentation = CheckpointTimelinePresenter.present(
-            built, phases: storedPhases, checkpoints: storedCheckpoints, events: eventRead.events,
-            scorecardEnabled: scorecardEnabled, phasesNeedAttention: phasesNeedAttention,
-            checkpointsNeedAttention: checkpointsNeedAttention, unitSystem: system, locale: shownLocale)
+            built, phases: inputs.phases, checkpoints: inputs.checkpoints, events: inputs.events.events,
+            scorecardEnabled: inputs.scorecardEnabled, phasesNeedAttention: inputs.phasesNeedAttention,
+            checkpointsNeedAttention: inputs.checkpointsNeedAttention, unitSystem: inputs.unitSystem,
+            locale: inputs.locale)
         if state != .loaded(presentation) { state = .loaded(presentation) }
+    }
+
+    /// From the first load with the scorecard on, every result the shared scorecard model publishes
+    /// re-presents the latest load's inputs, so a scorecard load that overtook this model's own (a
+    /// weigh-in saved, a sync) still reaches the timeline. The scorecard sets `evaluation` before
+    /// `state`, so the value read here is the published one. Nothing is read or evaluated again, and
+    /// a timeline load still in flight is left to read the evaluation itself.
+    private func followScorecard() {
+        guard scorecardObserver == nil else { return }
+        scorecardObserver = scorecard.$state.dropFirst().sink { [weak self] _ in
+            Task { @MainActor [weak self] in self?.scorecardDidPublish() }
+        }
+    }
+
+    private func scorecardDidPublish() {
+        guard publishedGeneration == generation, let inputs = latest, settings.isEnabled,
+              case .loaded = state else { return }
+        publish(inputs)
     }
 
     // MARK: Writes. Each reloads.
