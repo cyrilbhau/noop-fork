@@ -12,6 +12,9 @@ struct IntakeSettingsSection: View {
     @ObservedObject private var flag = IntakeSettings.flag
     @State private var source: IntakeSourceSetting = .none
     @State private var floorText = ""
+    /// The floor text `load()` put in the field: leaving any field writes the floor only when the
+    /// owner changed this text, so a calorie edit never rewrites the scorecard rules.
+    @State private var loadedFloorText = ""
     @State private var floorMessage: String?
     @State private var lowText = ""
     @State private var highText = ""
@@ -217,10 +220,13 @@ struct IntakeSettingsSection: View {
         // marked until a floor in range is typed.
         floorMessage = stored.map { CutScorecardSettings.isWholeGramProteinFloor($0) } == false
             ? IntakePresenter.refusedFloorMessage : nil
+        loadedFloorText = floorText
+        // Unusable stored rules are repaired in the rules sheet; this field writes nothing over them.
+        if settings.floorRulesNeedAttention { floorMessage = IntakePresenter.rulesNeedAttention }
         let targets = settings.storedTargets
-        lowText = targets?.energyLowKcal.map(Self.text) ?? ""
-        highText = targets?.energyHighKcal.map(Self.text) ?? ""
-        hardText = targets?.energyHardFloorKcal.map(Self.text) ?? ""
+        lowText = targets?.energyLowKcal.map(IntakePresenter.editableAmountText) ?? ""
+        highText = targets?.energyHighKcal.map(IntakePresenter.editableAmountText) ?? ""
+        hardText = targets?.energyHardFloorKcal.map(IntakePresenter.editableAmountText) ?? ""
         rangeMessage = settings.targetsNeedAttention ? IntakePresenter.targetsNeedAttention : nil
         supplements = settings.supplementQuestions
         cutoffMinute = settings.cutoffMinuteOfDay
@@ -228,10 +234,6 @@ struct IntakeSettingsSection: View {
         knownApps = settings.knownHealthSources.map { (id: $0.key, name: $0.value.name) }.sorted { $0.name < $1.name }
         admitted = settings.admittedHealthSources
         reminderCaption = IntakePresenter.cutoffReminderCaption(IntakeCutoffReminder.live.plannedTriggers)
-    }
-
-    private static func text(_ value: Double) -> String {
-        value == value.rounded() && abs(value) < 1e15 ? String(Int(value)) : String(value)
     }
 
     private func flagChanged(_ on: Bool) {
@@ -250,15 +252,17 @@ struct IntakeSettingsSection: View {
     }
 
     private func saveFloor() {
+        guard floorText != loadedFloorText else { return }
+        let refused = settings.floorRulesNeedAttention ? IntakePresenter.rulesNeedAttention : IntakePresenter.refusedFloorMessage
         switch IntakePresenter.floorEntry(floorText) {
         case .noFloor:
-            settings.setProteinFloorGrams(nil)
-            floorMessage = nil
+            floorMessage = settings.setProteinFloorGrams(nil) ? nil : refused
         case .grams(let grams):
-            floorMessage = settings.setProteinFloorGrams(grams) ? nil : IntakePresenter.refusedFloorMessage
+            floorMessage = settings.setProteinFloorGrams(grams) ? nil : refused
         case .invalid(let message):
             floorMessage = message
         }
+        if floorMessage == nil { loadedFloorText = floorText }
     }
 
     private func saveRange() {

@@ -37,6 +37,8 @@ struct IntakeScreenSnapshot: Equatable {
     var model: IntakeScreenModel
     var supplements: [IntakeSupplementRow]
     var day: String
+    /// The day the entries card lists: today or one of the seven days before it.
+    var entriesDay: String
     var quickAddDays: [String]
     var presets: [IntakeSettings.Preset]
 }
@@ -46,6 +48,8 @@ struct IntakeScreenSnapshot: Equatable {
 @MainActor
 final class IntakeScreenState: ObservableObject {
     @Published private(set) var snapshot: IntakeScreenSnapshot?
+    /// The day picked in the entries card; nil is today.
+    private var shownDay: String?
     let provider: IntakeProvider
     let settings: IntakeSettings
     let quickAdd: IntakeQuickAddStore
@@ -63,20 +67,22 @@ final class IntakeScreenState: ObservableObject {
 
     func load(rebank: Bool) async {
         let clock = clock
+        let quickAddDays = IntakePresenter.quickAddDays(today: clock.today)
+        let entriesDay = IntakePresenter.entriesDay(requested: shownDay, today: clock.today)
         if rebank, settings.source == .quickAdd {
-            for day in IntakePresenter.quickAddDays(today: clock.today).prefix(2) {
+            for day in Array(quickAddDays.prefix(2)) + (quickAddDays.prefix(2).contains(entriesDay) ? [] : [entriesDay]) {
                 try? await quickAdd.rebank(day: day)
             }
         }
         await provider.refresh()
         let input = await IntakePresenterInput.gather(provider: provider, settings: settings, day: clock.today,
-                                                      quickAdd: quickAdd)
+                                                      quickAdd: quickAdd, entriesDay: entriesDay)
         let states = await tick.states(day: clock.today)
         let model = IntakePresenter.screen(input, clock: clock, timeZone: .current, locale: AppClock.formattingLocale)
         let rows = IntakePresenter.supplementRows(questions: settings.supplementQuestions, states: states,
                                                   displayName: IntakePresenter.supplementName(question:))
-        snapshot = IntakeScreenSnapshot(model: model, supplements: rows, day: clock.today,
-                                        quickAddDays: IntakePresenter.quickAddDays(today: clock.today),
+        snapshot = IntakeScreenSnapshot(model: model, supplements: rows, day: clock.today, entriesDay: entriesDay,
+                                        quickAddDays: quickAddDays,
                                         presets: settings.quickAddPresets)
         IntakeWidgetPublisher.publish(provider: provider, clock: clock)
     }
@@ -84,6 +90,11 @@ final class IntakeScreenState: ObservableObject {
     func setTick(_ ticked: Bool, question: String) async {
         guard let day = snapshot?.day else { return }
         await tick.set(ticked, question: question, day: day)
+        await load(rebank: false)
+    }
+
+    func showDay(_ day: String) async {
+        shownDay = day
         await load(rebank: false)
     }
 
@@ -114,13 +125,19 @@ private struct IntakeLiveScreen: View {
                 edit: { editing = .edit($0) },
                 replaceRestored: { editing = .restored },
                 openSettings: { showsSettings = true },
-                readAgain: { Task { await state.load(rebank: false) } }))
+                readAgain: { Task { await state.load(rebank: false) } },
+                showDay: { day in Task { await state.showDay(day) } }))
             .task(id: repo.refreshSeq) { await state.load(rebank: true) }
+            // A screen left open past midnight rolls its "Today" over.
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                Task { await state.load(rebank: true) }
+            }
             .onReceive(state.provider.$revision.dropFirst()) { _ in Task { await state.load(rebank: false) } }
             .sheet(item: $editing) { mode in
                 IntakeQuickAddSheet(mode: mode, store: state.quickAdd,
                                     days: state.snapshot?.quickAddDays ?? [],
-                                    presets: state.snapshot?.presets ?? []) {
+                                    presets: state.snapshot?.presets ?? [],
+                                    shownDay: state.snapshot?.entriesDay) {
                     Task { await state.load(rebank: false) }
                 }
             }
@@ -148,6 +165,7 @@ struct IntakeScreenActions {
     var replaceRestored: () -> Void = {}
     var openSettings: () -> Void = {}
     var readAgain: () -> Void = {}
+    var showDay: (String) -> Void = { _ in }
 }
 
 /// The screen for one snapshot; nil draws the loading skeleton.
@@ -241,7 +259,7 @@ struct IntakeScreenContent: View {
         if let chart = model.chart { chartCard(chart) }
         sourceCard(model)
         if !model.entries.isEmpty || model.showsRestoredTotal || snapshot.model.sourceLine == IntakePresenter.enteredHere {
-            entriesCard(model)
+            entriesCard(snapshot)
         }
     }
 
@@ -405,9 +423,22 @@ struct IntakeScreenContent: View {
         }
     }
 
-    private func entriesCard(_ model: IntakeScreenModel) -> some View {
-        VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
-            NoopSectionHeader("Entries")
+    private func entriesCard(_ snapshot: IntakeScreenSnapshot) -> some View {
+        let model = snapshot.model
+        return VStack(alignment: .leading, spacing: NoopTheme.Layout.s) {
+            HStack(alignment: .firstTextBaseline) {
+                NoopSectionHeader("Entries")
+                Spacer(minLength: NoopTheme.Layout.s)
+                Picker("Day", selection: Binding(get: { snapshot.entriesDay }, set: { actions.showDay($0) })) {
+                    ForEach(snapshot.quickAddDays, id: \.self) { key in
+                        Text(verbatim: IntakePresenter.dayLabel(key, today: snapshot.day, timeZone: .current,
+                                                                locale: AppClock.formattingLocale)).tag(key)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(NoopTheme.textPrimary)
+            }
             NoopGlassCard(flush: true) {
                 VStack(spacing: 0) {
                     if model.showsRestoredTotal {
@@ -419,8 +450,9 @@ struct IntakeScreenContent: View {
                     }
                     ForEach(Array(model.entries.enumerated()), id: \.element.id) { index, entry in
                         Button { actions.edit(entry) } label: {
-                            IntakeTextRow(title: entry.label ?? IntakeEntryText.amounts(entry),
-                                          detail: entry.label == nil ? nil : IntakeEntryText.amounts(entry),
+                            let amounts = IntakePresenter.entryAmounts(entry, locale: AppClock.formattingLocale)
+                            IntakeTextRow(title: entry.label ?? amounts,
+                                          detail: entry.label == nil ? nil : amounts,
                                           showsDivider: index > 0 || model.showsRestoredTotal)
                         }
                         .buttonStyle(.plain)
@@ -457,21 +489,6 @@ private struct IntakeTextRow: View {
             .padding(.horizontal, NoopTheme.Layout.cardPadding)
             .contentShape(Rectangle())
         }
-    }
-}
-
-/// The amounts of an entry as one line: "30 g · 150 kcal".
-enum IntakeEntryText {
-    static func amounts(_ entry: IntakeEntry) -> String {
-        let locale = AppClock.formattingLocale
-        var parts: [String] = []
-        if let grams = entry.proteinGrams {
-            parts.append(String(localized: "\(grams.formatted(.number.precision(.fractionLength(0...1)).locale(locale))) g"))
-        }
-        if let kcal = entry.energyKcal {
-            parts.append(String(localized: "\(kcal.formatted(.number.precision(.fractionLength(0)).locale(locale))) kcal"))
-        }
-        return parts.joined(separator: " · ")
     }
 }
 
@@ -569,6 +586,8 @@ struct IntakeCardReader<Content: View>: View {
 /// protein came from and opens the intake screen (stage 1 ruling R41: every place that shows the
 /// value offers the way to correct it).
 struct ScorecardIntakeProteinRow<Row: View>: View {
+    /// The judged weigh-in day the protein signal counts back from; nil: no judged week, no caption.
+    let anchorDay: String?
     @ViewBuilder let row: () -> Row
     @State private var caption: String?
 
@@ -584,26 +603,18 @@ struct ScorecardIntakeProteinRow<Row: View>: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .task { await loadCaption() }
+        .task(id: anchorDay) { await loadCaption() }
     }
 
     private func loadCaption() async {
-        guard let repository = AppModel.shared?.repo else { return }
+        guard let anchorDay, let repository = AppModel.shared?.repo else {
+            caption = nil
+            return
+        }
         let provider = IntakeProvider.live(repository: repository)
         await provider.refresh()
-        let clock = IntakeClock.current(settings: provider.settings)
         caption = IntakePresenter.scorecardProteinCaption(
             flagEnabled: provider.settings.isEnabled,
-            sources: IntakeScorecardWindow.proteinSources(provider.series(), today: clock.today))
-    }
-}
-
-/// The days the scorecard's protein row is read over, as the screen approximates them: the seven
-/// days before today.
-enum IntakeScorecardWindow {
-    static func proteinSources(_ series: [ResolvedIntakeDay], today: String) -> [IntakeSource] {
-        guard let end = CanonicalDay.number(today) else { return [] }
-        let first = CanonicalDay.key(end - 7), last = CanonicalDay.key(end - 1)
-        return series.filter { $0.day >= first && $0.day <= last }.compactMap { $0.protein?.source }
+            sources: IntakePresenter.scorecardProteinSources(provider.series(), anchorDay: anchorDay))
     }
 }

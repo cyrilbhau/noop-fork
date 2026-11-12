@@ -102,7 +102,7 @@ enum IntakeDemo {
                                              states: [Fixture.supplementQuestion: .some(true)],
                                              displayName: IntakePresenter.supplementName(question:))
             : []
-        let snapshot = IntakeScreenSnapshot(model: model, supplements: rows, day: input.day,
+        let snapshot = IntakeScreenSnapshot(model: model, supplements: rows, day: input.day, entriesDay: input.day,
                                             quickAddDays: IntakePresenter.quickAddDays(today: Fixture.today),
                                             presets: [Fixture.preset])
         return AnyView(NavigationStack { IntakeScreenContent(snapshot: snapshot) })

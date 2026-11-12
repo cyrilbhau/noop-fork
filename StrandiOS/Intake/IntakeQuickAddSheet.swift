@@ -26,6 +26,9 @@ struct IntakeQuickAddSheet: View {
     /// Today and the seven days before it, today first.
     let days: [String]
     let presets: [IntakeSettings.Preset]
+    /// The day the screen's entries card shows: pre-selected when adding, and the day whose restored
+    /// total is replaced. Nil: today.
+    var shownDay: String? = nil
     let onChange: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -156,7 +159,8 @@ struct IntakeQuickAddSheet: View {
                 Spacer()
                 Picker("Day", selection: $day) {
                     ForEach(days, id: \.self) { key in
-                        Text(verbatim: IntakeDayText.label(key, today: days.first ?? key)).tag(key)
+                        Text(verbatim: IntakePresenter.dayLabel(key, today: days.first ?? key, timeZone: .current,
+                                                                locale: AppClock.formattingLocale)).tag(key)
                     }
                 }
                 .labelsHidden()
@@ -169,21 +173,17 @@ struct IntakeQuickAddSheet: View {
     // MARK: Actions
 
     private func fill() {
-        day = days.first ?? ""
+        day = shownDay.flatMap { days.contains($0) ? $0 : nil } ?? days.first ?? ""
         if case .edit(let entry) = mode {
-            proteinText = entry.proteinGrams.map(Self.text) ?? ""
-            energyText = entry.energyKcal.map(Self.text) ?? ""
+            proteinText = entry.proteinGrams.map(IntakePresenter.editableAmountText) ?? ""
+            energyText = entry.energyKcal.map(IntakePresenter.editableAmountText) ?? ""
             label = entry.label ?? ""
         }
     }
 
-    private static func text(_ value: Double) -> String {
-        value == value.rounded() && abs(value) < 1e15 ? String(Int(value)) : String(value)
-    }
-
     private func apply(_ preset: IntakeSettings.Preset) {
-        proteinText = preset.proteinGrams.map(Self.text) ?? ""
-        energyText = preset.energyKcal.map(Self.text) ?? ""
+        proteinText = preset.proteinGrams.map(IntakePresenter.editableAmountText) ?? ""
+        energyText = preset.energyKcal.map(IntakePresenter.editableAmountText) ?? ""
         label = preset.label
     }
 
@@ -198,16 +198,18 @@ struct IntakeQuickAddSheet: View {
         do {
             switch mode {
             case .add:
+                // "Today" is logged now, on the real current day; another day inside that day under
+                // the zone log.
                 try await store.add(proteinGrams: amount(protein), energyKcal: amount(energy),
-                                    label: label.isEmpty ? nil : label, at: IntakeDayText.instant(for: day))
+                                    label: label.isEmpty ? nil : label, on: day, today: days.first ?? day)
             case .edit(var entry):
                 entry.proteinGrams = amount(protein)
                 entry.energyKcal = amount(energy)
                 entry.label = label.isEmpty ? nil : label
                 try await store.update(entry)
             case .restored:
-                // The screen offers the restored total of the day it shows, today.
-                try await store.replaceRestoredTotal(day: days.first ?? day)
+                // The screen offers the restored total of the day its entries card shows.
+                try await store.replaceRestoredTotal(day: shownDay ?? days.first ?? day)
             }
             onChange()
             dismiss()
@@ -224,30 +226,5 @@ struct IntakeQuickAddSheet: View {
         } catch {
             failed = true
         }
-    }
-}
-
-/// The backdating picker's words and instants.
-enum IntakeDayText {
-    /// "Today", or the day's short date.
-    static func label(_ day: String, today: String) -> String {
-        if day == today { return String(localized: "Today") }
-        guard let date = instant(forKey: day) else { return day }
-        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(AppClock.formattingLocale))
-    }
-
-    /// The instant an entry is logged at: now for today, noon of the day otherwise, so that a
-    /// backdated entry falls inside its day in the phone's zone.
-    static func instant(for day: String, now: Date = Date()) -> Date {
-        guard day != Repository.localDayKey(now), let noon = instant(forKey: day) else { return now }
-        return noon
-    }
-
-    private static func instant(forKey day: String) -> Date? {
-        let parts = day.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))
     }
 }

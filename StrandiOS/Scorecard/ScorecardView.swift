@@ -418,7 +418,7 @@ struct ScorecardContent: View {
                     if index > 0 { FormKitDivider() }
                     // Stage 3: the protein row (third of four) names its source and opens Intake.
                     if index == 2, intakeFlag.isEnabled {
-                        ScorecardIntakeProteinRow { signalRow(signal) }
+                        ScorecardIntakeProteinRow(anchorDay: shown.proteinWindowAnchorDay) { signalRow(signal) }
                     } else {
                         signalRow(signal)
                     }
