@@ -14,6 +14,8 @@ enum DemoScreenPrefixes {
     static let bodyRecord = ["bodyrecord-", "scan-", "compare-", "bench-", "labunits-"]
     /// Stage 5: the names `PersonalEventsDemo.screen(named:)` answers.
     static let events = ["events-"]
+    // Stage 6: the names `Stage6Demo.screen(named:)` answers (ruling A4).
+    static let stage6 = ["niggle-", "cutstress-", "timeline-"]
 }
 
 /// The ordered list `--demo-screen <name>` falls through to after the app's own switch. Generic

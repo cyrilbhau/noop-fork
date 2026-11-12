@@ -137,6 +137,9 @@ struct ScorecardContent: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Stage 3: the intake flag (§10.4). Off: the protein row is exactly stage 1's.
     @ObservedObject private var intakeFlag = IntakeSettings.flag
+    // Stage 6: the Recovery context and timeline links (stage 6 §10.1), each present only while its flag is on.
+    @ObservedObject private var cutStressFlag = CutStressModel.flag
+    @ObservedObject private var timelineFlag = CheckpointTimelineSettings.flag
 
     private var stacks: Bool { dynamicTypeSize.isAccessibilitySize }
 
@@ -575,6 +578,17 @@ struct ScorecardContent: View {
                 }
                 Button(action: onPhase) {
                     ScorecardLinkRow(title: CutScorecardPresenter.phaseAndRulesTitle, value: shown.phaseLinkValue)
+                }
+                // Stage 6: Recovery context above Timeline (stage 6 §10.1).
+                if cutStressFlag.isEnabled {
+                    NavigationLink(value: RedesignRoute.cutStress) {
+                        ScorecardLinkRow(title: Stage6SettingsText.recoveryContextTitle, value: nil)
+                    }
+                }
+                if timelineFlag.isEnabled {
+                    NavigationLink(value: RedesignRoute.checkpointTimeline) {
+                        ScorecardLinkRow(title: CheckpointTimelinePresenter.title, value: nil)
+                    }
                 }
             }
             .buttonStyle(.noopPress)

@@ -48,6 +48,10 @@ public enum BackupSettings {
     // Android's whitelist; an Android restore drops both.
     //   - personalEvents.items (stage 5): the owner's personal events, one JSON array carried as text
     //     and never parsed here. Its feature flag, a `noop.*` toggle, stays out.
+    //   - Stage 6: niggleLog.entries, niggleLog.rules and niggleLog.paused (the owner's niggle log,
+    //     triage rules and paused exercises) and timeline.checkpoints (the timeline's checkpoints),
+    //     each one JSON value carried as text and never parsed here; the log is health data in clear
+    //     text, like the events list. The three `noop.*` flags of stage 6 stay out.
     /// THE whitelist — the only keys `settings.json` may carry, keyed by their CANONICAL
     /// (platform-neutral) names. Mirrored exactly by Android's `BackupSettingsCodec.WHITELIST`.
     ///
@@ -97,6 +101,11 @@ public enum BackupSettings {
         "intake.targets": .string,
         "intake.supplement.questions": .string,
         "personalEvents.items": .string,
+        // Stage 6: the niggle log's three lists and the timeline's checkpoints (stage 6 §9.5).
+        "niggleLog.entries": .string,
+        "niggleLog.rules": .string,
+        "niggleLog.paused": .string,
+        "timeline.checkpoints": .string,
     ]
 
     /// Canonical JSON key → this platform's UserDefaults key. Identity everywhere except
@@ -121,6 +130,10 @@ public enum BackupSettings {
         "intake.targets": "intake.targets", // Stage 3
         "intake.supplement.questions": "intake.supplement.questions", // Stage 3
         "personalEvents.items": "personalEvents.items",
+        "niggleLog.entries": "niggleLog.entries", // Stage 6
+        "niggleLog.rules": "niggleLog.rules", // Stage 6
+        "niggleLog.paused": "niggleLog.paused", // Stage 6
+        "timeline.checkpoints": "timeline.checkpoints", // Stage 6
     ]
 
     // MARK: - Snapshot / apply (UserDefaults boundary)

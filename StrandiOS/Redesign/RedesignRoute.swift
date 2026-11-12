@@ -22,6 +22,13 @@ enum RedesignRoute: Hashable {
     // Stage 5: the Events screen (stage 5 §10.2), pushed from the Health tab's row. Reachable only
     // while `noop.personalEventsEnabled` is on.
     case personalEvents
+    // Stage 6: the niggle log and one entry (pushed from the Health tab's row), Recovery context and
+    // the timeline (pushed from the scorecard's links; the timeline also from the Health tab's row).
+    // Each is reachable only while its own `noop.*` flag is on.
+    case niggleLog
+    case niggle(id: String)
+    case cutStress
+    case checkpointTimeline
 
     @ViewBuilder var destination: some View {
         switch self {
@@ -36,6 +43,11 @@ enum RedesignRoute: Hashable {
         case .bodyScanCompare(let earlierId, let laterId): BodyScanCompareView(earlierId: earlierId, laterId: laterId)
         case .benchmark(let key): BenchmarkDetailView(key: key)
         case .personalEvents: PersonalEventsView()   // Stage 5
+        // Stage 6: the niggle log, Recovery context and the timeline.
+        case .niggleLog: NiggleLogView()
+        case .niggle(let id): NiggleDetailView(niggleId: id)
+        case .cutStress: CutStressView()
+        case .checkpointTimeline: CheckpointTimelineView()
         }
     }
 }

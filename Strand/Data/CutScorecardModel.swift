@@ -40,6 +40,12 @@ final class CutScorecardModel: ObservableObject {
     /// `.idle` until the first load, and whenever the flag is off.
     @Published private(set) var state: State = .idle
 
+    // Stage 6 (§8.3): the evaluation behind the published presentation, the value
+    // `CutScorecardInputBuilder.evaluation(today:)` (or the injected evaluator) returned for the
+    // latest load. Nil while idle or before the first result. Not published: the timeline reads it
+    // after awaiting `load()`.
+    private(set) var evaluation: CutScorecardEvaluation?
+
     private let repository: Repository
     private let provider: BodyMeasurementProvider
     private let settings: CutScorecardSettings
@@ -113,6 +119,7 @@ final class CutScorecardModel: ObservableObject {
         let request = generation
         guard settings.isEnabled else {
             if state != .idle { state = .idle }
+            evaluation = nil   // Stage 6: cleared wherever the state becomes idle
             return
         }
         // Captured before the first suspension, so one load describes one moment.
@@ -141,6 +148,7 @@ final class CutScorecardModel: ObservableObject {
         guard request == generation else { return }
         guard settings.isEnabled else {
             state = .idle
+            self.evaluation = nil   // Stage 6: cleared wherever the state becomes idle
             return
         }
         // The source of the weight the result calls current: the provider's reading of that day.
@@ -152,6 +160,7 @@ final class CutScorecardModel: ObservableObject {
             storedPhaseName: storedPhaseName)
         context.events = events   // Stage 5: never passed to the evaluation
         let presentation = CutScorecardPresenter.present(evaluation.result, input: evaluation.input, context: context)
+        self.evaluation = evaluation   // Stage 6: set in the step that sets the state
         if state != .loaded(presentation) { state = .loaded(presentation) }
         // A weigh-in saved or deleted reaches the reminder here: every such write reloads this model.
         await reminder?.reconcile(latestWeighInDay: evaluation.result.currentWeightDay)

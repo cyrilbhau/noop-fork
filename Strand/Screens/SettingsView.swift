@@ -121,6 +121,10 @@ struct SettingsView: View {
     @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
     // Stage 5 (events layer): the one observable copy of its flag. An iPhone feature as well.
     @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
+    // Stage 6: the three flags (stage 6 §9.4), in the one order: Niggle log, Recovery context, Timeline.
+    @ObservedObject private var niggleLogFlag = NiggleLogSettings.flag
+    @ObservedObject private var cutStressFlag = CutStressModel.flag
+    @ObservedObject private var timelineFlag = CheckpointTimelineSettings.flag
     @State private var weighInReminderStatus: WeighInReminderStatus = .off
     @State private var weighInReminderWeekday = 7
     @State private var weighInReminderMinute = 480
@@ -475,6 +479,13 @@ struct SettingsView: View {
             intakeCard.staggeredAppear(index: 5) // Stage 3: third in the one order (ruling A1)
             bodyRecordCard.staggeredAppear(index: 5) // Stage 4: fourth in the one order (ruling A1).
             personalEventsCard.staggeredAppear(index: 5)   // Stage 5: fifth in the one order (ruling A1)
+            // Stage 6: the last three of the one order (ruling A1).
+            stage6Card(icon: "list.bullet.clipboard", title: NiggleLogPresenter.title,
+                       blurb: Stage6SettingsText.niggleLogBlurb, flag: niggleLogFlag).staggeredAppear(index: 5)
+            stage6Card(icon: "chart.line.uptrend.xyaxis", title: Stage6SettingsText.recoveryContextTitle,
+                       blurb: Stage6SettingsText.recoveryContextBlurb, flag: cutStressFlag).staggeredAppear(index: 5)
+            stage6Card(icon: "calendar.day.timeline.left", title: CheckpointTimelinePresenter.title,
+                       blurb: Stage6SettingsText.timelineBlurb, flag: timelineFlag).staggeredAppear(index: 5)
             syncCard.staggeredAppear(index: 6)
             #endif
 
@@ -2063,6 +2074,20 @@ struct SettingsView: View {
             Toggle(isOn: Binding(get: { personalEventsFlag.isEnabled },
                                  set: { PersonalEventStore.flag.set($0) })) {
                 Text("Personal events")
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textPrimary)
+            }
+            .toggleStyle(.switch)
+            .tint(StrandPalette.accent)
+        }
+    }
+
+    // Stage 6: one card per feature (stage 6 §10.1), always drawn on iPhone because it holds that
+    // flag's switch: its title, its one-line description and the switch, nothing else. Off by default.
+    private func stage6Card(icon: String, title: String, blurb: String, flag: ObservableDefaultsFlag) -> some View {
+        SettingsSection(icon: icon, title: LocalizedStringKey(title), blurb: LocalizedStringKey(blurb)) {
+            Toggle(isOn: Binding(get: { flag.isEnabled }, set: { flag.set($0) })) {
+                Text(verbatim: title)
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textPrimary)
             }

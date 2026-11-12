@@ -646,6 +646,9 @@ enum DemoScreens {
             // Stage 5: the events screens in the states of design/round-s5-events, on synthetic data:
             // events-h1 … events-n14 (see PersonalEventsDemo.swift).
             .init(prefixes: DemoScreenPrefixes.events, resolve: PersonalEventsDemo.screen(named:)),
+            // Stage 6: the niggle log, Recovery context and the timeline in the states of
+            // design/round-s6-niggle-timeline, on synthetic data: niggle-…, cutstress-… and timeline-….
+            .init(prefixes: DemoScreenPrefixes.stage6, resolve: Stage6Demo.screen(named:)),
         ])
         assert(registry.conflicts.isEmpty, "demo prefixes overlap: \(registry.conflicts)")
         return registry
