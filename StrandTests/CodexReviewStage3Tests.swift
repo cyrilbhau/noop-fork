@@ -36,4 +36,34 @@ final class CodexReviewStage3Tests: XCTestCase {
             XCTAssertEqual(total, 70, "the banked total of \(day) is the sum of both entries")
         }
     }
+
+    // MARK: - C8 P2: a decimal-comma keypad
+
+    /// A French keypad types "30,5" for thirty and a half; the field must read it as that amount.
+    func testAmountFieldReadsTheLocaleDecimalSeparator() {
+        let french = Locale(identifier: "fr_FR")
+        XCTAssertEqual(IntakePresenter.amountEntry("30,5", locale: french), .amount(30.5))
+        XCTAssertEqual(IntakePresenter.amountEntry("1250,25", locale: french), .amount(1_250.25), "calories too")
+        XCTAssertEqual(IntakePresenter.amountEntry("30", locale: french), .amount(30))
+        let english = Locale(identifier: "en_US")
+        XCTAssertEqual(IntakePresenter.amountEntry("30.5", locale: english), .amount(30.5))
+    }
+
+    /// No thousands separator is guessed: a grouped figure stays invalid rather than becoming another
+    /// number, in a point locale and in a locale that groups with a point.
+    func testAmountFieldGuessesNoThousandsSeparator() {
+        let invalid = IntakeAmountEntry.invalid(message: "Enter a number from 0 to 100000")
+        XCTAssertEqual(IntakePresenter.amountEntry("1,500", locale: Locale(identifier: "en_US")), invalid)
+        XCTAssertEqual(IntakePresenter.amountEntry("1.500", locale: Locale(identifier: "de_DE")), invalid)
+        XCTAssertEqual(IntakePresenter.amountEntry("30,5,1", locale: Locale(identifier: "fr_FR")), invalid)
+    }
+
+    /// The edit sheet's prefill uses the same separator, so a stored fraction reads back as it saves.
+    func testEditablePrefillUsesTheLocaleDecimalSeparatorAndRoundTrips() {
+        let french = Locale(identifier: "fr_FR")
+        XCTAssertEqual(IntakePresenter.editableAmountText(30.5, locale: french), "30,5")
+        XCTAssertEqual(IntakePresenter.editableAmountText(30, locale: french), "30")
+        XCTAssertEqual(IntakePresenter.amountEntry(IntakePresenter.editableAmountText(30.5, locale: french),
+                                                   locale: french), .amount(30.5))
+    }
 }

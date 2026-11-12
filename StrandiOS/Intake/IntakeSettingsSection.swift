@@ -224,9 +224,9 @@ struct IntakeSettingsSection: View {
         // Unusable stored rules are repaired in the rules sheet; this field writes nothing over them.
         if settings.floorRulesNeedAttention { floorMessage = IntakePresenter.rulesNeedAttention }
         let targets = settings.storedTargets
-        lowText = targets?.energyLowKcal.map(IntakePresenter.editableAmountText) ?? ""
-        highText = targets?.energyHighKcal.map(IntakePresenter.editableAmountText) ?? ""
-        hardText = targets?.energyHardFloorKcal.map(IntakePresenter.editableAmountText) ?? ""
+        lowText = targets?.energyLowKcal.map { IntakePresenter.editableAmountText($0) } ?? ""
+        highText = targets?.energyHighKcal.map { IntakePresenter.editableAmountText($0) } ?? ""
+        hardText = targets?.energyHardFloorKcal.map { IntakePresenter.editableAmountText($0) } ?? ""
         rangeMessage = settings.targetsNeedAttention ? IntakePresenter.targetsNeedAttention : nil
         supplements = settings.supplementQuestions
         cutoffMinute = settings.cutoffMinuteOfDay

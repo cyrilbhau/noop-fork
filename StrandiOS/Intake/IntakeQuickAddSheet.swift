@@ -39,8 +39,10 @@ struct IntakeQuickAddSheet: View {
     @State private var failed = false
     @State private var saving = false
 
-    private var protein: IntakeAmountEntry { IntakePresenter.amountEntry(proteinText) }
-    private var energy: IntakeAmountEntry { IntakePresenter.amountEntry(energyText) }
+    /// The keypad's locale, as the weigh-in sheet reads it: the device region's decimal separator.
+    private let locale = AppLanguage.activeLocale
+    private var protein: IntakeAmountEntry { IntakePresenter.amountEntry(proteinText, locale: locale) }
+    private var energy: IntakeAmountEntry { IntakePresenter.amountEntry(energyText, locale: locale) }
 
     var body: some View {
         NavigationStack {
@@ -175,15 +177,15 @@ struct IntakeQuickAddSheet: View {
     private func fill() {
         day = shownDay.flatMap { days.contains($0) ? $0 : nil } ?? days.first ?? ""
         if case .edit(let entry) = mode {
-            proteinText = entry.proteinGrams.map(IntakePresenter.editableAmountText) ?? ""
-            energyText = entry.energyKcal.map(IntakePresenter.editableAmountText) ?? ""
+            proteinText = entry.proteinGrams.map { IntakePresenter.editableAmountText($0, locale: locale) } ?? ""
+            energyText = entry.energyKcal.map { IntakePresenter.editableAmountText($0, locale: locale) } ?? ""
             label = entry.label ?? ""
         }
     }
 
     private func apply(_ preset: IntakeSettings.Preset) {
-        proteinText = preset.proteinGrams.map(IntakePresenter.editableAmountText) ?? ""
-        energyText = preset.energyKcal.map(IntakePresenter.editableAmountText) ?? ""
+        proteinText = preset.proteinGrams.map { IntakePresenter.editableAmountText($0, locale: locale) } ?? ""
+        energyText = preset.energyKcal.map { IntakePresenter.editableAmountText($0, locale: locale) } ?? ""
         label = preset.label
     }
 
