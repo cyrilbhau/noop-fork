@@ -622,9 +622,13 @@ struct BodyRecordHarness {
             .first { $0.day == day }?.value
     }
 
-    /// Writes rows exactly as given, through the owner-scope upsert the Lab Book screen uses.
+    /// Writes rows exactly as given, each under its own device id: the stored state a sync, an older
+    /// strap or an import leaves behind. The upsert is keyed on the natural index, which holds the
+    /// device id, so a copy or a conflicting row under another id is inserted beside the reading it
+    /// shares an instant with (ruling A10). The owner-scope upsert cannot build that state: it lands
+    /// on the stored reading at the instant and updates it.
     func seed(_ rows: [LabMarkerRow]) async throws {
-        try await store.upsertOwnerLabMarkers(rows)
+        try await store.upsertLabMarkers(rows)
     }
 
     /// A save through the store that must succeed.
