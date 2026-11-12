@@ -133,7 +133,12 @@ struct CoachPacketSheet: View {
             if demo == nil { Task { await model.load() } }
         }
         .onChangeCompat(of: flag.isEnabled) { enabled in
-            if demo == nil, !enabled { dismiss() }
+            // Switched off: the share sheet closes, the model drops its packet and the sheet goes.
+            if demo == nil, !enabled {
+                shared = nil
+                Task { await model.load() }
+                dismiss()
+            }
         }
         .onChangeCompat(of: model.state) { _ in
             if demo?.sharesAtOnce == true, shared == nil, let text = model.shareText {

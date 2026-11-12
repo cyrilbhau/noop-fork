@@ -46,10 +46,12 @@ struct CoachPacketAssembler {
     private let intake: IntakeProvider? // Stage 3: the protein days' funnel; nil is the live one
     /// Packet v2: the events store; nil is the app's shared one.
     private let events: PersonalEventStore?
+    private let storeReadable: @MainActor () async -> Bool
 
     /// `identifiers` is read once per `assemble()`, at scan time. Nil means the list of known
     /// identifiers could not be read, and the packet is blocked: the scan fails closed and is never
-    /// run with an empty list (ruling A20).
+    /// run with an empty list (ruling A20). `storeReadable` says whether the store can be read now,
+    /// asked before the reads and after them; nil asks the repository for its store handle.
     init(repository: Repository, provider: BodyMeasurementProvider,
          scorecardSettings: CutScorecardSettings, settings: CoachPacketSettings,
          now: @escaping () -> Date = { Date() },
@@ -57,7 +59,8 @@ struct CoachPacketAssembler {
          effortScale: @escaping () -> EffortScale,
          identifiers: @escaping () -> [String]?,
          intake: IntakeProvider? = nil, // Stage 3: nil is IntakeProvider.live(repository:)
-         events: PersonalEventStore? = nil) { // Packet v2: nil is PersonalEventStore.shared
+         events: PersonalEventStore? = nil, // Packet v2: nil is PersonalEventStore.shared
+         storeReadable: (@MainActor () async -> Bool)? = nil) {
         self.intake = intake // Stage 3
         self.events = events
         self.repository = repository
@@ -68,6 +71,7 @@ struct CoachPacketAssembler {
         self.timeZone = timeZone
         self.effortScale = effortScale
         self.identifiers = identifiers
+        self.storeReadable = storeReadable ?? { await repository.storeHandle() != nil }
     }
 
     /// What one assembly gathered: the renderer's input and the moment and choices it belongs to.
@@ -124,6 +128,11 @@ struct CoachPacketAssembler {
         guard let todayNumber = CanonicalDay.number(today) else { return nil }
         let start = CanonicalDay.key(todayNumber - (rangeDays - 1))
         let inRange: (String) -> Bool = { $0 >= start && $0 <= today }
+
+        // The repository's reads answer an unreadable store with nothing, which would print as a
+        // packet of dashes. The store is asked first, and again once the reads are done, so a
+        // store that could not be read is `.unavailable` and never "nothing measured".
+        guard await storeReadable() else { return nil }
 
         // Weight and waist: the value every other surface shows as current. A profile that was
         // never written is not the owner's measurement and is not printed.
@@ -198,6 +207,8 @@ struct CoachPacketAssembler {
             strainFactor: strainFactor, scorecard: scorecard, body: body,
             hrvBaseline: Self.baseline(baselines?.hrv), restingHrBaseline: Self.baseline(baselines?.restingHR),
             steps: steps, workouts: workouts, intake: intakeSection, events: eventsSection)
+        guard await storeReadable() else { return nil }
+
         let nothingMeasured = rows.isEmpty && steps.isEmpty && workouts.isEmpty && body.isEmpty && !hasWeeklyPoint
         return Gathered(input: input, generatedAt: instant, rangeDays: rangeDays, nothingMeasured: nothingMeasured,
                         privateEventsIncluded: eventsEnabled ? includeSensitive : nil, eventFreeText: eventFreeText)

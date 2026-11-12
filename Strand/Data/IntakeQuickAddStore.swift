@@ -22,7 +22,8 @@ struct IntakeEntry: Identifiable, Equatable, Codable {
 /// entry list in the defaults, and the day's total in `metricSeries`. Every change writes the list
 /// first and the total after it, so an interruption leaves the list ahead of the total and the next
 /// `rebank` repairs it. Totals are never written as zero for a day that has no entry: its rows are
-/// deleted and the day reads "not measured".
+/// deleted and the day reads "not measured". Changes run one at a time, so two changes that
+/// overlap cannot both start from the same list and lose an entry.
 ///
 /// No Kotlin twin: iPhone-only by the owner's decision (stage 1 ruling R43).
 @MainActor
@@ -44,6 +45,8 @@ final class IntakeQuickAddStore {
     private let defaults: UserDefaults
     private let now: () -> Date
     private let zoneIdentifier: () -> String
+    /// The last change queued; the next one starts after it finishes.
+    private var lastChange: Task<Void, Never>?
 
     init(repository: Repository, settings: IntakeSettings, defaults: UserDefaults = .standard,
          now: @escaping () -> Date = Date.init,
@@ -115,6 +118,19 @@ final class IntakeQuickAddStore {
 
     // MARK: - Changes
 
+    /// Runs `change` after every change queued before it: the whole read-list, restore, modify and
+    /// bank sequence of one change completes before the next reads the list. A caller that stops
+    /// waiting does not undo or skip a change already queued.
+    private func serially<T>(_ change: @escaping @MainActor () async throws -> T) async throws -> T {
+        let previous = lastChange
+        let task = Task { @MainActor in
+            await previous?.value
+            return try await change()
+        }
+        lastChange = Task { @MainActor in _ = try? await task.value }
+        return try await task.value
+    }
+
     @discardableResult
     func add(proteinGrams: Double?, energyKcal: Double?, label: String?, at instant: Date) async throws -> IntakeEntry {
         try Self.validate(proteinGrams: proteinGrams, energyKcal: energyKcal)
@@ -153,13 +169,15 @@ final class IntakeQuickAddStore {
 
     private func insert(proteinGrams: Double?, energyKcal: Double?, label: String?, at instant: Date,
                         day: String) async throws -> IntakeEntry {
-        var list = try await listForChange(day: day)
         let entry = IntakeEntry(id: UUID(), loggedAt: instant, day: day, proteinGrams: proteinGrams,
                                 energyKcal: energyKcal, label: Self.cut(label))
-        list.append(entry)
-        writeList(list, day: day)
-        try await rebank(day: day, stamp: true)
-        return entry
+        return try await serially {
+            var list = try await self.listForChange(day: day)
+            list.append(entry)
+            self.writeList(list, day: day)
+            try await self.rebank(day: day, stamp: true)
+            return entry
+        }
     }
 
     /// Noon of `day` in the zone the log puts in force there, or, when that instant keys to another
@@ -196,23 +214,27 @@ final class IntakeQuickAddStore {
 
     func update(_ entry: IntakeEntry) async throws {
         try Self.validate(proteinGrams: entry.proteinGrams, energyKcal: entry.energyKcal)
-        var list = try await listForChange(day: entry.day)
         var edited = entry
         edited.label = Self.cut(entry.label)
-        if let index = list.firstIndex(where: { $0.id == entry.id }) {
-            list[index] = edited
-        } else {
-            list.append(edited)
+        try await serially {
+            var list = try await self.listForChange(day: entry.day)
+            if let index = list.firstIndex(where: { $0.id == entry.id }) {
+                list[index] = edited
+            } else {
+                list.append(edited)
+            }
+            self.writeList(list, day: entry.day)
+            try await self.rebank(day: entry.day, stamp: true)
         }
-        writeList(list, day: entry.day)
-        try await rebank(day: entry.day, stamp: true)
     }
 
     func delete(id: UUID, day: String) async throws {
-        guard var list = storedList(day), list.contains(where: { $0.id == id }) else { return }
-        list.removeAll { $0.id == id }
-        writeList(list, day: day)
-        try await rebank(day: day, stamp: true)
+        try await serially {
+            guard var list = self.storedList(day), list.contains(where: { $0.id == id }) else { return }
+            list.removeAll { $0.id == id }
+            self.writeList(list, day: day)
+            try await self.rebank(day: day, stamp: true)
+        }
     }
 
     /// Re-derives the stored totals for `day` from its entries: the repair the screen runs. A day
@@ -221,7 +243,7 @@ final class IntakeQuickAddStore {
     /// When the stored totals already follow the list, nothing is written, so `intake_read_at`
     /// stays the time of the last entry change (§9.1).
     func rebank(day: String) async throws {
-        try await rebank(day: day, stamp: false)
+        try await serially { try await self.rebank(day: day, stamp: false) }
     }
 
     /// `stamp`: a change to the list was just written, so `intake_read_at` becomes now.
@@ -279,11 +301,13 @@ final class IntakeQuickAddStore {
     /// any edit. The entry is logged at the restored total's stored time, or now when it has none.
     @discardableResult
     func replaceRestoredTotal(day: String) async throws -> IntakeEntry {
-        guard let restored = await restoredTotal(day: day) else { throw Failure.nothingToSave }
-        let entry = try restoredEntry(restored, day: day)
-        writeList([entry], day: day)
-        try await rebank(day: day, stamp: true)
-        return entry
+        try await serially {
+            guard let restored = await self.restoredTotal(day: day) else { throw Failure.nothingToSave }
+            let entry = try self.restoredEntry(restored, day: day)
+            self.writeList([entry], day: day)
+            try await self.rebank(day: day, stamp: true)
+            return entry
+        }
     }
 
     // MARK: - Rules

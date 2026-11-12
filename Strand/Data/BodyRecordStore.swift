@@ -72,6 +72,19 @@ final class BodyRecordStore {
     /// The read a scan's total mass comes back through (§9.1).
     private let weighIns: WeighInStore
 
+    /// An instant a save is writing a scan at, in one database.
+    private struct Claim: Hashable {
+        let store: ObjectIdentifier
+        let takenAt: Int
+    }
+
+    /// Instants a save is between its occupancy check and the end of its write, across every
+    /// `BodyRecordStore` (independent sheets each hold their own). The check reads before the write
+    /// commits, so without this two overlapping saves at one instant would both find it free and the
+    /// second would overwrite the first (C7 review). Main-actor state: the claim is taken with no
+    /// suspension between looking and inserting.
+    private static var claimed: Set<Claim> = []
+
     init(repository: Repository, provider: BodyMeasurementProvider? = nil,
          timeZone: @escaping () -> TimeZone = { TimeZone.current },
          now: @escaping () -> Date = { Date() }) {
@@ -177,7 +190,14 @@ final class BodyRecordStore {
         let takenAt = keepsDay ? current!.takenAt : Self.instant(day: draft.day, zone: zone, now: instantNow)
         let day = keepsDay ? current!.day : LocalDayWindows(timeZone: zone)
             .dayKey(for: Date(timeIntervalSince1970: TimeInterval(takenAt)))
-        if !keepsDay, try await isOccupied(takenAt, store: store) { throw BodyRecordError.instantOccupied }
+        var claim: Claim?
+        if !keepsDay {
+            let wanted = Claim(store: ObjectIdentifier(store), takenAt: takenAt)
+            guard Self.claimed.insert(wanted).inserted else { throw BodyRecordError.instantOccupied }
+            claim = wanted
+        }
+        defer { if let claim { Self.claimed.remove(claim) } }
+        if claim != nil, try await isOccupied(takenAt, store: store) { throw BodyRecordError.instantOccupied }
 
         var deleteIds: [String] = []
         var upserts: [LabMarkerRow] = []

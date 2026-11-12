@@ -329,11 +329,19 @@ enum IntakePresenter {
 
     // MARK: - Quick-add sheet (§10.3)
 
-    /// One amount field. Empty: no amount. Valid: a finite number from 0 to 100 000.
-    static func amountEntry(_ text: String) -> IntakeAmountEntry {
+    /// One amount field. Empty: no amount. Valid: a finite number from 0 to 100 000. `locale` is the
+    /// keypad's: its decimal separator is read as the decimal point ("30,5" in French). A point is
+    /// also read as one, except where the locale groups thousands with a point; no thousands
+    /// separator is ever guessed, so a grouped figure is invalid rather than another number.
+    static func amountEntry(_ text: String, locale: Locale = Locale(identifier: "en_US_POSIX")) -> IntakeAmountEntry {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .empty }
-        guard let value = Double(trimmed), IntakeQuickAddStore.isValidAmount(value) else {
+        var number = trimmed
+        if let separator = locale.decimalSeparator, separator != "." {
+            if number.contains("."), locale.groupingSeparator == "." { return .invalid(message: invalidAmountMessage) }
+            number = number.replacingOccurrences(of: separator, with: ".")
+        }
+        guard let value = Double(number), IntakeQuickAddStore.isValidAmount(value) else {
             return .invalid(message: invalidAmountMessage)
         }
         return .amount(value)
@@ -383,9 +391,12 @@ enum IntakePresenter {
         return parts.joined(separator: " · ")
     }
 
-    /// A stored amount as an editable field's text: whole numbers without a decimal point.
-    static func editableAmountText(_ value: Double) -> String {
-        value == value.rounded() && abs(value) < 1e15 ? String(Int(value)) : String(value)
+    /// A stored amount as an editable field's text: whole numbers without a decimal point, and a
+    /// fraction with `locale`'s decimal separator, so `amountEntry` reads it back unchanged.
+    static func editableAmountText(_ value: Double, locale: Locale = Locale(identifier: "en_US_POSIX")) -> String {
+        if value == value.rounded() && abs(value) < 1e15 { return String(Int(value)) }
+        let separator = locale.decimalSeparator ?? "."
+        return separator == "." ? String(value) : String(value).replacingOccurrences(of: ".", with: separator)
     }
 
     // MARK: - Settings (§10.5)
