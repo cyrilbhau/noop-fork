@@ -1995,6 +1995,8 @@ struct SettingsView: View {
                 await WeighInReminder.live.reconcile(latestWeighInDay: latestWeighInDay(flagEnabled: true))
             case .denied: weighInReminderStatus = .denied
             case .off: weighInReminderStatus = .off
+            // A newer switch move or flag change arrived meanwhile; that one sets the row.
+            case .superseded: break
             }
         }
     }

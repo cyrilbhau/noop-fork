@@ -49,7 +49,10 @@ final class SystemWeighInReminderCenter: WeighInReminderCenter {
 /// weigh-in.
 @MainActor
 final class WeighInReminder {
-    enum Outcome: Equatable { case scheduled, denied, off }
+    /// `superseded`: a newer `setEnabled`, or the scorecard flag going off, arrived while this
+    /// call was suspended on the notification centre. That newer choice stands; this call wrote
+    /// nothing, scheduled nothing and has no state to report.
+    enum Outcome: Equatable { case scheduled, denied, off, superseded }
 
     /// The repeating weekly request.
     private static let weeklyId = "weigh-in-reminder"
@@ -77,6 +80,9 @@ final class WeighInReminder {
     /// The last scheduling pass. Passes run one after another: one that was suspended on the
     /// notification centre can then never finish over a later one.
     private var applying: Task<Void, Never>?
+    /// Counts `setEnabled` calls. A call is the owner's latest choice only while this still holds
+    /// the value it took on entry.
+    private var choice = 0
 
     init(center: WeighInReminderCenter, settings: CutScorecardSettings,
          now: @escaping () -> Date = { Date() },
@@ -94,8 +100,14 @@ final class WeighInReminder {
     /// returns `.scheduled`; otherwise the switch stays off and the caller is told `.denied`, so
     /// Settings can say so instead of showing a switch that cannot fire. Off: removes every
     /// request. With the scorecard flag off nothing is asked, stored or scheduled.
+    ///
+    /// The owner's latest choice wins. When a newer call, or the scorecard flag going off, arrives
+    /// while this one awaits the notification centre, this one returns `.superseded` without
+    /// writing the switch, scheduling or prompting.
     @discardableResult
     func setEnabled(_ on: Bool) async -> Outcome {
+        choice &+= 1
+        let mine = choice
         guard on else {
             settings.reminderEnabled = false
             removeAll()
@@ -105,9 +117,12 @@ final class WeighInReminder {
         var allowed: Bool
         switch await center.authorizationStatus() {
         case .authorized, .provisional, .ephemeral: allowed = true
-        case .notDetermined: allowed = await center.requestAuthorization()
+        case .notDetermined:
+            guard isLatest(mine) else { return .superseded }
+            allowed = await center.requestAuthorization()
         default: allowed = false
         }
+        guard isLatest(mine) else { return .superseded }
         guard allowed else {
             settings.reminderEnabled = false
             removeAll()
@@ -115,7 +130,15 @@ final class WeighInReminder {
         }
         settings.reminderEnabled = true
         await apply()
-        return .scheduled
+        // A newer choice that arrived during the pass has already brought what is pending into
+        // line (the pass removes what it added behind an off switch); it is the one reported.
+        return isLatest(mine) ? .scheduled : .superseded
+    }
+
+    /// True while the `setEnabled` call that took `mine` is still the latest one and the
+    /// scorecard flag is still on: the only condition under which it may write or report.
+    private func isLatest(_ mine: Int) -> Bool {
+        choice == mine && settings.isEnabled
     }
 
     /// Stores the weekday (1 = Sunday to 7 = Saturday) and the minute after local midnight, and
