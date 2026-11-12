@@ -433,6 +433,11 @@ final class AICoachEngine: ObservableObject {
     them to enable "Let the coach use my data" for guidance tailored to their real numbers.
     """
 
+    /// The one source of body weight and waist (stage 1 ruling R41). Nil, and any legacy policy:
+    /// `onDeviceSignalsBlock()` is the base text. Under the unified policy the block states this
+    /// provider's current weight and waist and leaves the Lab Book's own two markers out.
+    var bodyMeasurements: BodyMeasurementProvider?
+
     init(repo: Repository, session: URLSession = .shared, chatGPTSession: ChatGPTSession? = nil,
          chatGPTHTTP: URLSession? = nil) {
         self.repo = repo
@@ -1265,6 +1270,16 @@ final class AICoachEngine: ObservableObject {
             }
         }
 
+        // Ruling R41: with the scorecard flag on, the current weight and waist are the provider's,
+        // the values every other surface shows. Captured before the store reads suspend. Nil with
+        // the flag off, when everything below is the base text.
+        let currentBody: [ResolvedBodyMeasurement]? = bodyMeasurements.flatMap { provider in
+            guard provider.displayPolicy == .unified else { return nil }
+            return [BodyMeasurementKind.weight, .waist].compactMap { provider.current($0, consumer: .display) }
+                // A profile that was never written is not the owner's weight.
+                .filter { $0.source != .profileDefault }
+        }
+
         // 2. Lab Book markers roll-up (count + latest of a few, never the full history).
         if let store = await repo.storeHandle() {
             var markerSummaries: [String] = []
@@ -1272,6 +1287,8 @@ final class AICoachEngine: ObservableObject {
                 let rows = (try? await store.labMarkers(deviceId: repo.deviceId, category: category.rawValue)) ?? []
                 let byKey = Dictionary(grouping: rows, by: { $0.markerKey })
                 for (key, kRows) in byKey {
+                    // The Lab Book's own weight and waist rows are one source of the value stated below.
+                    if currentBody != nil, BodyMeasurementKind(markerKey: key) != nil { continue }
                     guard let latest = kRows.sorted(by: { $0.takenAt < $1.takenAt }).last else { continue }
                     let name = MarkerCatalog.definition(for: key)?.displayName ?? key
                     let value = latest.value.map { "\(LabBookFormat.value($0, key: key)) \(latest.unit)" } ?? latest.valueText ?? "—"
@@ -1285,7 +1302,26 @@ final class AICoachEngine: ObservableObject {
             }
         }
 
+        if let currentBody, !currentBody.isEmpty {
+            lines.append("")
+            lines.append("BODY MEASUREMENTS (the values the app shows as the user's own; kilograms and centimetres):")
+            for reading in currentBody { lines.append("  " + Self.bodyMeasurementLine(reading)) }
+        }
+
         return lines.joined(separator: "\n")
+    }
+
+    /// One resolved weight or waist as the Coach is told it: the value in kilograms or centimetres,
+    /// the source it came from and, for a dated reading, its day.
+    static func bodyMeasurementLine(_ reading: ResolvedBodyMeasurement) -> String {
+        let name: String, unit: String
+        switch reading.kind {
+        case .weight: (name, unit) = ("Weight", "kg")
+        case .waist: (name, unit) = ("Waist", "cm")
+        }
+        let origin = [CutScorecardPresenter.sourceCaption(reading.source), reading.day]
+            .compactMap { $0 }.joined(separator: ", ")
+        return "\(name) \(LabBookFormat.value(reading.value, key: reading.kind.markerKey)) \(unit) (\(origin))"
     }
 
     private enum CoachBackend {

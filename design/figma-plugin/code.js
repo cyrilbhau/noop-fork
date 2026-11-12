@@ -1,10 +1,16 @@
 // Local development plugin for the NOOP redesign file (import with Plugins > Development > Import plugin
 // from manifest). It works without the Figma MCP, which the Starter plan rate-limits.
 //
-//  import  Builds frames from design/round4 via the local preview server: the page's
-//          exportSvgFrames() writes export/r4-frames.json, the hidden UI fetches it, and each frame is
-//          created with createNodeFromSvg on the "Round 4 · System surfaces" page (replacing same-named
-//          frames, so it is safe to re-run).
+//  import  Builds frames from design/round4 via the local preview server (design/tools/serve.py): the
+//          page's exportSvgFrames() writes export/r4-frames.json, the hidden UI fetches it, and each
+//          frame is created with createNodeFromSvg on the "Round 4 · System surfaces" page (replacing
+//          same-named frames, so it is safe to re-run).
+//  import6 The same for design/round6-scorecard: export/r6-frames.json onto the
+//          "Round 6 · Scorecard (Stage 1)" page. See IMPORTS.
+//  importS2 … importS6, importCombined
+//          The same for the staged feature set: sN-frames.json onto that stage's page and
+//          combined-frames.json onto the combined page. See IMPORTS.
+//          Every import ends on the page it filled.
 //  repair  Fixes html_to_figma ring imports (see repairRings). Safe to re-run.
 
 // html_to_figma draws an SVG ring's contents in viewBox units, so a 230px ring renders ~100px in a
@@ -46,9 +52,24 @@ async function repairRings() {
   return `Rescaled ${fixed} rings`;
 }
 
-const PAGE = 'Round 4 · System surfaces';
+// Each import command reads one exported file onto its own page.
+const IMPORTS = {
+  import: { file: 'r4-frames.json', page: 'Round 4 · System surfaces' },
+  // rowWidth: frames wrap to a new row past this width, so a large round stays navigable. Rounds
+  // without it keep their single row.
+  import6: { file: 'r6-frames.json', page: 'Round 6 · Scorecard (Stage 1)', rowWidth: 6000 },
+  // The staged feature set: one command and one page per stage, each reading <name>-frames.json from
+  // that stage's design folder (design/round-s2-coach-packet … design/round-combined).
+  importS2: { file: 's2-frames.json', page: 'Stage 2 · Coach packet', rowWidth: 6000 },
+  importS3: { file: 's3-frames.json', page: 'Stage 3 · Intake', rowWidth: 6000 },
+  importS4: { file: 's4-frames.json', page: 'Stage 4 · Body record', rowWidth: 6000 },
+  importS5: { file: 's5-frames.json', page: 'Stage 5 · Events', rowWidth: 6000 },
+  importS6: { file: 's6-frames.json', page: 'Stage 6 · Niggle, recovery, timeline', rowWidth: 6000 },
+  importCombined: { file: 'combined-frames.json', page: 'Combined · Health, Settings, Scorecard', rowWidth: 6000 },
+};
+const GAP = 80;
 
-async function importFrames(json) {
+async function importFrames(json, PAGE, ROW_WIDTH = Infinity) {
   const frames = JSON.parse(json);
   const fonts = await figma.listAvailableFontsAsync();
   const families = new Set(fonts.map(f => f.fontName.family));
@@ -83,14 +104,16 @@ async function importFrames(json) {
   let page = figma.root.children.find(p => p.name === PAGE);
   if (!page) { page = figma.createPage(); page.name = PAGE; }
   await page.loadAsync();
-  let x = 0;
+  let x = 0, y = 0, rowH = 0;
   for (const f of frames) {
     for (const old of page.children.filter(n => n.name === f.name)) old.remove();
     const svg = f.svg.replace(/font-family="[^"]*"/g, `font-family="${family}"`);
     const node = figma.createNodeFromSvg(svg);
     node.name = f.name;
     page.appendChild(node);
-    node.x = x; node.y = 0;
+    if (x > 0 && x + node.width > ROW_WIDTH) { x = 0; y += rowH + GAP; rowH = 0; }
+    node.x = x; node.y = y;
+    rowH = Math.max(rowH, node.height);
     // Figma's SVG importer drops <text>, so text arrives as positioned items and becomes real layers.
     for (const t of f.texts || []) {
       if (!t.s) continue;
@@ -106,7 +129,7 @@ async function importFrames(json) {
       tx.x = t.x;
       tx.y = t.y + (t.h - tx.height) / 2;
     }
-    x += node.width + 80;
+    x += node.width + GAP;
   }
   return `Imported ${frames.length} frames in ${family}`;
 }
@@ -114,9 +137,11 @@ async function importFrames(json) {
 if (figma.command === 'repair') {
   repairRings().then(m => figma.closePlugin(m), e => figma.closePlugin(`Error: ${e.message}`));
 } else {
+  const target = IMPORTS[figma.command] || IMPORTS.import;
   figma.showUI(__html__, { visible: false });
   figma.ui.onmessage = msg => {
-    if (msg.type === 'frames') importFrames(msg.json).then(m => figma.closePlugin(m), e => figma.closePlugin(`Error: ${e.message}`));
+    if (msg.type === 'ready') figma.ui.postMessage({ file: target.file });
+    else if (msg.type === 'frames') importFrames(msg.json, target.page, target.rowWidth).then(async m => { const pg = figma.root.children.find(p => p.name === target.page); if (pg) await figma.setCurrentPageAsync(pg); return m; }).then(m => figma.closePlugin(m), e => figma.closePlugin(`Error: ${e.message}`));
     else figma.closePlugin(`Could not reach the preview server: ${msg.message}`);
   };
 }

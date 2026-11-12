@@ -288,7 +288,8 @@ struct TodayView: View {
         // Opt-in gate (mirrors the Android TodayScreen filter `it != HYDRATION || hydrationEnabled`):
         // the hydration card only renders when the feature is on AND the user has added it via CUSTOMISE.
         // It's not in the default selection, so a fresh install never shows it until both are true.
-        DashboardCardPrefs.decodeEnabled(dashboardCardsRaw)
+        // Stage 1 specification §10.1: a card only the iPhone redesign draws is not in this list.
+        DashboardCard.classicSelection(raw: dashboardCardsRaw)
             .filter { hydrationEnabled || $0 != .hydration }
             // Coach off means the AI is off, so the launcher card goes with the tab: leaving it on
             // Today would offer a feature the wearer has just switched off. Same gate shape as
@@ -324,6 +325,17 @@ struct TodayView: View {
     }
     @State private var workoutDetail: WorkoutDetailTarget?
     @State private var appleDays: [AppleDaily] = []
+    /// The dated weight the Weight tile shows, resolved through `BodyMeasurementProvider` (stage 1
+    /// specification §8.4). Nil means the tile falls back to the profile value.
+    @State private var weightReading: ResolvedBodyMeasurement?
+    /// The weight series `weightReading` and `sparks["weight"]` come from, with the policy it was
+    /// fetched under. `weightReading` is only ever resolved from this and `appleDays` as they stand
+    /// (ruling R37), and neither it nor the sparkline is shown once that policy is no longer the
+    /// provider's (ruling R38).
+    @State private var weightSeries: BodyWeightSeries?
+    /// The scorecard flag, observed (ruling R40). Reading it writes nothing, and it publishes only
+    /// when the flag changes, so with the flag left alone this never re-renders Today.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     // Design Reset / #582, the pinned "Your cards" values (Stress / Fitness age / Vitality), surfaced
     // on Today so the buried Explore features sit on the home screen. Loaded in loadAll; nil hides the row.
     @State private var stressToday: Double?
@@ -442,6 +454,8 @@ struct TodayView: View {
     /// #1862: the optional Coach launcher sheet, opened from the default-OFF Coach dashboard card.
     /// Presentation state only — nothing is requested from a provider by opening it.
     @State private var showCoachLauncher = false
+    /// The weigh-in sheet the Weight tile opens with the scorecard flag on (ruling R41).
+    @State private var showWeighInSheet = false
     @State private var showUpdatesInbox = false
 
     /// The NEWEST day-key (max yyyy-MM-dd in `repo.days`) announced to the inbox. Persisted (not @State)
@@ -1571,6 +1585,24 @@ struct TodayView: View {
         // edited / deleted drink (hydrationSeq) and the Settings feature toggle both re-read just the two
         // hydration fields. Cheap (one metricSeries row), never re-runs the heavy loads.
         .task(id: repo.hydrationSeq) { await reloadHydration() }
+        // Stage 1 ruling R32: a weigh-in or Lab Book write changes the weight without moving
+        // refreshSeq. The provider's revision moves only with the scorecard flag on, so with it off
+        // this never fires.
+        .onReceive(bodyMeasurements.$revision.dropFirst()) { _ in
+            Task { @MainActor in
+                if bodyMeasurements.displayPolicy == .unified { await reloadWeight() }
+            }
+        }
+        // Ruling R38: the series this view holds was fetched under another policy than the current
+        // one (the scorecard flag changed), so the weight is fetched and resolved again. The id is
+        // one flag read per body evaluation; while the flag stays put the task runs once, when the
+        // first series lands, finds the policies equal and reads nothing.
+        // Ruling R40: the flag itself is observed (`scorecardFlag`) and is part of the identity,
+        // so a change made while Today stays mounted re-evaluates the body and re-runs this task.
+        .task(id: WeightPolicyKey(held: weightSeries?.policy, current: bodyMeasurements.displayPolicy,
+                                  flagEnabled: scorecardFlag.isEnabled)) {
+            if weightIsUnderAnotherPolicy { await reloadWeight() }
+        }
         .onChangeCompat(of: hydrationEnabled) { _ in Task { await reloadHydration() } }
         // #755: NO per-edge safety net here, on purpose. A deep offload segments into many slices that each
         // flip `backfilling` false→true, so re-running the heavy history-wide reads on that edge would re-fire
@@ -1619,6 +1651,9 @@ struct TodayView: View {
         .sheet(isPresented: $showCoachLauncher) {
             CoachLauncherSheet()
         }
+        #if os(iOS)
+        .sheet(isPresented: $showWeighInSheet) { WeighInSheet() }
+        #endif
         .sheet(isPresented: $showUpdatesInbox) {
             UpdatesInboxView(onClose: { showUpdatesInbox = false })
         }
@@ -2660,6 +2695,9 @@ struct TodayView: View {
             // would take you off Today, which is the discoverability problem this card exists to solve.
             pinnedCardActionRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
                                 value: dashboardValue(card)) { showCoachLauncher = true }
+        case .scorecard:
+            // Drawn by the iPhone redesign only; `enabledDashboardCards` never lists it here.
+            EmptyView()
         }
     }
 
@@ -2682,6 +2720,7 @@ struct TodayView: View {
         case .hydration:   return StrandPalette.metricCyan
         case .coupled:     return StrandPalette.chargeColor
         case .coach:       return StrandPalette.accent
+        case .scorecard:   return card.customizationTint
         }
     }
 
@@ -2796,6 +2835,9 @@ struct TodayView: View {
         case .coach:
             // #1862: likewise a launcher row. Empty rather than "—" for the same reason — there is no
             // missing measurement here, there is no measurement at all.
+            return ""
+        case .scorecard:
+            // Never rendered here (see `dashboardCardRow`): no value to resolve.
             return ""
         }
     }
@@ -4131,14 +4173,23 @@ struct TodayView: View {
                 }
             )
         case .weight:
-            StatTile(
+            let weight = StatTile(
                 label: "Weight",
-                value: weightTile(aLatest?.weightKg).value,
-                caption: weightTile(aLatest?.weightKg).caption,
+                value: weightTile(shownWeightReading).value,
+                caption: weightTile(shownWeightReading).caption,
                 accent: StrandPalette.accent,
-                sparkline: sparks["weight"],
+                sparkline: shownWeightSpark,
                 sparkColor: StrandPalette.accent
             )
+            // Ruling R41: flag off the tile is bare, as it was; flag on a tap leads to a correction.
+            if Self.presentsWeighIn(BodyMeasurementCorrection.route(for: .classicTodayWeightTile,
+                                                                    policy: scorecardFlag.displayPolicy)) {
+                Button { showWeighInSheet = true } label: { weight }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the weigh-in sheet")
+            } else {
+                weight
+            }
         case .calories:
             StatTile(
                 label: "Calories",
@@ -4583,6 +4634,14 @@ struct TodayView: View {
         // reload identical data. If the cache is somehow absent (defensive), fall through and reload.
         if repo.todayHistoryWideLoadedSeq == currentSeq, let cached = repo.todayHistoryWideCache {
             restoreHistoryWide(cached)
+            // Stage 1 ruling R32: a weigh-in since the snapshot does not move `refreshSeq`. Ruling
+            // R38: nor does a change of the scorecard flag, after which the snapshot's weight was
+            // not restored. Neither is ever true while the flag stays off: the provider's revision
+            // does not move and the policy is the one the snapshot was taken under.
+            if cached.bodyMeasurementRevision != bodyMeasurements.revision
+                || cached.weightSeries?.policy != bodyMeasurements.displayPolicy {
+                await reloadWeight()
+            }
             // #989: hydration is excluded from the snapshot (a drink logged since would be stale), so a
             // restore re-reads it live, one cheap row.
             await reloadHydration()
@@ -4691,7 +4750,10 @@ struct TodayView: View {
         // trend. "my-whoop" covers imported WHOOP CSV (Layer 1) + computed DailyMetric (Layer 3).
         async let respRateSpark      = sparkValuesExplore("resp_rate", source: "my-whoop", window: 14)
         async let stepsAppleSpark    = sparkValues("steps", source: "apple-health", window: 14)
-        async let weightSpark        = sparkValues("weight", source: "apple-health", window: 90)
+        // Stage 1 specification §8.4, ruling R26: the weight read belongs to the provider. This view's
+        // window is the trailing 90 days (read as 91, exactly as `sparkValues` reads) and its tile
+        // shows the latest reading whichever day is selected.
+        async let weightSeriesA      = bodyMeasurements.displayWeightSeries(days: 91, trailingDays: 90)
         async let activeKcalSpark    = sparkValues("active_kcal", source: "apple-health", window: 14)
 
         sparks["recovery"]        = await recoverySpark
@@ -4710,7 +4772,9 @@ struct TodayView: View {
         // must run AFTER sparks["steps"] is assigned from the Apple-Health read above (unchanged order).
         let strapSteps = repo.days.suffix(14).compactMap { $0.steps.map(Double.init) }
         if !strapSteps.isEmpty { sparks["steps"] = strapSteps }
-        sparks["weight"]      = await weightSpark
+        // Ruling R35: the base tile was a render-time expression of `appleDays` and this spark, so
+        // it moves here, against the rows the view holds now, and again when the fresh rows land.
+        publishWeightSeries(await weightSeriesA)
         sparks["active_kcal"] = await activeKcalSpark
 
         // Steps ESTIMATE per day (WHOOP 4.0 motion → calibrated steps), the Mi-Band series, workout +
@@ -4748,6 +4812,9 @@ struct TodayView: View {
 
         workouts = await workoutsA
         appleDays = await appleDaysA
+        // Ruling R37: against the series the view holds now, which an overlapping load or a weight
+        // reload may have replaced since this pass published its own.
+        resolveWeightReading()
         // Mi Band (Mi Fitness import), distinct days across its representative metric keys.
         let xSteps = await xStepsA
         let xSleep = await xSleepA
@@ -4783,6 +4850,8 @@ struct TodayView: View {
             stepsEstByDay: stepsEstByDay,
             workouts: workouts,
             appleDays: appleDays,
+            weightSeries: weightSeries,
+            bodyMeasurementRevision: bodyMeasurements.revision,
             xiaomiDays: xiaomiDays,
             xiaomiSleeps: xiaomiSleeps,
             stressToday: stressToday,
@@ -4798,10 +4867,18 @@ struct TodayView: View {
     /// spark) and runs before this in the same pass, so overwriting the whole dict would drop that day-scoped
     /// entry. Every other history-wide spark key is restored.
     private func restoreHistoryWide(_ c: TodayHistoryWideCache) {
-        sparks.merge(c.sparks) { _, cached in cached }
+        // Ruling R38: a weight series cached under another policy than the current one is not
+        // restored, and nor is the sparkline drawn from it; `loadAll` reloads the weight instead.
+        let restoresWeight = c.weightSeries?.policy == bodyMeasurements.displayPolicy
+        var cachedSparks = c.sparks
+        if !restoresWeight { cachedSparks["weight"] = nil }
+        sparks.merge(cachedSparks) { _, cached in cached }
         stepsEstByDay = c.stepsEstByDay
         workouts = c.workouts
         appleDays = c.appleDays
+        if restoresWeight { weightSeries = c.weightSeries }
+        // Resolved from what the view now holds rather than restored as a value (ruling R37).
+        resolveWeightReading()
         xiaomiDays = c.xiaomiDays
         xiaomiSleeps = c.xiaomiSleeps
         stressToday = c.stressToday
@@ -5209,11 +5286,86 @@ struct TodayView: View {
     /// sparse-but-recent value still renders); when neither carries a weight, falls back to the user's
     /// self-reported profile weight instead of ", " (#204). Always formatted through the shared
     /// `UnitFormatter` so the Imperial/Metric toggle reaches this tile. Mirrors Android's `weightTile`.
-    private func weightTile(_ appleWeightKg: Double?) -> (value: String, caption: String) {
-        if let kg = appleWeightKg ?? sparks["weight"]?.last {
-            return (UnitFormatter.massFromKilograms(kg, system: unitSystem), String(localized: "latest"))
+    /// `dated` is the reading `loadHistoryWide` resolved through `BodyMeasurementProvider`; without one
+    /// the provider supplies the profile value as it is now.
+    private func weightTile(_ dated: ResolvedBodyMeasurement?) -> (value: String, caption: String) {
+        let shown = bodyMeasurements.displayWeightValue(dated)
+        let caption = BodyMeasurementCorrection.todayCaption(dated: dated, policy: scorecardFlag.displayPolicy)
+        return (UnitFormatter.massFromKilograms(shown.value, system: unitSystem), caption)
+    }
+
+    /// True when the tile presents the weigh-in sheet for `route`. The sheet is an iPhone screen:
+    /// on macOS no route presents it, and the tile stays without a tap target.
+    private static func presentsWeighIn(_ route: BodyMeasurementCorrectionRoute) -> Bool {
+        #if os(iOS)
+        return route.offersCorrection
+        #else
+        return false
+        #endif
+    }
+
+    /// The weight part of `loadHistoryWide`, on its own. Called when the provider's revision moved
+    /// (stage 1 ruling R32, unified policy only) and when the series the view holds, or would
+    /// restore, was fetched under another policy than the current one (ruling R38). Never called
+    /// while the scorecard flag stays off: the tile's inputs are then reads `loadAll` already keys
+    /// on `refreshSeq`.
+    private func reloadWeight() async {
+        publishWeightSeries(await bodyMeasurements.displayWeightSeries(days: 91, trailingDays: 90))
+    }
+
+    /// Take `series` as the view's weight series: the sparkline and the tile's reading move with
+    /// it, together. A series fetched under a policy that is no longer the provider's is still
+    /// taken when the view holds nothing better, since it records that policy: it is then not shown
+    /// (`weightIsUnderAnotherPolicy`), and holding it is what makes the policy task fetch again. It
+    /// never replaces a series fetched under the current policy: an obsolete read does not publish.
+    private func publishWeightSeries(_ series: BodyWeightSeries) {
+        let current = bodyMeasurements.displayPolicy
+        if series.policy != current, let held = weightSeries, held.policy == current { return }
+        weightSeries = series
+        sparks["weight"] = series.points.map { $0.value }
+        resolveWeightReading()
+    }
+
+    /// The ONE place the Weight tile's reading is resolved (rulings R35 and R37): from the series
+    /// and the Apple Health daily rows the view holds at this moment, never from values local to
+    /// one load pass. Called whenever either changes. With the scorecard flag off this is the base
+    /// tile's render-time expression: the newest daily row's weight, else the newest series point.
+    private func resolveWeightReading() {
+        guard let weightSeries else {
+            weightReading = nil
+            return
         }
-        return (UnitFormatter.massFromKilograms(profile.weightKg, system: unitSystem), String(localized: "from profile"))
+        weightReading = bodyMeasurements.displayWeight(from: weightSeries, asOf: .latest, appleRows: appleDays)
+    }
+
+    /// True when the view holds a weight series fetched under another policy than the provider's
+    /// current one: the scorecard flag changed since (ruling R38). One flag read.
+    private var weightIsUnderAnotherPolicy: Bool {
+        guard let weightSeries else { return false }
+        return weightSeries.policy != bodyMeasurements.displayPolicy
+    }
+
+    /// The reading the Weight tile shows: none, so the profile value, while the one held was
+    /// resolved under another policy and its replacement is being fetched.
+    private var shownWeightReading: ResolvedBodyMeasurement? {
+        weightIsUnderAnotherPolicy ? nil : weightReading
+    }
+
+    /// The weight sparkline, withheld on the same condition as the reading it belongs to.
+    private var shownWeightSpark: [Double]? {
+        weightIsUnderAnotherPolicy ? nil : sparks["weight"]
+    }
+
+    /// Identity of the policy task: the policy of the series held and the provider's current one.
+    private struct WeightPolicyKey: Equatable {
+        let held: BodyMeasurementPolicy?
+        let current: BodyMeasurementPolicy
+        let flagEnabled: Bool
+    }
+
+    /// The one source of body weight and waist for this view.
+    private var bodyMeasurements: BodyMeasurementProvider {
+        BodyMeasurementProvider.live(repository: repo, profile: profile)
     }
 
     // MARK: - Derived text
@@ -5456,6 +5608,14 @@ struct TodayHistoryWideCache {
     let stepsEstByDay: [String: Int]
     let workouts: [WorkoutRow]
     let appleDays: [AppleDaily]
+    /// The weight series the view held, with the policy it was fetched under. A restore resolves
+    /// the Weight tile's reading from it and `appleDays`, and does not restore it at all when that
+    /// policy is no longer the provider's (stage 1 rulings R37 and R38).
+    let weightSeries: BodyWeightSeries?
+    /// The provider's `revision` when `weightSeries` was held. It moves only with the scorecard
+    /// flag on, when a weigh-in or Lab Book write changed the readings without moving `refreshSeq`;
+    /// a restore that finds it moved re-resolves the weight (stage 1 ruling R32).
+    let bodyMeasurementRevision: Int
     let xiaomiDays: Int
     let xiaomiSleeps: Int
     let stressToday: Double?

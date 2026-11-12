@@ -110,6 +110,17 @@ struct SettingsView: View {
     private var clockFormatRaw = ClockFormatPreference.system.rawValue
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
     @AppStorage(UnitPrefs.distanceSystemKey) private var distanceSystemRaw = ""
+    #if os(iOS)
+    /// Stage 1 (weigh-in and scorecard): the one observable copy of the feature flag, and the
+    /// reminder row's state. The scorecard is an iPhone feature; macOS Settings does not show it.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+    @State private var weighInReminderStatus: WeighInReminderStatus = .off
+    @State private var weighInReminderWeekday = 7
+    @State private var weighInReminderMinute = 480
+    /// The body-measurement provider's revision, held so that a weigh-in re-renders the body rows.
+    @State private var bodyMeasurementRevision = 0
+    @State private var showWeighInSheet = false
+    #endif
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(UnitPrefs.skinTempDisplayKey) private var skinTempDisplayRaw = ""   // #1846
     // Effort display scale (#268). Display-only — Effort stays stored 0–100, this only chooses whether
@@ -452,6 +463,7 @@ struct SettingsView: View {
             streakCard.staggeredAppear(index: 4)
             featuresCard.staggeredAppear(index: 5)
             #if os(iOS)
+            scorecardCard.staggeredAppear(index: 5)
             syncCard.staggeredAppear(index: 6)
             #endif
 
@@ -523,7 +535,9 @@ struct SettingsView: View {
                 rowDivider
                 FormRow(label: "Weight") {
                     // Imperial mode steps in pounds and stores the kg equivalent; metric steps in kg.
-                    if unitSystem == .imperial {
+                    if let reading = datedBodyReading(.weight) {
+                        bodyReadingControl(reading)
+                    } else if unitSystem == .imperial {
                         poundsField(weightKg: $profile.weightKg)
                     } else {
                         measureField(value: $profile.weightKg, unit: "kg",
@@ -550,7 +564,9 @@ struct SettingsView: View {
                 // accurate rather than implying it tunes the age.
                 FormRow(label: "Waist (optional)") {
                     // Imperial mode steps in whole inches and stores the cm equivalent; metric steps in cm.
-                    if unitSystem == .imperial {
+                    if let reading = datedBodyReading(.waist) {
+                        bodyReadingControl(reading)
+                    } else if unitSystem == .imperial {
                         waistInchesField(waistCm: $profile.waistCm)
                     } else {
                         waistCentimetresField(waistCm: $profile.waistCm)
@@ -560,6 +576,30 @@ struct SettingsView: View {
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
+                #if os(iOS)
+                // Stage 1 specification §10.7: with a dated reading the rows above show it, and a
+                // new value is logged as a weigh-in instead of stepped. Ruling R41: the way into
+                // the weigh-in sheet is offered whenever the rows' route says so, a dated reading
+                // or not, so the first weigh-in can be logged from here too.
+                if bodyRowsOfferWeighIn {
+                    rowDivider
+                    Button { showWeighInSheet = true } label: {
+                        Text("Log weigh-in")
+                            .font(StrandFont.subhead)
+                            .frame(maxWidth: .infinity, minHeight: NoopTheme.Layout.minTouchTarget, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(StrandPalette.accent)
+                    .sheet(isPresented: $showWeighInSheet) { WeighInSheet() }
+                    if datedBodyReading(.weight) != nil || datedBodyReading(.waist) != nil {
+                        Text("With the scorecard on, weight and waist come from the latest dated reading, so Settings and the scorecard cannot disagree.")
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                #endif
                 rowDivider
                 FormRow(label: "Max heart rate") {
                     VStack(alignment: .trailing, spacing: 6) {
@@ -1809,6 +1849,237 @@ struct SettingsView: View {
             .buttonStyle(LiquidPressStyle())
             .accessibilityLabel("Open Test Centre")
         }
+    }
+
+    // MARK: - Scorecard (stage 1, iPhone only)
+
+    #if os(iOS)
+    /// The weekly weigh-in and scorecard switch (specification §10.6), with the weekly reminder
+    /// beneath it while the feature is on. Off by default: with the switch off there is no card, no
+    /// row, no screen and no reminder. Every string of the rows comes from `CutScorecardPresenter`.
+    private var scorecardCard: some View {
+        let shown = CutScorecardPresenter.settings(
+            flagEnabled: scorecardFlag.isEnabled, reminder: weighInReminderStatus,
+            weekday: weighInReminderWeekday, minuteOfDay: weighInReminderMinute,
+            locale: AppClock.formattingLocale)
+        return SettingsSection(
+            icon: "scalemass",
+            title: "Scorecard",
+            blurb: "A weekly weigh-in and one verdict from the rules you set. Off by default. Everything stays on this iPhone."
+        ) {
+            VStack(alignment: .leading, spacing: NoopMetrics.space2 + 2) {
+                Toggle(isOn: Binding(get: { scorecardFlag.isEnabled }, set: { scorecardFlagChanged($0) })) {
+                    Text(verbatim: shown.toggleTitle)
+                        .font(StrandFont.subhead)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                }
+                .toggleStyle(.switch)
+                .tint(StrandPalette.accent)
+
+                if let reminderTitle = shown.reminderTitle {
+                    rowDivider
+                    Toggle(isOn: Binding(get: { shown.reminderIsOn }, set: { weighInReminderChanged($0) })) {
+                        Text(verbatim: reminderTitle)
+                            .font(StrandFont.subhead)
+                            .foregroundStyle(StrandPalette.textPrimary)
+                    }
+                    .toggleStyle(.switch)
+                    .tint(StrandPalette.accent)
+                    .task { await loadWeighInReminderState() }
+                    // Back from the system settings: what the row says about notifications is
+                    // checked again. Mounted only while the feature is on.
+                    .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                        Task { await loadWeighInReminderState() }
+                    }
+
+                    if shown.reminderIsOn {
+                        FormRow(label: "Day") {
+                            Picker("Day", selection: Binding(
+                                get: { weighInReminderWeekday },
+                                set: { weighInReminderScheduleChanged(weekday: $0, minuteOfDay: weighInReminderMinute) }
+                            )) {
+                                // Monday first, as the scorecard's weeks run; 1 is Sunday.
+                                ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { weekday in
+                                    Text(verbatim: CutScorecardPresenter.weekdayName(weekday, locale: AppClock.formattingLocale))
+                                        .tag(weekday)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .tint(StrandPalette.accent)
+                        }
+                        FormRow(label: "Time") {
+                            DatePicker("Time", selection: Binding(
+                                get: {
+                                    Calendar.current.date(bySettingHour: weighInReminderMinute / 60,
+                                                          minute: weighInReminderMinute % 60, second: 0,
+                                                          of: Date()) ?? Date()
+                                },
+                                set: { picked in
+                                    let parts = Calendar.current.dateComponents([.hour, .minute], from: picked)
+                                    weighInReminderScheduleChanged(
+                                        weekday: weighInReminderWeekday,
+                                        minuteOfDay: (parts.hour ?? 8) * 60 + (parts.minute ?? 0))
+                                }
+                            ), displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                            .tint(StrandPalette.accent)
+                        }
+                    }
+                    if let footnote = shown.footnote {
+                        Text(verbatim: footnote)
+                            .font(StrandFont.caption)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let title = shown.previewTitle, let message = shown.previewBody {
+                        VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                            Text("What it looks like")
+                                .font(StrandFont.caption)
+                                .foregroundStyle(StrandPalette.textTertiary)
+                            Text(verbatim: title)
+                                .font(StrandFont.subhead)
+                                .foregroundStyle(StrandPalette.textPrimary)
+                            Text(verbatim: message)
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                    if let title = shown.deniedTitle, let detail = shown.deniedDetail,
+                       let action = shown.deniedActionTitle {
+                        VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                            Text(verbatim: title)
+                                .font(StrandFont.subhead)
+                                .foregroundStyle(StrandPalette.textPrimary)
+                            Text(verbatim: detail)
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button(action) {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            }
+                            .font(StrandFont.subhead)
+                            .tint(StrandPalette.accent)
+                        }
+                    }
+                }
+            }
+        }
+        // A weigh-in or a Lab Book edit changes the body-metrics rows above without any other
+        // state of this screen moving. The revision moves only while the feature is on.
+        .onReceive(model.bodyMeasurements.$revision) { bodyMeasurementRevision = $0 }
+    }
+
+    /// The feature switch moved. On: the readings the flag now admits are read, so every screen
+    /// resolves from them at once. Either way the reminder is brought into line: off removes it.
+    private func scorecardFlagChanged(_ on: Bool) {
+        scorecardFlag.set(on)
+        Task { @MainActor in
+            if on { await model.bodyMeasurements.refresh() }
+            await WeighInReminder.live.reconcile(latestWeighInDay: latestWeighInDay(flagEnabled: on))
+            await loadWeighInReminderState()
+        }
+    }
+
+    /// The reminder switch moved. A reminder the system will not deliver is not shown as on: the
+    /// row says notifications are off for NOOP and links to the system settings.
+    private func weighInReminderChanged(_ on: Bool) {
+        Task { @MainActor in
+            switch await WeighInReminder.live.setEnabled(on) {
+            case .scheduled:
+                weighInReminderStatus = .on
+                await WeighInReminder.live.reconcile(latestWeighInDay: latestWeighInDay(flagEnabled: true))
+            case .denied: weighInReminderStatus = .denied
+            case .off: weighInReminderStatus = .off
+            }
+        }
+    }
+
+    private func weighInReminderScheduleChanged(weekday: Int, minuteOfDay: Int) {
+        weighInReminderWeekday = weekday
+        weighInReminderMinute = minuteOfDay
+        // The day goes with the schedule: this process may never have been told it.
+        let latest = latestWeighInDay(flagEnabled: scorecardFlag.isEnabled)
+        Task { @MainActor in
+            await WeighInReminder.live.setSchedule(weekday: weekday, minuteOfDay: minuteOfDay,
+                                                   latestWeighInDay: latest)
+        }
+    }
+
+    /// The stored reminder settings, read when the row appears and when the app comes back to
+    /// the front. A reminder stored as on whose permission has since been withdrawn is switched
+    /// off and shown as denied; a row that says denied stops saying so once notifications are
+    /// allowed, and the switch stays off. The decision is `CutScorecardPresenter.reminderStatus`.
+    private func loadWeighInReminderState() async {
+        let settings = CutScorecardSettings()
+        weighInReminderWeekday = settings.reminderWeekday
+        weighInReminderMinute = settings.reminderMinuteOfDay
+        let storedOn = settings.reminderEnabled
+        // The system is asked only when its answer can change what the row says.
+        let systemDenied: Bool
+        if storedOn || weighInReminderStatus == .denied {
+            systemDenied = await SystemWeighInReminderCenter().authorizationStatus() == .denied
+        } else {
+            systemDenied = false
+        }
+        let status = CutScorecardPresenter.reminderStatus(storedOn: storedOn, systemDenied: systemDenied,
+                                                          current: weighInReminderStatus)
+        if storedOn, status == .denied { await WeighInReminder.live.setEnabled(false) }
+        if weighInReminderStatus != status { weighInReminderStatus = status }
+    }
+
+    /// The local day of the newest weight the scorecard would call current, for the reminder's
+    /// "this week already has a weigh-in" rule. Nil with the feature off.
+    private func latestWeighInDay(flagEnabled: Bool) -> String? {
+        guard flagEnabled else { return nil }
+        return WeighInReminder.latestWeighInDay(in: model.bodyMeasurements, today: Repository.localDayKey(Date()))
+    }
+    #endif
+
+    /// The dated weight or waist the scorecard resolves for today (specification §10.7). Nil with
+    /// the feature off, with no dated reading, and on macOS: the stepper then shows, as it always
+    /// did. With a dated reading the row shows it instead, so Settings and the scorecard cannot
+    /// hold two different values.
+    private func datedBodyReading(_ kind: BodyMeasurementKind) -> ResolvedBodyMeasurement? {
+        #if os(iOS)
+        guard scorecardFlag.isEnabled, bodyMeasurementRevision >= 0,
+              let resolved = model.bodyMeasurements.current(kind, consumer: .display),
+              resolved.day != nil else { return nil }
+        return resolved
+        #else
+        return nil
+        #endif
+    }
+
+    #if os(iOS)
+    /// True when the Weight or the Waist row leads to the weigh-in sheet: with the scorecard flag
+    /// on, whatever the rows show. False with the flag off, when the stepper is the editor.
+    private var bodyRowsOfferWeighIn: Bool {
+        let policy = scorecardFlag.displayPolicy
+        return BodyMeasurementCorrection.route(for: .settingsWeightRow, policy: policy) == .weighInSheet
+            || BodyMeasurementCorrection.route(for: .settingsWaistRow, policy: policy) == .weighInSheet
+    }
+    #endif
+
+    /// A dated reading in place of the stepper: the value, then its source and its day.
+    private func bodyReadingControl(_ reading: ResolvedBodyMeasurement) -> some View {
+        let words = CutScorecardPresenter.Wording(unitSystem: unitSystem, locale: AppClock.formattingLocale)
+        let value = reading.kind == .weight ? words.weight(reading.value) : words.length(reading.value)
+        let origin = [CutScorecardPresenter.sourceCaption(reading.source), reading.day.map(words.date)]
+            .compactMap { $0 }.joined(separator: " · ")
+        return VStack(alignment: .trailing, spacing: 2) {
+            Text(verbatim: value)
+                .font(StrandFont.bodyNumber)
+                .foregroundStyle(StrandPalette.textPrimary)
+            Text(verbatim: origin)
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.textTertiary)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Features (opt-in trackers)

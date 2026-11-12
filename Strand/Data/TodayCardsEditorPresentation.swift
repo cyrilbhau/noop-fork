@@ -12,6 +12,30 @@ enum TodayCardsEditorPresentation {
         case hidden, first, after(TodaySection)
     }
 
+    /// What the editor lists: every card in canonical order, without a card only the redesign
+    /// draws unless this is the redesign's editor and the scorecard flag is on. With the flag off
+    /// the list is the one from before the scorecard card existed.
+    static func availableCards(redesign: Bool, scorecardEnabled: Bool) -> [DashboardCard] {
+        DashboardCard.canonicalOrder.filter { !$0.isRedesignOnly || (redesign && scorecardEnabled) }
+    }
+
+    /// What a save writes: `edited` as it is, with every withheld card (a saved card the editor does
+    /// not list) put back where it was saved, directly after the nearest saved card before it that
+    /// is still present, or first when none is. A choice made while its gate was on therefore
+    /// survives an edit made while it is off, and keeps its place.
+    static func mergedSelection(edited: [DashboardCard], raw: String,
+                                available: [DashboardCard]) -> [DashboardCard] {
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return edited }
+        let saved = DashboardCardPrefs.decodeEnabled(raw)
+        var result = edited
+        for (index, card) in saved.enumerated() where !available.contains(card) && !result.contains(card) {
+            let anchor = saved[..<index].last { result.contains($0) }
+            let position = anchor.flatMap { result.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
+            result.insert(card, at: position)
+        }
+        return result
+    }
+
     static func visibleKeyMetrics(sections: EditableLayoutDraft<TodaySection>,
                                   metrics: [KeyMetric]) -> [KeyMetric]? {
         sections.visible.contains(.keyMetrics) ? metrics : nil
@@ -19,7 +43,7 @@ enum TodayCardsEditorPresentation {
 
     static func selection(raw: String, redesign: Bool, sections: EditableLayoutDraft<TodaySection>,
                           metrics: [KeyMetric]) -> [DashboardCard] {
-        guard redesign else { return DashboardCardPrefs.decodeEnabled(raw) }
+        guard redesign else { return DashboardCard.classicSelection(raw: raw) }
         return TodayCardResolver.selection(raw: raw, visibleKeyMetrics: visibleKeyMetrics(sections: sections, metrics: metrics))
     }
 

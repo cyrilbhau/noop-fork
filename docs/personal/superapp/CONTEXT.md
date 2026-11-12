@@ -151,7 +151,7 @@ where they disagree.
 |---|---|---|---|
 | Q1 | Exactly which app is "Instinct"? Does it write dietary protein and energy to Apple Health? Does it have an MCP server or an export? | Owner supplies the App Store link; the discovery spike checks the rest | Stage 3 stays blocked. Stages 0, 1, 2 and 4 proceed. |
 | Q2 | Does the scorecard screen live in a new tab, under Health, or as a Today card with a detail screen? | Owner, at the stage 1 design gate | Design both placements as frames; the owner chooses from the pictures. |
-| Q3 | Is Android parity enforced by running tests locally (install JDK 17 and the Android SDK), or recorded as a written disposition per change? | Owner | Install nothing. Write the Kotlin twins and report each as "written, not run". Remind the owner it is outstanding. |
+| Q3 | Is Android parity enforced by running tests locally (install JDK 17 and the Android SDK), or recorded as a written disposition per change? | **Answered 11 November 2026:** the owner has no Android device; Android work is skipped | Install nothing. Existing Kotlin twins stay as written and never executed. New shared logic records a written disposition per change instead of a twin. See the stage 1 specification, ruling R43. |
 | Q4 | May Health reads widen to dietary protein and energy? | Owner, at stage 3 | No. |
 | Q5 | Are progress photos in scope, and if so are they included in backups? | Owner, at stage 4 | Out of scope. |
 | Q6 | Should the app's lift signal for the scorecard come from monthly CSV imports, per-session pastes, or stay "unknown to the app"? | Owner, at the stage 1 design gate | Unknown to the app unless imported sessions cover the period; the screen says so. |

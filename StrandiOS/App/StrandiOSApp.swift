@@ -618,9 +618,26 @@ enum DemoScreens {
         case "redesignhealth": return AnyView(RedesignHealthView())
         case "profile": return AnyView(ProfileDemoHost())
         case "gallery": return AnyView(NoopDesignGallery())
-        default:         return nil
+        // Every other name goes to the stages' own demo screens, by reserved prefix.
+        default:         return registry.screen(named: args[i + 1].lowercased())
         }
     }
+
+    /// The demo screens of the staged features, tried in order after the switch above. Each stage
+    /// adds ONE element here, with its prefixes listed in `DemoScreenPrefixes`
+    /// (Strand/Data/DemoScreenRegistry.swift), and edits nothing else in this block. Reserved for
+    /// the later stages: packet-, intake-, scan- and bench-, events-, niggle- and recovery- and
+    /// timeline-, labbook-. No two elements may claim overlapping prefixes.
+    static let registry: DemoScreenRegistry<AnyView> = {
+        let registry = DemoScreenRegistry<AnyView>([
+            // The stage 1 scorecard screens in each state of design/round6-scorecard, on synthetic data:
+            // scorecard-b1 … b27, weighin-c1 … c10, history-d1 … d5, phase-e1 … e4, cards-a1 … a3,
+            // scorecard-live and the scripted flow-… steps.
+            .init(prefixes: DemoScreenPrefixes.scorecard, resolve: ScorecardDemo.screen(named:)),
+        ])
+        assert(registry.conflicts.isEmpty, "demo prefixes overlap: \(registry.conflicts)")
+        return registry
+    }()
 }
 #endif
 #endif

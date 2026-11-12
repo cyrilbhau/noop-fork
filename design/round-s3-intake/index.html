@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOOP round S3 · Protein and intake (Stage 3)</title>
+<link rel="stylesheet" href="../system/noop.css">
+<link rel="stylesheet" href="../round6-scorecard/scorecard.css">
+<link rel="stylesheet" href="intake.css">
+</head>
+<body>
+<div class="controls"><button id="replay">Replay load</button><span>Round S3 · Protein and intake (Stage 3) · synthetic data only</span></div>
+<p class="legend"><b>Every number here is invented.</b> "Fixture Person" is the one fictional subject shared by every stage (stage 1 §13): protein floor 100 g, and stage 1's daily protein amounts, read from the stage 1 round's model file. Stage 3 adds a calorie range of 2400 to 2600 kcal, a hard floor of 2100 kcal and a 20:00 cutoff (§13.1). Each frame is that person at a stated moment, run through a design model of the specified logic (<code>model.js</code>, checked against the §13 tables by <code>node check.js</code>), then worded with the specification's strings (<code>strings.js</code>). Intake has no colour of its own in the palette, so the ring, the figures and the curve are in the primary text colour, and the ring does not change colour at the floor. See <code>README.md</code> for the frame list, the decisions being asked and every proposed string.</p>
+<div id="boards"></div>
+<script src="../system/noop.js"></script>
+<script src="../round6-scorecard/model.js"></script>
+<script src="model.js"></script>
+<script src="strings.js"></script>
+<script src="frames.js"></script>
+<script src="intake.js"></script>
+</body>
+</html>

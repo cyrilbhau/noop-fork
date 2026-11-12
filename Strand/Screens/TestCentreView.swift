@@ -113,7 +113,7 @@ struct TestCentreView: View {
     private func prefillUserInfoValue() {
         switch userInfoField {
         case .height: userInfoValueText = String(Int(profile.heightCm.rounded()))
-        case .weight: userInfoValueText = String(Int(profile.weightKg.rounded()))
+        case .weight: userInfoValueText = String(Int(model.bodyMeasurements.estimateWeightKg().rounded()))
         case .gender: userInfoValueText = String(OuraUserInfoWrite.genderCode(forSex: profile.sex))
         case .unit:   userInfoValueText = "0"
         case .dateOfBirth: userInfoValueText = ""

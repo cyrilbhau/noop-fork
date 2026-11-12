@@ -196,6 +196,86 @@ final class BackupSettingsTests: XCTestCase {
         XCTAssertEqual(deviceB.object(forKey: "profile.hrMaxOverride") as? Int, 0)
     }
 
+    // MARK: - Cut scorecard keys (stage 1 specification §9.3)
+
+    /// The two scorecard settings cross the backup as Strings, under their own names on this platform.
+    /// Fails until `cutScorecard.phases` and `cutScorecard.rules` join `whitelist` and
+    /// `appleDefaultsKey`. The values are the synthetic fixture of specification §13.
+    func testScorecardPhasesAndRulesRoundTripAsStrings() throws {
+        let phases = "[{\"kind\":\"cut\",\"name\":\"Fixture cut\",\"rateHighPercentPerWeek\":1.2,"
+            + "\"rateLowPercentPerWeek\":0.4,\"startDay\":\"2031-01-06\",\"targetWeightKg\":94.0,\"v\":1}]"
+        let rules = "{\"addCaloriesKcal\":300,\"rateWindowWeeks\":4,\"v\":1}"
+
+        // The contract itself: String kind, identity storage key.
+        XCTAssertEqual(BackupSettings.whitelist["cutScorecard.phases"], .string)
+        XCTAssertEqual(BackupSettings.whitelist["cutScorecard.rules"], .string)
+        XCTAssertEqual(BackupSettings.appleDefaultsKey["cutScorecard.phases"], "cutScorecard.phases")
+        XCTAssertEqual(BackupSettings.appleDefaultsKey["cutScorecard.rules"], "cutScorecard.rules")
+
+        // Codec round trip: the strings come back byte for byte (they are JSON carried as text and
+        // are never parsed by the codec).
+        let data = try XCTUnwrap(BackupSettings.encode(["cutScorecard.phases": phases,
+                                                        "cutScorecard.rules": rules]))
+        let back = BackupSettings.decode(data)
+        XCTAssertEqual(back["cutScorecard.phases"] as? String, phases)
+        XCTAssertEqual(back["cutScorecard.rules"] as? String, rules)
+        XCTAssertEqual(back.count, 2)
+
+        // Device A to device B through UserDefaults.
+        let deviceA = try freshDefaults()
+        deviceA.set(phases, forKey: "cutScorecard.phases")
+        deviceA.set(rules, forKey: "cutScorecard.rules")
+        let snap = BackupSettings.snapshot(from: deviceA)
+        XCTAssertEqual(snap["cutScorecard.phases"] as? String, phases)
+        XCTAssertEqual(snap["cutScorecard.rules"] as? String, rules)
+        let payload = try XCTUnwrap(BackupSettings.encode(snap))
+
+        let deviceB = try freshDefaults()
+        BackupSettings.apply(BackupSettings.decode(payload), to: deviceB)
+        XCTAssertEqual(deviceB.string(forKey: "cutScorecard.phases"), phases)
+        XCTAssertEqual(deviceB.string(forKey: "cutScorecard.rules"), rules)
+
+        // A value of the wrong kind is dropped, as for every other String key.
+        XCTAssertNil(BackupSettings.encode(["cutScorecard.phases": 1, "cutScorecard.rules": 2.5]))
+        let unset = try freshDefaults()
+        XCTAssertNil(BackupSettings.snapshot(from: unset)["cutScorecard.phases"],
+                     "a never-set key is omitted, not defaulted")
+        XCTAssertNil(BackupSettings.snapshot(from: unset)["cutScorecard.rules"])
+    }
+
+    /// The feature flag and the reminder settings stay on the device they were set on. This holds
+    /// before the stage's whitelist edit as well as after it: it pins the exclusion, so adding the two
+    /// String keys cannot bring the flag or the reminder along.
+    func testScorecardFlagAndReminderAreNotExported() throws {
+        let excluded = ["noop.cutScorecardEnabled", "cutScorecard.reminder.enabled",
+                        "cutScorecard.reminder.weekday", "cutScorecard.reminder.minuteOfDay"]
+        for key in excluded {
+            XCTAssertNil(BackupSettings.whitelist[key], "\(key) must not be whitelisted")
+            XCTAssertNil(BackupSettings.appleDefaultsKey[key], "\(key) must have no storage mapping")
+            XCTAssertFalse(BackupSettings.appleDefaultsKey.values.contains(key),
+                           "\(key) must not be reachable under another canonical name")
+        }
+
+        let deviceA = try freshDefaults()
+        deviceA.set(true, forKey: "noop.cutScorecardEnabled")
+        deviceA.set(true, forKey: "cutScorecard.reminder.enabled")
+        deviceA.set(4, forKey: "cutScorecard.reminder.weekday")
+        deviceA.set(390, forKey: "cutScorecard.reminder.minuteOfDay")
+        let snap = BackupSettings.snapshot(from: deviceA)
+        for key in excluded { XCTAssertNil(snap[key], "\(key) must not be exported") }
+
+        // A hand-made payload carrying them is dropped on encode, on decode and on apply.
+        let forged: [String: Any] = ["noop.cutScorecardEnabled": 1, "cutScorecard.reminder.enabled": 1,
+                                     "cutScorecard.reminder.weekday": 4,
+                                     "cutScorecard.reminder.minuteOfDay": 390]
+        XCTAssertNil(BackupSettings.encode(forged))
+        let raw = try JSONSerialization.data(withJSONObject: forged)
+        XCTAssertTrue(BackupSettings.decode(raw).isEmpty)
+        let deviceB = try freshDefaults()
+        BackupSettings.apply(forged, to: deviceB)
+        for key in excluded { XCTAssertNil(deviceB.object(forKey: key), "\(key) must not be restored") }
+    }
+
     // MARK: - Suite-scoped defaults (never the test runner's real domain)
 
     private var suites: [String] = []

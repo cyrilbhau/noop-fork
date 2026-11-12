@@ -25,6 +25,9 @@ struct RedesignTodayView: View {
     @Environment(\.scrollToTopSignal) private var scrollToTopSignal
 
     @StateObject private var dayModel = TodayDayModel()
+    /// The scorecard flag, observed (stage 1 ruling R40). Reading it writes nothing, and it
+    /// publishes only when the flag changes.
+    @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
 
     // Shared preferences: the same keys Liquid Today and the Customise sheet read and write.
     @AppStorage(DayCycleMode.storageKey) private var dayCycleModeRaw = DayCycleMode.sleepOnset.rawValue
@@ -135,6 +138,15 @@ struct RedesignTodayView: View {
         .task(id: "\(repo.refreshSeq)-\(selectedDayOffset)-\(repo.hydrationSeq)-\(hydrationEnabled)-\(dayCycleModeRaw)-\(HostedCardLoadNeeds(raw: hostedCardsRaw).signature)") {
             DashboardCardPrefs.migrateLegacyStepsAverage()
             await load()
+        }
+        // Stage 1 ruling R38, as in Liquid Today: a weight resolved under another policy than the
+        // current one is resolved again. One flag read per body evaluation; nothing is read while
+        // the flag stays put.
+        // Ruling R40: the flag itself is observed (`scorecardFlag`) and is part of the identity.
+        .task(id: dayModel.bodyWeightPolicyKey(BodyMeasurementProvider.live(repository: repo, profile: profile),
+                                               flagEnabled: scorecardFlag.isEnabled)) {
+            await dayModel.resolveBodyWeightAgainIfPolicyChanged(
+                BodyMeasurementProvider.live(repository: repo, profile: profile), repo: repo)
         }
         .task(id: "\(repo.refreshSeq)-\(repo.deviceId)") {
             let deviceId = repo.deviceId
@@ -569,30 +581,95 @@ struct RedesignTodayView: View {
         var unit: String?
         var sparkKey: String?
         var route: TabRoute?
+        /// The row pushes the scorecard screen instead of `route` (stage 1 specification §10.8).
+        var opensScorecard = false
+        /// The row stacks its title and caption above its value at accessibility text sizes. Set
+        /// only by the Weight row with the scorecard flag on: its value carries its unit
+        /// ("97.5 kg") and its caption names a source, which left the title column a letter wide.
+        var stacksAtAccessibilitySizes = false
+    }
+
+    /// The sparkline slot of a stacked row: `NoopMetricRow`'s own (72 × 30, `.mrow` in
+    /// `design/system/noop.css`), which has no `NoopTheme` token.
+    private enum StackedRowMetrics {
+        static let accessoryWidth: CGFloat = 72
+        static let accessoryHeight: CGFloat = 30
     }
 
     @ViewBuilder
     private func keyMetricRow(_ metric: KeyMetric, first: Bool) -> some View {
         let c = rowContent(metric)
         let spark = c.sparkKey.map { dayModel.windowedSpark($0, windowDays: keyMetricsWindowDays) } ?? []
-        let row = NoopMetricRow(c.title, color: c.color, subtitle: c.subtitle, value: c.value, unit: c.unit,
-                                showsDivider: !first) {
-            if spark.count >= 2 {
-                NoopLineChart(points: spark.enumerated().map { NoopChartPoint(x: Double($0.offset), y: $0.element) },
-                              color: c.color, compact: true, animates: ringsAnimate)
-            } else {
-                Color.clear
-            }
-        }
+        let row = keyMetricRowBody(c, spark: spark, first: first)
         if metric == .steps {
             Button { showStepSources = true } label: { row.contentShape(Rectangle()) }
                 .buttonStyle(.noopPress)
                 .accessibilityHint("Opens step sources and a phone-free walk check")
+        } else if c.opensScorecard {
+            NavigationLink(value: RedesignRoute.scorecard) { row.contentShape(Rectangle()) }
+                .buttonStyle(.noopPress)
         } else if let route = c.route {
             NavigationLink(value: route) { row.contentShape(Rectangle()) }
                 .buttonStyle(.noopPress)
         } else {
             row
+        }
+    }
+
+    @ViewBuilder
+    private func keyMetricRowBody(_ c: MetricRowContent, spark: [Double], first: Bool) -> some View {
+        if c.stacksAtAccessibilitySizes, dynamicTypeSize.isAccessibilitySize {
+            // Title and caption on full-width lines, then the value beside the sparkline, so no
+            // word is broken mid-word. Every other row, and this row at every other size, is the
+            // shared `NoopMetricRow` below, unchanged.
+            VStack(spacing: 0) {
+                if !first { FormKitDivider() }
+                VStack(alignment: .leading, spacing: NoopTheme.Layout.xs) {
+                    Text(c.title)
+                        .noopFont(.rowTitle, color: false)
+                        .foregroundStyle(c.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let subtitle = c.subtitle {
+                        Text(verbatim: subtitle)
+                            .noopFont(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(spacing: NoopTheme.Layout.m) {
+                        Group {
+                            if let value = c.value {
+                                Text(verbatim: value).noopFont(.rowNumber)
+                            } else {
+                                Text(verbatim: "—")
+                                    .noopFont(.rowNumber, color: false)
+                                    .foregroundStyle(NoopTheme.textSecondary)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        keyMetricSparkline(spark, color: c.color)
+                            .frame(width: StackedRowMetrics.accessoryWidth, height: StackedRowMetrics.accessoryHeight)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, NoopTheme.Layout.rowVerticalPadding)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            NoopMetricRow(c.title, color: c.color, subtitle: c.subtitle, value: c.value, unit: c.unit,
+                          showsDivider: !first) {
+                keyMetricSparkline(spark, color: c.color)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func keyMetricSparkline(_ spark: [Double], color: Color) -> some View {
+        if spark.count >= 2 {
+            NoopLineChart(points: spark.enumerated().map { NoopChartPoint(x: Double($0.offset), y: $0.element) },
+                          color: color, compact: true, animates: ringsAnimate)
+        } else {
+            Color.clear
         }
     }
 
@@ -606,12 +683,23 @@ struct RedesignTodayView: View {
         }
         switch metric {
         case .weight:
-            let kg = dayModel.weightKg
+            // Resolved through the one body-measurement provider (stage 1 specification §8.4): the
+            // day model's dated reading, else the profile value as it is now.
+            // A reading resolved under another policy than the current one is not shown (ruling R38).
+            let provider = BodyMeasurementProvider.live(repository: repo, profile: profile)
+            let dated = dayModel.shownBodyWeight(provider)
+            let shown = provider.displayWeightValue(dated)
+            // Specification §10.8 and ruling R41. Flag off: the caption and the route are as they
+            // were. Flag on: the reading is named by its source, and the row opens the scorecard,
+            // which hosts the weigh-in sheet and the history, whatever the source of the value.
+            let policy = scorecardFlag.displayPolicy
+            let correction = BodyMeasurementCorrection.route(for: .redesignTodayWeightRow, policy: policy)
             return MetricRowContent(
                 title: "Weight", color: NoopTheme.temp,
-                subtitle: kg == nil ? String(localized: "from profile") : String(localized: "latest"),
-                value: UnitFormatter.massFromKilograms(kg ?? profile.weightKg, system: unitSystem), unit: nil,
-                sparkKey: "weight", route: .metric("weight"))
+                subtitle: BodyMeasurementCorrection.todayCaption(dated: dated, policy: policy),
+                value: UnitFormatter.massFromKilograms(shown.value, system: unitSystem), unit: nil,
+                sparkKey: "weight", route: correction.metricRoute, opensScorecard: correction == .scorecard,
+                stacksAtAccessibilitySizes: policy == .unified)
         default:
             // Score rows retain their existing hero-only presentation; A4 is a separate follow-up.
             return MetricRowContent(title: "", color: NoopTheme.textTertiary, value: nil)
@@ -626,24 +714,34 @@ struct RedesignTodayView: View {
 
     private var renderedDashboardCards: [DashboardCard] {
         TodayCardResolver.renderList(raw: dashboardCardsRaw, hydrationEnabled: hydrationEnabled,
-                                     coachEnabled: coachEnabled, visibleKeyMetrics: visibleKeyMetricRows)
+                                     coachEnabled: coachEnabled, visibleKeyMetrics: visibleKeyMetricRows,
+                                     scorecardEnabled: scorecardFlag.isEnabled)
     }
 
     private var gatedDashboardCaption: String? {
-        guard renderedDashboardCards.isEmpty else { return nil }
-        let selected = TodayCardResolver.selection(raw: dashboardCardsRaw, visibleKeyMetrics: visibleKeyMetricRows)
-        let hydrationOff = selected.contains(.hydration) && !hydrationEnabled
-        let coachOff = selected.contains(.coach) && !coachEnabled
-        if hydrationOff && coachOff {
-            return String(localized: "Nothing to show while Hydration and Coach are off.")
-        }
-        if hydrationOff { return String(localized: "Nothing to show while Hydration is off.") }
-        if coachOff { return String(localized: "Nothing to show while Coach is off.") }
-        return nil
+        TodayCardResolver.gatedCaption(raw: dashboardCardsRaw, hydrationEnabled: hydrationEnabled,
+                                       coachEnabled: coachEnabled, scorecardEnabled: scorecardFlag.isEnabled,
+                                       visibleKeyMetrics: visibleKeyMetricRows)
     }
 
+    /// The scorecard card reads the one shared scorecard model, which exists only while the card is
+    /// rendered: the flag is on and the owner has added it (stage 1 specification §10.1).
+    @ViewBuilder
     private var yourCardsSection: some View {
-        YourCardsSection(cards: renderedDashboardCards, inputs: dashboardInputs,
+        if renderedDashboardCards.contains(.scorecard) {
+            CutScorecardCardReader(model: CutScorecardModel.live(repository: repo, profile: profile),
+                                   refreshSequence: repo.refreshSeq) { card in
+                yourCards(scorecard: card)
+            }
+        } else {
+            yourCards(scorecard: nil)
+        }
+    }
+
+    private func yourCards(scorecard: CutScorecardCard?) -> some View {
+        var inputs = dashboardInputs
+        inputs.scorecard = scorecard
+        return YourCardsSection(cards: renderedDashboardCards, inputs: inputs,
                          isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
                          loading: loading || dayModel.cardSnapshotDayKey != selectedDayKey,
                          refreshSequence: repo.refreshSeq, gatedCaption: gatedDashboardCaption,

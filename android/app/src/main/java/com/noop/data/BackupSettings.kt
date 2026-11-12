@@ -73,6 +73,13 @@ object BackupSettingsCodec {
         // SCOPE: NAMES only — the wire carries no kind/group, so a numeric custom behaviour restores as a
         // plain .bool toggle (identical on both platforms; historical entries keep their DB numericValue).
         "journal.customBehaviors" to Kind.STRING,
+        // Cut scorecard: the user's phases (a JSON array) and rule parameters (a JSON object), each carried
+        // as ONE opaque String exactly like today.hostedCards above. Android has no scorecard, so nothing
+        // here parses either value: it is stored and re-exported untouched, so an Apple backup restored
+        // here and exported again keeps both strings byte for byte. The feature flag and the reminder
+        // settings stay per install and are deliberately not carried.
+        "cutScorecard.phases" to Kind.STRING,
+        "cutScorecard.rules" to Kind.STRING,
     )
 
     /**
@@ -126,6 +133,8 @@ object BackupSettingsCodec {
  *                   (canonical `profile.hrMax` ↔ ProfileStore's `hr_max_override`).
  *  - `units.*` / `effort.scale` → [NoopPrefs] under the SAME literal key strings as the canonical names
  *                   (they were already kept identical to the Apple @AppStorage keys).
+ *  - `cutScorecard.phases` / `cutScorecard.rules` → [NoopPrefs] under the same literal key strings,
+ *                   as opaque Strings that nothing on Android parses.
  */
 object BackupSettingsBridge {
 
@@ -166,6 +175,15 @@ object BackupSettingsBridge {
         }
         if (noop.contains(HostedCardPrefs.KEY_SELECTION)) {
             noop.getString(HostedCardPrefs.KEY_SELECTION, null)?.let { values[HostedCardPrefs.KEY_SELECTION] = it }
+        }
+        // Cut scorecard: canonical key and `noop_prefs` storage key are the same string, as with
+        // today.hostedCards. No Android screen reads either; they are held only to survive a restore and
+        // the next export, unparsed.
+        if (noop.contains("cutScorecard.phases")) {
+            noop.getString("cutScorecard.phases", null)?.let { values["cutScorecard.phases"] = it }
+        }
+        if (noop.contains("cutScorecard.rules")) {
+            noop.getString("cutScorecard.rules", null)?.let { values["cutScorecard.rules"] = it }
         }
         // #1361: custom journal behaviours from the LIVE v2 catalog blob (the legacy key is read-once-
         // then-stale). Parse raw to avoid a data→ui dependency; shape mirrors JournalCatalog.
@@ -211,6 +229,8 @@ object BackupSettingsBridge {
         (values["effort.scale"] as? String)?.let { editor.putString(UnitPrefs.KEY_EFFORT_SCALE, it) }
         (values["dayCycle.mode"] as? String)?.let { editor.putString(NoopPrefs.KEY_DAY_CYCLE_MODE, it) }
         (values[HostedCardPrefs.KEY_SELECTION] as? String)?.let { editor.putString(HostedCardPrefs.KEY_SELECTION, it) }
+        (values["cutScorecard.phases"] as? String)?.let { editor.putString("cutScorecard.phases", it) }
+        (values["cutScorecard.rules"] as? String)?.let { editor.putString("cutScorecard.rules", it) }
         // #1361: restore custom behaviours — write the names to the legacy custom key, clear stale hidden,
         // and drop the v2 blob so the next catalog load re-migrates them (restart-gated, #57). Mirrors iOS.
         (values["journal.customBehaviors"] as? String)?.let { joined ->

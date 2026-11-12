@@ -72,7 +72,9 @@ struct YourCardsSection: View {
     }
 }
 
-private struct YourCardTile: View {
+/// One tile of Your cards. Internal so the scorecard's debug demo can draw the tile in each of its
+/// states.
+struct YourCardTile: View {
     let card: DashboardCard
     let inputs: TodayCardInputs
     let isAccessibilitySize: Bool
@@ -99,7 +101,7 @@ private struct YourCardTile: View {
 
     var body: some View {
         interactiveTile
-            .noopSkeleton(loading, cornerRadius: NoopTheme.Layout.tileRadius)
+            .noopSkeleton(loading || readout.isLoading, cornerRadius: NoopTheme.Layout.tileRadius)
             .task(id: loadIdentity) {
                 guard card == .stepsAverage30 else { return }
                 let identity = loadIdentity
@@ -121,6 +123,9 @@ private struct YourCardTile: View {
                 .buttonStyle(.noopPress)
         case .coachSheet:
             Button(action: onCoach) { content }
+                .buttonStyle(.noopPress)
+        case .scorecard:
+            NavigationLink(value: RedesignRoute.scorecard) { content }
                 .buttonStyle(.noopPress)
         case .none:
             content
@@ -154,7 +159,8 @@ private struct YourCardTile: View {
                 HStack(alignment: .firstTextBaseline, spacing: NoopTheme.Layout.xs) {
                     Text(verbatim: numberParts.primary ?? "—")
                         .noopFont(.tileNumber, color: false)
-                        .foregroundStyle(readout.value == nil ? NoopTheme.textTertiary : NoopTheme.textPrimary)
+                        .foregroundStyle(readout.value == nil || readout.valueIsDimmed
+                                         ? NoopTheme.textTertiary : NoopTheme.textPrimary)
                         .lineLimit(isAccessibilitySize ? nil : 1)
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
@@ -288,6 +294,21 @@ extension TodayCardReadout.Tint {
         case .temp: return NoopTheme.temp
         case .coach: return NoopTheme.coach
         case .muted: return NoopTheme.textTertiary
+        case .neutral: return NoopTheme.textPrimary
         }
+    }
+}
+
+/// Feeds the scorecard card of the shared scorecard model into the cards it wraps, and loads the
+/// model when the card appears and after each repository refresh. Mounted only while the scorecard
+/// card is rendered, so with the flag off, or the card not added, the model is never created.
+struct CutScorecardCardReader<Content: View>: View {
+    @ObservedObject var model: CutScorecardModel
+    let refreshSequence: Int
+    @ViewBuilder let content: (CutScorecardCard) -> Content
+
+    var body: some View {
+        content(model.card)
+            .task(id: refreshSequence) { await model.load() }
     }
 }
