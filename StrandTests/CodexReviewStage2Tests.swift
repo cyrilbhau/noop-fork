@@ -100,3 +100,51 @@ final class CodexReviewStage2FlagRevocationTests: XCTestCase {
         XCTAssertEqual(model.copyState, .none)
     }
 }
+
+/// C10 P2: a store that cannot be read gives the unavailable state, never a packet of dashes.
+@MainActor
+final class CodexReviewStage2UnreadableStoreTests: XCTestCase {
+    private typealias H = CoachPacketHarness
+    private let suites = CoachPacketSuites()
+
+    override func tearDown() {
+        suites.removeAll()
+        super.tearDown()
+    }
+
+    private func assembler(_ h: H, storeReadable: (@MainActor () async -> Bool)?) -> CoachPacketAssembler {
+        let now = h.clock.now
+        return CoachPacketAssembler(repository: h.repo, provider: h.provider, scorecardSettings: h.scorecardSettings,
+                                    settings: h.packetSettings, now: { now }, timeZone: { H.utc },
+                                    effortScale: { .hundred }, identifiers: { [] }, storeReadable: storeReadable)
+    }
+
+    func testAnUnreadableStoreIsUnavailableNotAnEmptyPacket() async throws {
+        let h = try await H.empty(scorecard: true, suites: suites)
+        let unreadable = assembler(h, storeReadable: { false })
+        let outcome = await unreadable.assemble()
+        XCTAssertEqual(outcome, .unavailable, "an unreadable store must not be exported as nothing measured")
+        let input = await unreadable.input()
+        XCTAssertNil(input, "no renderer input exists for a store that could not be read")
+    }
+
+    func testAStoreThatStopsBeingReadableDuringAssemblyIsUnavailable() async throws {
+        let h = try await H.fixturePerson(scorecard: true, suites: suites)
+        let probes = CoachPacketBox(0)
+        // Readable when assembly begins, unreadable once the reads are done.
+        let outcome = await assembler(h, storeReadable: {
+            probes.value += 1
+            return probes.value == 1
+        }).assemble()
+        XCTAssertEqual(outcome, .unavailable)
+    }
+
+    func testAReadableStoreGivesTheSamePacketWithOrWithoutTheProbe() async throws {
+        let h = try await H.fixturePerson(scorecard: true, suites: suites)
+        let probed = await assembler(h, storeReadable: { true }).assemble()
+        let byHandle = await assembler(h, storeReadable: nil).assemble()
+        guard case .ready(let document) = byHandle else { return XCTFail("a readable store is a packet: \(byHandle)") }
+        XCTAssertEqual(probed, byHandle)
+        XCTAssertFalse(document.nothingMeasured)
+    }
+}
