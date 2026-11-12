@@ -81,14 +81,14 @@ struct CheckpointSheet: View {
                             .tint(NoopTheme.textSecondary)
                         }
                         FormKitControlRow("Date") {
-                            DatePicker("", selection: $day, displayedComponents: .date).labelsHidden()
+                            DatePicker("Date", selection: $day, displayedComponents: .date).labelsHidden()
                         }
                         FormKitControlRow("Approximate date") {
-                            Toggle("", isOn: $draft.checkpoint.approximate).labelsHidden().tint(NoopTheme.recovery)
+                            Toggle("Approximate date", isOn: $draft.checkpoint.approximate).labelsHidden().tint(NoopTheme.recovery)
                         }
                         if candidate.day <= today {
                             FormKitControlRow(LocalizedStringKey(CheckpointTimelinePresenter.doneTitle)) {
-                                Toggle("", isOn: $draft.checkpoint.done).labelsHidden().tint(NoopTheme.recovery)
+                                Toggle(isOn: $draft.checkpoint.done) { Text(verbatim: CheckpointTimelinePresenter.doneTitle) }.labelsHidden().tint(NoopTheme.recovery)
                             }
                         }
                     }

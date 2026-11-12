@@ -180,6 +180,16 @@ final class CodexReviewRound3Tests: XCTestCase {
                        "Days measured: 0 of 1. Shown day: not measured")
     }
 
+    // MARK: - C19: the calorie target fields
+
+    func testEachCalorieFieldHasItsOwnNameAndUnit() {
+        let labels = [IntakePresenter.calorieRangeLowFieldLabel, IntakePresenter.calorieRangeHighFieldLabel,
+                      IntakePresenter.hardFloorFieldLabel]
+        XCTAssertEqual(labels, ["Lower end of the calorie range, kcal", "Upper end of the calorie range, kcal",
+                                "Hard floor, kcal"])
+        XCTAssertEqual(Set(labels).count, 3)
+    }
+
     // MARK: - C19: the scan comparison
 
     func testAComparisonRowNamesEachFigureWhateverTheLayout() {
@@ -222,7 +232,22 @@ final class CodexReviewRound3Tests: XCTestCase {
         return try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
     }
 
+    func testStage6SwitchesAndDateControlsAreNamed() throws {
+        for path in ["StrandiOS/NiggleLog/NiggleSheet.swift", "StrandiOS/NiggleLog/PausedExerciseSheet.swift",
+                     "StrandiOS/Timeline/CheckpointSheet.swift"] {
+            let text = try source(path)
+            for unnamed in ["Toggle(\"\"", "DatePicker(\"\""] {
+                XCTAssertFalse(text.contains(unnamed), "\(path) has an unnamed control: \(unnamed)")
+            }
+        }
+    }
+
     func testTheViewsSpeakThePresentersWords() throws {
+        let settings = try source("StrandiOS/Intake/IntakeSettingsSection.swift")
+        for label in ["calorieRangeLowFieldLabel", "calorieRangeHighFieldLabel", "hardFloorFieldLabel"] {
+            XCTAssertTrue(settings.contains("IntakePresenter.\(label)"), label)
+        }
+        XCTAssertTrue(settings.contains(".accessibilityLabel(Text(verbatim: label))"))
         XCTAssertTrue(try source("StrandiOS/Intake/IntakeView.swift")
             .contains(".accessibilityValue(Text(verbatim: IntakePresenter.chartAccessibilitySummary(points)))"))
         XCTAssertTrue(try source("StrandiOS/BodyRecord/BodyScanCompareView.swift")

@@ -428,6 +428,12 @@ enum IntakePresenter {
 
     // MARK: - Settings (§10.5)
 
+    /// Codex C19: each calorie field's own spoken name, with its purpose and unit. The row title beside
+    /// the fields is not their programmatic name, and the range row holds two fields.
+    static var calorieRangeLowFieldLabel: String { String(localized: "Lower end of the calorie range, kcal") }
+    static var calorieRangeHighFieldLabel: String { String(localized: "Upper end of the calorie range, kcal") }
+    static var hardFloorFieldLabel: String { String(localized: "Hard floor, kcal") }
+
     /// The floor field: empty is no floor; otherwise valid exactly when stage 1's rule accepts it.
     /// The typed value is never rounded.
     static func floorEntry(_ text: String) -> IntakeFloorEntry {
