@@ -116,6 +116,11 @@ struct SettingsView: View {
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     /// Stage 2 (coach packet): the one observable copy of its flag. An iPhone feature as well.
     @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
+    // Stage 4 (body record): the two observable flags, laboratory units first (stage-4.md §10.8).
+    @ObservedObject private var labReportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
+    @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
+    // Stage 5 (events layer): the one observable copy of its flag. An iPhone feature as well.
+    @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
     @State private var weighInReminderStatus: WeighInReminderStatus = .off
     @State private var weighInReminderWeekday = 7
     @State private var weighInReminderMinute = 480
@@ -467,6 +472,9 @@ struct SettingsView: View {
             #if os(iOS)
             scorecardCard.staggeredAppear(index: 5)
             coachPacketCard.staggeredAppear(index: 5)
+            intakeCard.staggeredAppear(index: 5) // Stage 3: third in the one order (ruling A1)
+            bodyRecordCard.staggeredAppear(index: 5) // Stage 4: fourth in the one order (ruling A1).
+            personalEventsCard.staggeredAppear(index: 5)   // Stage 5: fifth in the one order (ruling A1)
             syncCard.staggeredAppear(index: 6)
             #endif
 
@@ -1998,6 +2006,71 @@ struct SettingsView: View {
         }
     }
 
+    // Stage 3: the Intake card (stage 3 specification §10.5), directly after Coach packet (ruling A1).
+    // Always drawn on iPhone, because it holds the flag's switch; every other row exists only while
+    // `noop.intakeEnabled` is on. Its content is `IntakeSettingsSection`.
+    private var intakeCard: some View {
+        SettingsSection(icon: "fork.knife", title: LocalizedStringKey(IntakePresenter.settingsTitle),
+                        blurb: LocalizedStringKey(IntakePresenter.settingsBlurb)) {
+            IntakeSettingsSection()
+        }
+    }
+
+    // Stage 4: the body-record card (stage-4.md §10.8), after the coach packet card (ruling A1). Always
+    // drawn on iPhone, because it holds both switches; both are off by default, and switching either
+    // off hides its surfaces and deletes nothing. Every string comes from `BodyRecordPresenter`.
+    private var bodyRecordCard: some View {
+        SettingsSection(
+            icon: "figure.stand",
+            title: LocalizedStringKey(BodyRecordPresenter.title),
+            blurb: LocalizedStringKey(BodyRecordPresenter.settingsBlurb)
+        ) {
+            VStack(alignment: .leading, spacing: NoopMetrics.space2 + 2) {
+                bodyRecordToggle(BodyRecordPresenter.labUnitsSettingTitle, detail: BodyRecordPresenter.labUnitsSettingDetail,
+                                 flag: labReportUnitsFlag)
+                rowDivider
+                bodyRecordToggle(BodyRecordPresenter.title, detail: BodyRecordPresenter.bodyRecordSettingDetail,
+                                 flag: bodyRecordFlag)
+            }
+        }
+    }
+
+    // Stage 4: one switch of the body-record card, with its line beneath.
+    private func bodyRecordToggle(_ title: String, detail: String, flag: ObservableDefaultsFlag) -> some View {
+        Toggle(isOn: Binding(get: { flag.isEnabled }, set: { flag.set($0) })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: title)
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                Text(verbatim: detail)
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .toggleStyle(.switch)
+        .tint(StrandPalette.accent)
+    }
+
+    // Stage 5: the Events card (stage 5 §10.7), always drawn on iPhone because it holds the flag's
+    // switch; off by default. With it off there is no Health row, no mark, no caption and no note.
+    private var personalEventsCard: some View {
+        SettingsSection(
+            icon: "calendar",
+            title: "Events",
+            blurb: "Mark travel, illness, a diet break or a deload, and charts show when it happened. Off by default."
+        ) {
+            Toggle(isOn: Binding(get: { personalEventsFlag.isEnabled },
+                                 set: { PersonalEventStore.flag.set($0) })) {
+                Text("Personal events")
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textPrimary)
+            }
+            .toggleStyle(.switch)
+            .tint(StrandPalette.accent)
+        }
+    }
+
     /// The feature switch moved. On: the readings the flag now admits are read, so every screen
     /// resolves from them at once. Either way the reminder is brought into line: off removes it.
     private func scorecardFlagChanged(_ on: Bool) {
@@ -2019,6 +2092,8 @@ struct SettingsView: View {
                 await WeighInReminder.live.reconcile(latestWeighInDay: latestWeighInDay(flagEnabled: true))
             case .denied: weighInReminderStatus = .denied
             case .off: weighInReminderStatus = .off
+            // A newer switch move or flag change arrived meanwhile; that one sets the row.
+            case .superseded: break
             }
         }
     }

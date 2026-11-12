@@ -28,6 +28,8 @@ struct RedesignTodayView: View {
     /// The scorecard flag, observed (stage 1 ruling R40). Reading it writes nothing, and it
     /// publishes only when the flag changes.
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+    /// Stage 3: the intake flag, observed. Reading it writes nothing.
+    @ObservedObject private var intakeFlag = IntakeSettings.flag
 
     // Shared preferences: the same keys Liquid Today and the Customise sheet read and write.
     @AppStorage(DayCycleMode.storageKey) private var dayCycleModeRaw = DayCycleMode.sleepOnset.rawValue
@@ -715,13 +717,15 @@ struct RedesignTodayView: View {
     private var renderedDashboardCards: [DashboardCard] {
         TodayCardResolver.renderList(raw: dashboardCardsRaw, hydrationEnabled: hydrationEnabled,
                                      coachEnabled: coachEnabled, visibleKeyMetrics: visibleKeyMetricRows,
-                                     scorecardEnabled: scorecardFlag.isEnabled)
+                                     scorecardEnabled: scorecardFlag.isEnabled,
+                                     intakeEnabled: intakeFlag.isEnabled) // Stage 3
     }
 
     private var gatedDashboardCaption: String? {
         TodayCardResolver.gatedCaption(raw: dashboardCardsRaw, hydrationEnabled: hydrationEnabled,
                                        coachEnabled: coachEnabled, scorecardEnabled: scorecardFlag.isEnabled,
-                                       visibleKeyMetrics: visibleKeyMetricRows)
+                                       visibleKeyMetrics: visibleKeyMetricRows,
+                                       intakeEnabled: intakeFlag.isEnabled) // Stage 3
     }
 
     /// The scorecard card reads the one shared scorecard model, which exists only while the card is
@@ -731,16 +735,31 @@ struct RedesignTodayView: View {
         if renderedDashboardCards.contains(.scorecard) {
             CutScorecardCardReader(model: CutScorecardModel.live(repository: repo, profile: profile),
                                    refreshSequence: repo.refreshSeq) { card in
-                yourCards(scorecard: card)
+                intakeAwareCards(scorecard: card) // Stage 3
             }
         } else {
-            yourCards(scorecard: nil)
+            intakeAwareCards(scorecard: nil) // Stage 3
         }
     }
 
-    private func yourCards(scorecard: CutScorecardCard?) -> some View {
+    /// Stage 3: the protein card reads the one live intake provider, mounted only while the card is
+    /// rendered: the flag is on and the owner has added it (stage 3 specification §10.1).
+    @ViewBuilder
+    private func intakeAwareCards(scorecard: CutScorecardCard?) -> some View {
+        if renderedDashboardCards.contains(.protein) {
+            IntakeCardReader(provider: .live(repository: repo), selectedDayKey: selectedDayKey, isToday: isToday,
+                             refreshSequence: repo.refreshSeq) { card in
+                yourCards(scorecard: scorecard, intake: card)
+            }
+        } else {
+            yourCards(scorecard: scorecard, intake: nil)
+        }
+    }
+
+    private func yourCards(scorecard: CutScorecardCard?, intake: IntakeCard?) -> some View { // Stage 3: intake
         var inputs = dashboardInputs
         inputs.scorecard = scorecard
+        inputs.intake = intake // Stage 3
         return YourCardsSection(cards: renderedDashboardCards, inputs: inputs,
                          isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
                          loading: loading || dayModel.cardSnapshotDayKey != selectedDayKey,

@@ -41,7 +41,13 @@ public enum BackupSettings {
     // absent from an Android export. It still obeys the rest of the contract: Int, Double or String
     // only, personal and not device-specific, and never a `noop.*` per-install toggle.
     //
-    // Fork-only keys today: none.
+    // Fork-only keys today:
+    // Stage 3: intake.targets (the calorie range and hard floor, a JSON object) and
+    // intake.supplement.questions (a JSON array of the Journal questions listed as supplements; it
+    // holds the names the owner typed, in clear text). Ruling R43: deliberately absent from
+    // Android's whitelist; an Android restore drops both.
+    //   - personalEvents.items (stage 5): the owner's personal events, one JSON array carried as text
+    //     and never parsed here. Its feature flag, a `noop.*` toggle, stays out.
     /// THE whitelist — the only keys `settings.json` may carry, keyed by their CANONICAL
     /// (platform-neutral) names. Mirrored exactly by Android's `BackupSettingsCodec.WHITELIST`.
     ///
@@ -85,7 +91,12 @@ public enum BackupSettings {
         // permission. Mirrored by Android's `BackupSettingsCodec.WHITELIST`.
         "cutScorecard.phases": .string,
         "cutScorecard.rules": .string,
-        // Fork-only keys (see the block above the whitelist; not mirrored on Android). None yet.
+        // Fork-only keys (see the block above the whitelist; not mirrored on Android).
+        // Stage 3: the intake targets and supplement list. The feature flag, the source, the zone log,
+        // the Health sources, the cutoff, the presets and the entry lists stay out: they are per install.
+        "intake.targets": .string,
+        "intake.supplement.questions": .string,
+        "personalEvents.items": .string,
     ]
 
     /// Canonical JSON key → this platform's UserDefaults key. Identity everywhere except
@@ -107,6 +118,9 @@ public enum BackupSettings {
         "today.hostedCards": "today.hostedCards",
         "cutScorecard.phases": "cutScorecard.phases",
         "cutScorecard.rules": "cutScorecard.rules",
+        "intake.targets": "intake.targets", // Stage 3
+        "intake.supplement.questions": "intake.supplement.questions", // Stage 3
+        "personalEvents.items": "personalEvents.items",
     ]
 
     // MARK: - Snapshot / apply (UserDefaults boundary)

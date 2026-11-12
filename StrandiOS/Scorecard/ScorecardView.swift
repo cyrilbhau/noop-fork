@@ -135,6 +135,8 @@ struct ScorecardContent: View {
     let onHistory: () -> Void
     let onPhase: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Stage 3: the intake flag (§10.4). Off: the protein row is exactly stage 1's.
+    @ObservedObject private var intakeFlag = IntakeSettings.flag
 
     private var stacks: Bool { dynamicTypeSize.isAccessibilitySize }
 
@@ -157,6 +159,8 @@ struct ScorecardContent: View {
                 .padding(.horizontal, NoopTheme.Layout.gutter)
                 .padding(.top, NoopTheme.Layout.l)
                 .noopEntrance(index: 2)
+            // Stage 5: the personal events note directly under the verdict; nothing without one.
+            ScorecardEventNoteView(presentation: shown)
 
             ScorecardSectionHeader(title: CutScorecardPresenter.signalsTitle, trailing: shown.weekLabel)
             signalsCard
@@ -414,7 +418,12 @@ struct ScorecardContent: View {
             VStack(spacing: 0) {
                 ForEach(Array(shown.signals.enumerated()), id: \.offset) { index, signal in
                     if index > 0 { FormKitDivider() }
-                    signalRow(signal)
+                    // Stage 3: the protein row (third of four) names its source and opens Intake.
+                    if index == 2, intakeFlag.isEnabled {
+                        ScorecardIntakeProteinRow(anchorDay: shown.proteinWindowAnchorDay) { signalRow(signal) }
+                    } else {
+                        signalRow(signal)
+                    }
                 }
             }
         }
@@ -469,7 +478,8 @@ struct ScorecardContent: View {
                     .padding(.top, NoopTheme.Layout.xs)
                 SourceCaption(verbatim: curve.provenance)
                     .padding(.top, NoopTheme.Layout.s)
-                ScorecardWeekChart(points: curve.points, firstLabel: curve.firstLabel, lastLabel: curve.lastLabel)
+                ScorecardWeekChart(points: curve.points, firstLabel: curve.firstLabel, lastLabel: curve.lastLabel,
+                                   axisMarks: .points(covered: curve.marked))   // Stage 5: event dots
                     .padding(.top, NoopTheme.Layout.m)
                 factGrid(curve.facts)
                     .padding(.top, NoopTheme.Layout.rowVerticalPadding)

@@ -60,6 +60,8 @@ struct TrendsView: View {
     @State private var sleepPerfByDay: [String: Double] = [:]
     @State private var sleepPerfRevision = 0
     @State private var resolvedCache = ResolvedCache()
+    /// Stage 5: personal event dots and their caption under the Recovery hero chart.
+    @ObservedObject private var eventMarks = PersonalEventChartSource.shared
 
     // #710 — browse previous weeks in the Week-in-review digest. 0 = the week containing today; each step
     // back is one Mon–Sun week earlier. Clamped so it never runs past the earliest day we hold (see
@@ -1036,14 +1038,20 @@ extension TrendsView {
     private func trendsRdChart(_ pts: [TrendPoint], color: Color, height: CGFloat, captions: Bool,
                                name: String, format: @escaping (Double) -> String) -> some View {
         if pts.count >= 2 {
+            // Stage 5: only the captioned hero chart carries event dots; the small tiles do not.
+            let eventDays = captions ? PersonalEventChartSource.dayKeys(utcDayStarts: pts.map(\.date)) : []
+            let xs = pts.map(\.date.timeIntervalSince1970)
             NoopLineChart(
                 points: pts.map { NoopChartPoint(date: $0.date, y: $0.value) },
                 color: color,
                 xLabels: captions ? trendsRdAxisLabels(pts) : [],
                 animates: true,
                 accessibilityLabel: Text(verbatim: String(localized: "\(name) trend")),
-                valueFormat: format)
+                valueFormat: format,
+                axisMarks: eventMarks.marks(dayKeys: eventDays, xs: xs,
+                                            domain: NoopLineChart.xDomain(values: xs) ?? 0...1))
                 .frame(height: height)
+            PersonalEventChartCaption(eventMarks.caption(dayKeys: eventDays))
         } else {
             Text("Not enough data for this window.")
                 .noopFont(.footnote)

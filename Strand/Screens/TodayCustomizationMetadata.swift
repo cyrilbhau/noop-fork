@@ -81,6 +81,8 @@ extension DashboardCard {
         case .coach: return StrandPalette.accent
         // Body weight has no semantic colour: the neutral primary text colour.
         case .scorecard: return StrandPalette.textPrimary
+        // Stage 3: intake has no semantic colour either.
+        case .protein: return StrandPalette.textPrimary
         }
     }
 }

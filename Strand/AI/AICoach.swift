@@ -1247,7 +1247,8 @@ final class AICoachEngine: ObservableObject {
         var lines: [String] = []
 
         // 1. Strongest behaviour→outcome associations (EffectRanker over the journal × Charge).
-        let entries = await repo.journalEntries()
+        // Stage 3: supplement questions stay out of the Coach (§10.6.1); no list is the identity.
+        let entries = IntakeSettings.coachVisible(await repo.journalEntries())
         // Yes days and NO days, kept apart. A day with no journal row for the question lands in
         // neither, so an unanswered day is never counted as a No (BehaviorInsights.effect).
         var byBehaviour: [String: Set<String>] = [:]
@@ -1291,6 +1292,8 @@ final class AICoachEngine: ObservableObject {
                 for (key, kRows) in byKey {
                     // The Lab Book's own weight and waist rows are one source of the value stated below.
                     if currentBody != nil, BodyMeasurementKind(markerKey: key) != nil { continue }
+                    // Stage 4: scan and benchmark figures are not sent to the Coach (stage-4.md §4.5).
+                    if MarkerCatalog.isScanOnlyMarker(key) || MarkerCatalog.isBenchmark(key) { continue }
                     // Greatest instant, then greatest id: the reading the projection and the
                     // resolver name when two share an instant.
                     guard let latest = kRows.max(by: { ($0.takenAt, $0.id) < ($1.takenAt, $1.id) }) else { continue }

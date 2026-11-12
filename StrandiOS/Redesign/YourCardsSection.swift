@@ -127,6 +127,9 @@ struct YourCardTile: View {
         case .scorecard:
             NavigationLink(value: RedesignRoute.scorecard) { content }
                 .buttonStyle(.noopPress)
+        case .intake: // Stage 3
+            NavigationLink(value: RedesignRoute.intake) { content }
+                .buttonStyle(.noopPress)
         case .none:
             content
         }

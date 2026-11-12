@@ -7,11 +7,16 @@ public struct PersonalWidgetMetrics: Codable, Equatable {
     public var steps: PersonalStepReading?
     public var sleep: PersonalSleepReading?
     public var stepGoal: Int?
+    /// Stage 3: today's protein against the floor. Nil (flag off, no source, never published) is
+    /// omitted from the encoded payload, so the bytes are what they were before the field existed.
+    public var intake: PersonalIntakeReading?
 
-    public init(steps: PersonalStepReading? = nil, sleep: PersonalSleepReading? = nil, stepGoal: Int? = nil) {
+    public init(steps: PersonalStepReading? = nil, sleep: PersonalSleepReading? = nil, stepGoal: Int? = nil,
+                intake: PersonalIntakeReading? = nil) {
         self.steps = steps
         self.sleep = sleep
         self.stepGoal = stepGoal.flatMap { (1...50_000).contains($0) ? $0 : nil }
+        self.intake = intake
     }
 
     public static func dayKey(_ date: Date, calendar: Calendar = .current) -> String {
@@ -28,6 +33,22 @@ public struct PersonalWidgetMetrics: Codable, Equatable {
     public func todaySteps(now: Date, calendar: Calendar = .current) -> PersonalStepReading? {
         guard let steps, steps.day == Self.dayKey(now, calendar: calendar) else { return nil }
         return steps
+    }
+
+    /// Stage 3: the protein reading for the entry's own day only; yesterday's figure is never shown
+    /// as today's.
+    public func todayIntake(now: Date, calendar: Calendar = .current) -> PersonalIntakeReading? {
+        guard let intake, intake.day == Self.dayKey(now, calendar: calendar) else { return nil }
+        return intake
+    }
+
+    /// Stage 3: what the protein widget draws at `now`. Not set up only when nothing was published
+    /// or the reading has no source (§10.8). A set-up reading from an earlier day is "Nothing logged
+    /// today" with its floor: its figure and time are never drawn as today's.
+    public func intakeWidgetState(now: Date, calendar: Calendar = .current) -> PersonalIntakeWidgetState {
+        guard let intake, intake.source != nil else { return .notSetUp }
+        guard intake.day == Self.dayKey(now, calendar: calendar) else { return .nothingLogged(floorGrams: intake.floorGrams) }
+        return intake.widgetState
     }
 
     public func recentSleep(now: Date, calendar: Calendar = .current) -> PersonalSleepReading? {
@@ -79,5 +100,87 @@ public struct PersonalSleepReading: Codable, Equatable {
               asleepMinutes <= spanMinutes + 1, asleepMinutes.rounded() < Double(Int.max) else { return nil }
         return Self(asleepMinutes: Int(asleepMinutes.rounded()), start: start, end: end,
                     source: source, incomplete: incomplete, userEdited: userEdited)
+    }
+}
+
+// MARK: - Stage 3: protein and intake (specification §10.8)
+
+/// The shown protein figures, filled by the app's presenter from the pure progress. Foundation only:
+/// this file cannot import the analytics package.
+public struct IntakeProteinValues: Equatable {
+    public let shownGrams: Int?
+    public let shownFloorGrams: Int?
+    public let remainingGrams: Int?
+
+    public init(shownGrams: Int?, shownFloorGrams: Int?, remainingGrams: Int?) {
+        self.shownGrams = shownGrams
+        self.shownFloorGrams = shownFloorGrams
+        self.remainingGrams = remainingGrams
+    }
+}
+
+/// What the protein widget draws (§10.8).
+public enum PersonalIntakeWidgetState: Equatable {
+    case notSetUp
+    case nothingLogged(floorGrams: Int?)
+    case noFloor(grams: Int)
+    case below(grams: Int, floorGrams: Int, remainingGrams: Int)
+    case atFloor(grams: Int, floorGrams: Int)
+    case above(grams: Int, floorGrams: Int, overGrams: Int)
+}
+
+/// Today's protein for the widget: whole grams, the printed floor, where the figure came from and
+/// when it was read or entered. No calories, labels, app names or supplements.
+public struct PersonalIntakeReading: Codable, Equatable {
+    public enum Source: String, Codable { case appleHealth, quickAdd }
+
+    public let day: String
+    /// Shown grams; nil: not measured.
+    public let proteinGrams: Int?
+    /// Shown floor; nil: no floor set.
+    public let floorGrams: Int?
+    public let source: Source?
+    /// Nil: unknown.
+    public let readAt: Date?
+
+    /// Seconds after `readAt` at which a Health figure is drawn as stale.
+    public static let staleAfter: TimeInterval = 3 * 3600
+
+    public static func reading(day: String, progress: IntakeProteinValues, source: Source?,
+                               readAt: Date?) -> Self {
+        Self(day: day, proteinGrams: progress.shownGrams, floorGrams: progress.shownFloorGrams, source: source,
+             readAt: readAt)
+    }
+
+    /// A value is never drawn without its time: a figure with no read time, or a reading with no
+    /// source, draws the not-set-up state.
+    public var widgetState: PersonalIntakeWidgetState {
+        guard source != nil else { return .notSetUp }
+        guard let grams = proteinGrams else { return .nothingLogged(floorGrams: floorGrams) }
+        guard readAt != nil else { return .notSetUp }
+        guard let floor = floorGrams, floor > 0 else { return .noFloor(grams: grams) }
+        if grams < floor { return .below(grams: grams, floorGrams: floor, remainingGrams: max(1, floor - grams)) }
+        if grams == floor { return .atFloor(grams: grams, floorGrams: floor) }
+        return .above(grams: grams, floorGrams: floor, overGrams: grams - floor)
+    }
+
+    /// A Health figure at or after `readAt + staleAfter`. An entry made in the app is never stale.
+    public func isStale(now: Date) -> Bool {
+        guard source == .appleHealth, let readAt else { return false }
+        return now >= readAt.addingTimeInterval(Self.staleAfter)
+    }
+
+    /// When the widget should draw again without the app: now, when a Health figure turns stale (if
+    /// that is still ahead), and the next local midnight (so yesterday's figure expires). Ascending.
+    public func timelineDates(now: Date, calendar: Calendar = .current) -> [Date] {
+        var dates = [now]
+        if source == .appleHealth, let readAt {
+            let stale = readAt.addingTimeInterval(Self.staleAfter)
+            if stale > now { dates.append(stale) }
+        }
+        if let midnight = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)), midnight > now {
+            dates.append(midnight)
+        }
+        return dates.sorted()
     }
 }

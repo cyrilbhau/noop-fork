@@ -147,7 +147,8 @@ struct TodayCustomizationSheet: View {
             allItems: KeyMetric.defaultOrder
         )
         let available = TodayCardsEditorPresentation.availableCards(
-            redesign: usesRedesign, scorecardEnabled: CutScorecardFlag.shared.isEnabled)
+            redesign: usesRedesign, scorecardEnabled: CutScorecardFlag.shared.isEnabled,
+            intakeEnabled: IntakeSettings.flag.isEnabled) // Stage 3
         availableDashboardCards = available
         savedDashboardCardsRaw = dashboardCardsRaw.wrappedValue
         let cards = EditableLayoutDraft(

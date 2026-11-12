@@ -13,19 +13,19 @@ typealias CutScorecardEvaluation = (input: CutScorecardInput, result: CutScoreca
 /// The builder reads no Lab Book row and no Apple Health value by itself, and it writes nothing.
 @MainActor
 struct CutScorecardInputBuilder {
-    private static let nutritionSource = "nutrition-csv"
-    private static let proteinKey = "protein_g"
-
     private let repository: Repository
     private let provider: BodyMeasurementProvider
     private let settings: CutScorecardSettings
+    // Stage 3: protein days come from the intake funnel, never from the store directly (§9.4).
+    private let intake: IntakeProvider
     private let timeZone: () -> TimeZone
 
     init(repository: Repository, provider: BodyMeasurementProvider, settings: CutScorecardSettings,
-         timeZone: @escaping () -> TimeZone = { TimeZone.current }) {
+         intake: IntakeProvider, timeZone: @escaping () -> TimeZone = { TimeZone.current }) {
         self.repository = repository
         self.provider = provider
         self.settings = settings
+        self.intake = intake
         self.timeZone = timeZone
     }
 
@@ -64,25 +64,28 @@ struct CutScorecardInputBuilder {
     /// a set with no load has no observation and an unlogged day has no protein entry.
     func build(today: String) async -> CutScorecardInput {
         // Captured before the first suspension, so one build describes one moment.
-        let weights = readings(.weight)
-        let waists = readings(.waist)
+        // Stage 4 (stage 1 work package 1-11): the series as of `today` (ruling R44).
+        let weights = readings(.weight, asOf: today)
+        let waists = readings(.waist, asOf: today)
         let phase = settings.evaluationPhase(on: today)
         let parameters = settings.parameters
         let activeDeviceId = repository.deviceId
         let zone = timeZone()
 
         let lifts = await liftObservations(activeDeviceId: activeDeviceId, zone: zone)
-        let protein = await repository.series(key: Self.proteinKey, source: Self.nutritionSource)
+        // Stage 3: the intake provider's list. With the intake flag off it is the nutrition-csv
+        // series, value for value what was read here before.
+        await intake.refresh()
+        let protein = intake.proteinDays()
         return CutScorecardInput(
-            weights: weights, waists: waists, lifts: lifts,
-            proteinDays: protein.map { CutScorecardProteinDay(day: $0.day, grams: $0.value) },
+            weights: weights, waists: waists, lifts: lifts, proteinDays: protein,
             phase: phase, parameters: parameters, today: today)
     }
 
     /// One reading per day of the provider's series. An Apple Health value has no instant; it is
     /// the only reading of its day in the series, so the 0 it is given orders nothing.
-    private func readings(_ kind: BodyMeasurementKind) -> [CutScorecardReading] {
-        provider.series(kind, consumer: .display).map {
+    private func readings(_ kind: BodyMeasurementKind, asOf today: String) -> [CutScorecardReading] {
+        provider.series(kind, consumer: .display, asOf: today).map {
             CutScorecardReading(day: $0.day, takenAt: $0.takenAt ?? 0, value: $0.value)
         }
     }

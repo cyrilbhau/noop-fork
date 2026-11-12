@@ -115,6 +115,9 @@ struct CutScorecardPresentation: Equatable {
         var lastLabel: String
         var facts: [Fact]
         var note: String?
+        /// Stage 5: one per point, true where a personal event overlaps that week. Empty when no
+        /// shown week has one, or with no events.
+        var marked: [Bool] = []
     }
 
     struct Projection: Equatable {
@@ -148,6 +151,29 @@ struct CutScorecardPresentation: Equatable {
     var historyValue: String
     var phaseLinkValue: String
     var card: CutScorecardCard
+    // Stage 3: the judged weigh-in day the protein signal counts back from, so the intake source
+    // caption reads the same seven days as the row (§10.4). Nil with no judged week.
+    var proteinWindowAnchorDay: String? = nil
+
+    // Stage 5: the personal events noted under the verdict (specification §10.6). Display context
+    // only: the verdict and everything above are computed before and without the events.
+    struct EventNote: Equatable {
+        /// "Events this week".
+        var title: String
+        /// Events overlapping the judged week, latest start first, at most three.
+        var lines: [String]
+        /// "Earlier in the weeks behind this verdict"; nil when `earlierLines` is empty.
+        var earlierTitle: String?
+        /// Events overlapping the evidence window up to the judged week's Sunday but not the judged
+        /// week, latest start first, at most three.
+        var earlierLines: [String]
+        /// "and %lld more", counting what both cuts left out.
+        var moreText: String?
+        /// "Shown for context. Events do not change the verdict."
+        var footnote: String
+    }
+    /// Nil with no events, no judged week, no readings or an overdue weigh-in.
+    var eventNote: EventNote? = nil
 }
 
 /// What the presenter needs beyond the result and its input.
@@ -162,6 +188,9 @@ struct CutScorecardPresentationContext {
     /// The name of the stored phase the "Phase and rules" link names when the evaluation has no
     /// phase of its own: an active phase of another kind. Nil: none.
     var storedPhaseName: String?
+    /// Stage 5: the owner's personal events, for the note and the curve marks only. Never part of
+    /// the evaluation.
+    var events: [PersonalEvent] = []
 
     init(unitSystem: UnitSystem = .metric, weightSource: BodyMeasurementSource = .labBook,
          rulesNeedAttention: Bool = false, locale: Locale = AppLanguage.activeLocale,
@@ -211,6 +240,8 @@ struct WeighInHistoryRow: Equatable, Identifiable {
     /// The stored rows an edit or a delete acts on.
     var weightRow: LabMarkerRow?
     var waistRow: LabMarkerRow?
+    // Stage 4: the body scan a tap opens; nil unless the body record is on and the row is a scan's.
+    var scanId: String? = nil
 }
 
 /// The weigh-in history list, newest first.
@@ -512,7 +543,7 @@ enum CutScorecardPresenter {
                                     isDimmed: status == .overdue, opensScorecard: true)
 
         let logged = input.weights.filter { $0.day <= today }.count
-        return CutScorecardPresentation(
+        var presentation = CutScorecardPresentation(
             status: status, weekLabel: weekOfJudged, phase: header, dueBanner: dueBanner, targetBanner: targetBanner, verdict: verdict,
             rules: rules, signals: signals,
             liftFootnote: String(localized: "Compares the heaviest working set of each exercise with the week before."),
@@ -522,7 +553,49 @@ enum CutScorecardPresenter {
             logWeighInIsPrimary: isDue || weightCurve == nil || reason == .weighInOverdue || status == .noReadings,
             historyValue: logged == 1 ? String(localized: "\(logged) weigh-in") : String(localized: "\(logged) weigh-ins"),
             phaseLinkValue: header?.name ?? context.storedPhaseName ?? String(localized: "Not set up"),
-            card: card)
+            card: card,
+            // Stage 3: the protein window's anchor, the judged week's weigh-in day.
+            proteinWindowAnchorDay: result.weeks.first { $0.weekStart == judged }?.weightDay)
+        // Stage 5: the events note and the curve marks, added after everything else is decided.
+        if !context.events.isEmpty {
+            let marked = eventMarks(context.events, weeks: weeks.map(\.weekStart))
+            presentation.weight?.marked = marked
+            presentation.waist?.marked = marked
+            presentation.eventNote = eventNote(context.events, result: result, today: today, locale: context.locale)
+        }
+        return presentation
+    }
+
+    // MARK: Stage 5: personal events beside the verdict
+
+    /// One flag per shown week; empty when no shown week is covered.
+    private static func eventMarks(_ events: [PersonalEvent], weeks: [String]) -> [Bool] {
+        let slots = weeks.map { PersonalEventSlot(firstDay: $0, lastDay: CanonicalDay.adding(6, to: $0) ?? $0) }
+        let covered = PersonalEvents.coveredSlots(events: events, slots: slots)
+        return covered.contains(true) ? covered : []
+    }
+
+    /// The note under the verdict (§10.6): the judged week's events, then the earlier weeks the
+    /// verdict looked back over. None without a judged week, without readings or while overdue.
+    private static func eventNote(_ events: [PersonalEvent], result: CutScorecardResult, today: String,
+                                  locale: Locale) -> CutScorecardPresentation.EventNote? {
+        guard let judged = result.judgedWeekStart, let evidence = result.evidenceStartDay,
+              result.verdict.reason != .noReadings, result.verdict.reason != .weighInOverdue,
+              let sunday = CanonicalDay.adding(6, to: judged) else { return nil }
+        let inWeek = Array(PersonalEvents.events(overlapping: judged, sunday, in: events).reversed())
+        let earlier = Array(PersonalEvents.events(overlapping: evidence, sunday, in: events)
+            .filter { event in !inWeek.contains { $0.id == event.id } }.reversed())
+        guard !inWeek.isEmpty || !earlier.isEmpty else { return nil }
+        let limit = 3
+        let line = { (event: PersonalEvent) in PersonalEventPresenter.outsideLine(for: event, today: today, locale: locale) }
+        let hidden = max(0, inWeek.count - limit) + max(0, earlier.count - limit)
+        return CutScorecardPresentation.EventNote(
+            title: String(localized: "Events this week"),
+            lines: inWeek.prefix(limit).map(line),
+            earlierTitle: earlier.isEmpty ? nil : String(localized: "Earlier in the weeks behind this verdict"),
+            earlierLines: earlier.prefix(limit).map(line),
+            moreText: hidden > 0 ? PersonalEventPresenter.moreText(hidden) : nil,
+            footnote: String(localized: "Shown for context. Events do not change the verdict."))
     }
 
     /// The card while its first load is in flight: a skeleton, no number and no caption.
@@ -819,9 +892,16 @@ enum CutScorecardPresenter {
 
     /// The history list. `weights` and `waists` are `WeighInStore.readings(_:)`, the union across
     /// strap ids of ruling R25; `appleHealth` is the provider's Apple Health weight per day.
+    ///
+    /// `today` (stage 1 work package 1-11, ruling R44): a scan's weight row outranked by a manual
+    /// weigh-in of its week as of `today` is listed without the week's mark; nil judges every row.
+    /// `bodyRecordEnabled` (stage 4 §10.7): a scan's row is captioned as a scan, is read-only here
+    /// and opens its scan. Stage 4: `scanIds` are the stored scans' ids; a body-scan row whose scan
+    /// does not exist (§7.6) is then an ordinary Lab Book row. Nil does not check.
     static func history(weights: [LabMarkerRow], waists: [LabMarkerRow],
                         appleHealth: [(day: String, value: Double)],
-                        unitSystem: UnitSystem, locale: Locale) -> WeighInHistory {
+                        unitSystem: UnitSystem, locale: Locale, today: String? = nil,
+                        bodyRecordEnabled: Bool = false, scanIds: Set<String>? = nil) -> WeighInHistory {
         let words = Wording(unitSystem: unitSystem, locale: locale)
         var unlisted = 0
         var entries: [HistoryEntry] = []
@@ -861,8 +941,11 @@ enum CutScorecardPresenter {
 
         // The reading that represents a week is its latest weight: the newest day, a Lab Book reading
         // before an Apple Health value on one day, then the latest instant.
+        // Stage 4 (stage 1 work package 1-11, R44): an outranked scan row stays listed without the mark.
+        let markable = Set(BodyMeasurementResolver.withoutOutrankedScans(weights, asOf: today).map(\.id))
         var representative: [String: Int] = [:]
         for (index, entry) in entries.enumerated() where entry.weightKg != nil {
+            if let row = entry.weightRow, !markable.contains(row.id) { continue }
             guard let week = CutScorecard.weekStart(containing: entry.day) else { continue }
             representative[week] = index
         }
@@ -880,13 +963,19 @@ enum CutScorecardPresenter {
             }
             let stored = entry.weightRow ?? entry.waistRow
             let isLabBook = entry.source == .labBook
+            // Stage 4: while the body record is on a scan's row names the scan and opens it.
+            let scanId = bodyRecordEnabled && entry.labSource == MarkerCatalog.scanSource
+                ? stored.map { BodyScan.id(source: $0.source, takenAt: $0.takenAt) }
+                    .flatMap { scanIds?.contains($0) == false ? nil : $0 } : nil
+            let shownOrigin = scanId == nil ? origin : String(localized: "Lab Book · body scan")
             return WeighInHistoryRow(
                 id: stored.map { "\($0.deviceId)\u{1F}\($0.id)" } ?? "apple-health\u{1F}\(entry.day)",
                 day: entry.day, takenAt: entry.takenAt, dateText: words.date(entry.day),
                 weightText: entry.weightKg.map(words.weightNumber),
                 waistText: entry.waistCm.map(words.lengthNumber), source: entry.source,
-                caption: "\(lead) · \(origin)", representsWeek: represents,
-                canEdit: isLabBook, canDelete: isLabBook, weightRow: entry.weightRow, waistRow: entry.waistRow)
+                caption: "\(lead) · \(shownOrigin)", representsWeek: represents,
+                canEdit: isLabBook && scanId == nil, canDelete: isLabBook && scanId == nil,
+                weightRow: entry.weightRow, waistRow: entry.waistRow, scanId: scanId)
         }
 
         var note: String?
@@ -1315,7 +1404,9 @@ extension CutScorecardPresenter {
         case .targetToleranceKg:
             return row(decimal(words.weightValue(p.targetToleranceKg), 2), words.weightUnit, .decimal)
         case .proteinFloorGrams:
-            return row(p.proteinFloorGrams.map { decimal($0, 2) } ?? "", "g", .decimal, placeholder: notSet)
+            // Stage 3 (R45, the rules-sheet part of 1-10): a whole-number keypad; the typed value
+            // is shown as typed, never rounded.
+            return row(p.proteinFloorGrams.map { decimal($0, 2) } ?? "", "g", .whole, placeholder: notSet)
         case .proteinMinDaysPerWeek:
             return row(whole(p.proteinMinDaysPerWeek), String(localized: "of 7"), .whole)
         case .maxWeighInAgeWeeks:

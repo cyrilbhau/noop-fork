@@ -150,6 +150,11 @@ public enum NoopTheme {
         public static let m: CGFloat = 12
         public static let l: CGFloat = 16
         public static let xl: CGFloat = 24
+        /// Stage 5 event marks on a chart's time axis: the dot's diameter, the strip's height and the
+        /// least distance between two dots before the row thins them.
+        public static let chartAxisMark: CGFloat = 4
+        public static let chartAxisMarkRow: CGFloat = 8
+        public static let chartAxisMarkSpacing: CGFloat = 6
     }
 
     // MARK: - Motion (§3.5)

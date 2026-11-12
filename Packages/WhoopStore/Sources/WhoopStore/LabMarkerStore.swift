@@ -156,6 +156,31 @@ extension WhoopStore {
         }
     }
 
+    /// In one transaction: delete the rows with these ids and every copy of each, upsert `rows` by
+    /// the owner-scope rule, then re-project every touched (markerKey, day) cell over all device ids.
+    /// An id that is not stored is skipped. Returns the number of stored rows inserted or updated by
+    /// the upsert. If anything throws, nothing is changed.
+    ///
+    /// Stage 4 (body record, docs/personal/superapp/specs/stage-4.md §9.2): a scan's rows must appear,
+    /// move and disappear together, so an edit or a delete is this one call. It is composed only of
+    /// the ownership steps `deleteWithCopies`, `ownerUpsert` and `reprojectCells` and writes no SQL of
+    /// its own. The deletes run first, so the upserts are evaluated against the table they left.
+    /// No Kotlin twin, by ruling R43 of the stage 1 specification.
+    @discardableResult
+    public func replaceLabMarkers(deleteIds: [String], upsert rows: [LabMarkerRow]) async throws -> Int {
+        guard !deleteIds.isEmpty || !rows.isEmpty else { return 0 }
+        return try syncWrite { db in
+            var touched: Set<LabBookDayCell> = []
+            for id in deleteIds {
+                touched.formUnion(try deleteWithCopies(db, id: id).touched)
+            }
+            let step = try ownerUpsert(db, rows: rows)
+            touched.formUnion(step.touched)
+            try reprojectCells(db, cells: touched)
+            return step.written
+        }
+    }
+
     // MARK: - Reads
 
     /// All readings in a category, oldest first (by takenAt). Served by
@@ -240,10 +265,16 @@ extension WhoopStore {
     /// `vacated` is a number the transaction took out of the cell (a reading deleted, moved to
     /// another day, or given another value). `reprojectCells` erases a cell only while it still holds
     /// such a number, so a cell no stored row backs is never erased (ruling A11).
+    ///
+    /// `supersedes` marks a reading that arrived in the cell from outside it (a new reading, or one
+    /// moved in from another marker or day) as the latest of its marker and day (§7.2). Without it,
+    /// `reprojectCells` keeps a cell whose number a stored reading of the marker and day still holds
+    /// (rulings A14, A19), so an edit or delete of the latest reading never replaces that number.
     struct LabBookDayCell: Hashable {
         let markerKey: String
         let day: String
         var vacated: Double? = nil
+        var supersedes = false
     }
 
     /// The cells one written reading asks `reprojectCells` to re-derive (ruling A11). `before` is
@@ -260,7 +291,9 @@ extension WhoopStore {
     ///   it holds when the reading was the latest of its marker and day too.
     /// - A number that arrived in a cell: the cell, when it is missing or this reading is now the
     ///   latest of its marker and day (§7.2). An earlier reading of the day does not disturb the
-    ///   cell, so a cell holding one of two conflicting readings keeps the value already there.
+    ///   cell, so a cell holding one of two conflicting readings keeps the value already there. Only
+    ///   a reading new to the marker and day `supersedes` a held number; an edit of the latest
+    ///   reading in place leaves a cell another stored reading still backs (ruling A19).
     func projectionTouches(_ db: Database, before: LabMarkerRow?, after: LabMarkerRow?) throws -> Set<LabBookDayCell> {
         func stored(_ markerKey: String, _ day: String) throws -> Double? {
             try Double.fetchOne(db, sql: """
@@ -296,7 +329,10 @@ extension WhoopStore {
                     """, arguments: [after.markerKey, after.day])
                 derive = latest == after.id
             }
-            if derive { touched.insert(LabBookDayCell(markerKey: after.markerKey, day: after.day)) }
+            if derive {
+                let arrived = before.map { $0.markerKey != after.markerKey || $0.day != after.day } ?? true
+                touched.insert(LabBookDayCell(markerKey: after.markerKey, day: after.day, supersedes: arrived))
+            }
         }
         return touched
     }
@@ -416,16 +452,29 @@ extension WhoopStore {
     /// last reading leaves no stale value behind and a cell no stored row backs is never erased
     /// (ruling A11): it may be the last trace of a reading an earlier strap delete removed.
     ///
+    /// A cell no touch `supersedes` is left as stored while a stored reading of its marker and day
+    /// holds its number, judged after every write of the transaction (rulings A14, A19).
+    ///
     /// It takes no device id on purpose. Choosing within one id let a strap's older reading replace
     /// a later one entered under another id, and let the delete of one id's last reading of a day
     /// drop a cell another id still backed.
     func reprojectCells(_ db: Database, cells: Set<LabBookDayCell>) throws {
         var vacatedByCell: [LabBookDayCell: [Double]] = [:]
+        var superseded: Set<LabBookDayCell> = []
         for cell in cells {
             let key = LabBookDayCell(markerKey: cell.markerKey, day: cell.day)
             vacatedByCell[key, default: []] += cell.vacated.map { [$0] } ?? []
+            if cell.supersedes { superseded.insert(key) }
         }
         for (cell, vacated) in vacatedByCell {
+            if !superseded.contains(cell), try Bool.fetchOne(db, sql: """
+                SELECT EXISTS(
+                    SELECT 1 FROM metricSeries s JOIN labMarker m
+                      ON m.markerKey = s.key AND m.day = s.day AND m.value = s.value
+                    WHERE s.deviceId = ? AND s.day = ? AND s.key = ?)
+                """, arguments: [WhoopStore.labBookSourceId, cell.day, cell.markerKey]) == true {
+                continue
+            }
             // Latest NUMERIC reading for this (markerKey, day) under any device id: greatest takenAt,
             // then greatest id, with a non-null value. Matches LabBookProjection.project(.latest) on
             // numeric rows fed in (takenAt, id) order, and the body-measurement resolver's same-day rule.

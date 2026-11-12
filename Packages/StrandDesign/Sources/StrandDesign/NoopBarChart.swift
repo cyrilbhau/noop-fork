@@ -28,6 +28,8 @@ public struct NoopBarChart: View {
     public var animates: Bool
     public var accessibilityLabel: Text?
     public var valueFormat: (Double) -> String
+    /// Stage 5 event dots in a strip under the bars, placed at each bar's centre. Nil draws no strip.
+    public var axisMarks: NoopChartAxisMarks?
     private var colorFor: (Double) -> Color
 
     /// Single-colour bars.
@@ -40,12 +42,13 @@ public struct NoopBarChart: View {
         xLabels: [String] = [],
         animates: Bool = true,
         accessibilityLabel: Text? = nil,
-        valueFormat: @escaping (Double) -> String = { NoopBarChart.defaultValueString($0) }
+        valueFormat: @escaping (Double) -> String = { NoopBarChart.defaultValueString($0) },
+        axisMarks: NoopChartAxisMarks? = nil
     ) {
         self.init(
             values: values, colorForValue: { _ in color }, maxValue: maxValue, barWidth: barWidth,
             highlightedIndex: highlightedIndex, xLabels: xLabels, animates: animates,
-            accessibilityLabel: accessibilityLabel, valueFormat: valueFormat
+            accessibilityLabel: accessibilityLabel, valueFormat: valueFormat, axisMarks: axisMarks
         )
     }
 
@@ -59,9 +62,11 @@ public struct NoopBarChart: View {
         xLabels: [String] = [],
         animates: Bool = true,
         accessibilityLabel: Text? = nil,
-        valueFormat: @escaping (Double) -> String = { NoopBarChart.defaultValueString($0) }
+        valueFormat: @escaping (Double) -> String = { NoopBarChart.defaultValueString($0) },
+        axisMarks: NoopChartAxisMarks? = nil
     ) {
         self.values = values
+        self.axisMarks = axisMarks
         self.colorFor = colorForValue
         self.maxValue = maxValue
         self.barWidth = barWidth
@@ -133,6 +138,9 @@ public struct NoopBarChart: View {
                 }
                 .animation(NoopTheme.Motion.resolved(NoopTheme.Motion.bar, reduceMotion: reduceMotion), value: heights)
             }
+            if let axisMarks, !axisMarks.fractions.isEmpty {
+                NoopChartAxisMarkRow(marks: axisMarks)
+            }
             if !xLabels.isEmpty {
                 captions
             }
@@ -140,7 +148,8 @@ public struct NoopBarChart: View {
         .onAppear { if animates { grown = true } }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel ?? Text(summary))
-        .accessibilityValue(accessibilityLabel == nil ? Text(verbatim: "") : Text(summary))
+        .accessibilityValue(Text(verbatim: NoopChartAxisMarks.spokenValue(accessibilityLabel == nil ? nil : summary,
+                                                                          appending: axisMarks)))
     }
 
     /// Spring from the baseline with an 18 ms stagger; under Reduce Motion one short fade for every bar.

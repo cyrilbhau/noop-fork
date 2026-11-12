@@ -23,6 +23,12 @@ struct RedesignHealthView: View {
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     /// The coach packet flag (stage 2 specification §10.1): its row shows only while on.
     @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
+    /// Stage 3: the intake flag (stage 3 specification §10.9): its row shows only while on.
+    @ObservedObject private var intakeFlag = IntakeSettings.flag
+    // Stage 4: the body record flag (stage-4.md §10.1): its row shows only while on.
+    @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
+    // Stage 5: the personal events flag (stage 5 §10.1): its row shows only while on.
+    @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
@@ -484,9 +490,29 @@ struct RedesignHealthView: View {
                 if coachPacketFlag.isEnabled {
                     HealthCoachPacketRow(showsDivider: scorecardFlag.isEnabled)
                 }
+                // Stage 3: third in the one order (ruling A1), beneath Coach packet. Flag off: absent.
+                if intakeFlag.isEnabled {
+                    HealthIntakeRow(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled)
+                }
+                // Stage 4: fourth in the one order (ruling A1), after the rows of stages 1 to 3.
+                if bodyRecordFlag.isEnabled {
+                    BodyRecordHealthRowView(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                                || intakeFlag.isEnabled) // Integration: the divider follows the row above.
+                }
+                // Stage 5: Events, the fifth entry of the one order (ruling A1), after Body record and
+                // before Niggle log. With the flag off this row is absent.
+                if personalEventsFlag.isEnabled {
+                    NavigationLink(value: RedesignRoute.personalEvents) {
+                        PersonalEventsHealthRowLabel(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                                         || intakeFlag.isEnabled || bodyRecordFlag.isEnabled) // Integration
+                    }
+                }
                 NavigationLink(value: MoreDestination.live) {
                     NoopListRow("Live heart rate", systemImage: "waveform.path.ecg", color: NoopTheme.heart,
-                                showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled)
+                                showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                    || intakeFlag.isEnabled // Stage 3
+                                    || bodyRecordFlag.isEnabled // Stage 4: the divider follows the row above.
+                                    || personalEventsFlag.isEnabled)   // Stage 5
                 }
                 NavigationLink(value: MoreDestination.explore) {
                     NoopListRow("All metrics", systemImage: "square.grid.2x2", color: NoopTheme.hrv)
@@ -558,6 +584,21 @@ private struct HealthCoachPacketRow: View {
                         showsDivider: showsDivider)
         }
         .sheet(isPresented: $showsSheet) { CoachPacketSheet() }
+    }
+}
+
+// MARK: - Intake row
+
+// Stage 3: the Health tab's way into the intake screen (stage 3 specification §10.9). No value and
+// no caption: today's grams are shown on the card, the screen and the widget, each with its time.
+private struct HealthIntakeRow: View {
+    let showsDivider: Bool
+
+    var body: some View {
+        NavigationLink(value: RedesignRoute.intake) {
+            NoopListRow(LocalizedStringKey(IntakePresenter.settingsTitle), systemImage: DashboardCard.protein.icon,
+                        color: NoopTheme.textPrimary, showsDivider: showsDivider)
+        }
     }
 }
 

@@ -15,8 +15,11 @@ enum TodayCardsEditorPresentation {
     /// What the editor lists: every card in canonical order, without a card only the redesign
     /// draws unless this is the redesign's editor and the scorecard flag is on. With the flag off
     /// the list is the one from before the scorecard card existed.
-    static func availableCards(redesign: Bool, scorecardEnabled: Bool) -> [DashboardCard] {
-        DashboardCard.canonicalOrder.filter { !$0.isRedesignOnly || (redesign && scorecardEnabled) }
+    static func availableCards(redesign: Bool, scorecardEnabled: Bool,
+                               intakeEnabled: Bool = false) -> [DashboardCard] { // Stage 3: intakeEnabled
+        DashboardCard.canonicalOrder.filter {
+            !$0.isRedesignOnly || (redesign && ($0 == .protein ? intakeEnabled : scorecardEnabled))
+        }
     }
 
     /// What a save writes: `edited` as it is, with every withheld card (a saved card the editor does

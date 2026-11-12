@@ -17,5 +17,7 @@ struct NOOPWidgetBundle: WidgetBundle {
         SyncLiveActivity()
         PersonalStepsWidget()
         PersonalSleepWidget()
+        // Stage 3: today's protein against the floor (stage 3 specification §10.8).
+        PersonalProteinWidget()
     }
 }
