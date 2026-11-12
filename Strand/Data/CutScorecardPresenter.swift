@@ -115,6 +115,9 @@ struct CutScorecardPresentation: Equatable {
         var lastLabel: String
         var facts: [Fact]
         var note: String?
+        /// Stage 5: one per point, true where a personal event overlaps that week. Empty when no
+        /// shown week has one, or with no events.
+        var marked: [Bool] = []
     }
 
     struct Projection: Equatable {
@@ -151,6 +154,26 @@ struct CutScorecardPresentation: Equatable {
     // Stage 3: the judged weigh-in day the protein signal counts back from, so the intake source
     // caption reads the same seven days as the row (§10.4). Nil with no judged week.
     var proteinWindowAnchorDay: String? = nil
+
+    // Stage 5: the personal events noted under the verdict (specification §10.6). Display context
+    // only: the verdict and everything above are computed before and without the events.
+    struct EventNote: Equatable {
+        /// "Events this week".
+        var title: String
+        /// Events overlapping the judged week, latest start first, at most three.
+        var lines: [String]
+        /// "Earlier in the weeks behind this verdict"; nil when `earlierLines` is empty.
+        var earlierTitle: String?
+        /// Events overlapping the evidence window up to the judged week's Sunday but not the judged
+        /// week, latest start first, at most three.
+        var earlierLines: [String]
+        /// "and %lld more", counting what both cuts left out.
+        var moreText: String?
+        /// "Shown for context. Events do not change the verdict."
+        var footnote: String
+    }
+    /// Nil with no events, no judged week, no readings or an overdue weigh-in.
+    var eventNote: EventNote? = nil
 }
 
 /// What the presenter needs beyond the result and its input.
@@ -165,6 +188,9 @@ struct CutScorecardPresentationContext {
     /// The name of the stored phase the "Phase and rules" link names when the evaluation has no
     /// phase of its own: an active phase of another kind. Nil: none.
     var storedPhaseName: String?
+    /// Stage 5: the owner's personal events, for the note and the curve marks only. Never part of
+    /// the evaluation.
+    var events: [PersonalEvent] = []
 
     init(unitSystem: UnitSystem = .metric, weightSource: BodyMeasurementSource = .labBook,
          rulesNeedAttention: Bool = false, locale: Locale = AppLanguage.activeLocale,
@@ -517,7 +543,7 @@ enum CutScorecardPresenter {
                                     isDimmed: status == .overdue, opensScorecard: true)
 
         let logged = input.weights.filter { $0.day <= today }.count
-        return CutScorecardPresentation(
+        var presentation = CutScorecardPresentation(
             status: status, weekLabel: weekOfJudged, phase: header, dueBanner: dueBanner, targetBanner: targetBanner, verdict: verdict,
             rules: rules, signals: signals,
             liftFootnote: String(localized: "Compares the heaviest working set of each exercise with the week before."),
@@ -530,6 +556,46 @@ enum CutScorecardPresenter {
             card: card,
             // Stage 3: the protein window's anchor, the judged week's weigh-in day.
             proteinWindowAnchorDay: result.weeks.first { $0.weekStart == judged }?.weightDay)
+        // Stage 5: the events note and the curve marks, added after everything else is decided.
+        if !context.events.isEmpty {
+            let marked = eventMarks(context.events, weeks: weeks.map(\.weekStart))
+            presentation.weight?.marked = marked
+            presentation.waist?.marked = marked
+            presentation.eventNote = eventNote(context.events, result: result, today: today, locale: context.locale)
+        }
+        return presentation
+    }
+
+    // MARK: Stage 5: personal events beside the verdict
+
+    /// One flag per shown week; empty when no shown week is covered.
+    private static func eventMarks(_ events: [PersonalEvent], weeks: [String]) -> [Bool] {
+        let slots = weeks.map { PersonalEventSlot(firstDay: $0, lastDay: CanonicalDay.adding(6, to: $0) ?? $0) }
+        let covered = PersonalEvents.coveredSlots(events: events, slots: slots)
+        return covered.contains(true) ? covered : []
+    }
+
+    /// The note under the verdict (§10.6): the judged week's events, then the earlier weeks the
+    /// verdict looked back over. None without a judged week, without readings or while overdue.
+    private static func eventNote(_ events: [PersonalEvent], result: CutScorecardResult, today: String,
+                                  locale: Locale) -> CutScorecardPresentation.EventNote? {
+        guard let judged = result.judgedWeekStart, let evidence = result.evidenceStartDay,
+              result.verdict.reason != .noReadings, result.verdict.reason != .weighInOverdue,
+              let sunday = CanonicalDay.adding(6, to: judged) else { return nil }
+        let inWeek = Array(PersonalEvents.events(overlapping: judged, sunday, in: events).reversed())
+        let earlier = Array(PersonalEvents.events(overlapping: evidence, sunday, in: events)
+            .filter { event in !inWeek.contains { $0.id == event.id } }.reversed())
+        guard !inWeek.isEmpty || !earlier.isEmpty else { return nil }
+        let limit = 3
+        let line = { (event: PersonalEvent) in PersonalEventPresenter.outsideLine(for: event, today: today, locale: locale) }
+        let hidden = max(0, inWeek.count - limit) + max(0, earlier.count - limit)
+        return CutScorecardPresentation.EventNote(
+            title: String(localized: "Events this week"),
+            lines: inWeek.prefix(limit).map(line),
+            earlierTitle: earlier.isEmpty ? nil : String(localized: "Earlier in the weeks behind this verdict"),
+            earlierLines: earlier.prefix(limit).map(line),
+            moreText: hidden > 0 ? PersonalEventPresenter.moreText(hidden) : nil,
+            footnote: String(localized: "Shown for context. Events do not change the verdict."))
     }
 
     /// The card while its first load is in flight: a skeleton, no number and no caption.

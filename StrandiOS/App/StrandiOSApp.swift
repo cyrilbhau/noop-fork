@@ -643,6 +643,9 @@ enum DemoScreens {
             // Stage 4: the body record in each state of design/round-s4-body-record, on synthetic
             // data: bodyrecord-…, scan-…, compare-…, bench-… and labunits-… (stage-4.md §12.10).
             .init(prefixes: DemoScreenPrefixes.bodyRecord, resolve: BodyRecordDemo.screen(named:)),
+            // Stage 5: the events screens in the states of design/round-s5-events, on synthetic data:
+            // events-h1 … events-n14 (see PersonalEventsDemo.swift).
+            .init(prefixes: DemoScreenPrefixes.events, resolve: PersonalEventsDemo.screen(named:)),
         ])
         assert(registry.conflicts.isEmpty, "demo prefixes overlap: \(registry.conflicts)")
         return registry

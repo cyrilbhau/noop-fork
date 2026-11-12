@@ -19,6 +19,9 @@ enum RedesignRoute: Hashable {
     case bodyScan(id: String)
     case bodyScanCompare(earlierId: String?, laterId: String?)
     case benchmark(key: String)
+    // Stage 5: the Events screen (stage 5 §10.2), pushed from the Health tab's row. Reachable only
+    // while `noop.personalEventsEnabled` is on.
+    case personalEvents
 
     @ViewBuilder var destination: some View {
         switch self {
@@ -32,6 +35,7 @@ enum RedesignRoute: Hashable {
         case .bodyScan(let id): BodyScanDetailView(scanId: id)
         case .bodyScanCompare(let earlierId, let laterId): BodyScanCompareView(earlierId: earlierId, laterId: laterId)
         case .benchmark(let key): BenchmarkDetailView(key: key)
+        case .personalEvents: PersonalEventsView()   // Stage 5
         }
     }
 }

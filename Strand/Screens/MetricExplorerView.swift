@@ -734,6 +734,8 @@ struct MetricDetailView: View {
     /// its newest point "latest". Observed, so the wording follows the scorecard flag; every other
     /// metric, and the flag-off state, keep the base wording.
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+    /// Stage 5: personal event dots and their caption under the redesign's chart.
+    @ObservedObject private var eventMarks = PersonalEventChartSource.shared
 
     /// The page's title: the metric's, and for a body measurement with the flag on its source too.
     var pageTitle: String {
@@ -2334,6 +2336,7 @@ extension MetricDetailView {
                                    windowed: [(day: String, value: Double)]) -> some View {
         let points = redesignChartPoints(windowed)
         let labels = redesignXLabels(points)
+        let eventDays = PersonalEventChartSource.dayKeys(utcDayStarts: points.map(\.date))
         let stepsResolution = MetricDetailSteps.resolution(for: effectiveRange)
         let steps = isStepsDetail
         let format: (Double) -> String = { value in
@@ -2351,7 +2354,8 @@ extension MetricDetailView {
                         NoopBarChart(values: points.map { Optional($0.y) }, color: redesignAccent,
                                      xLabels: labels,
                                      accessibilityLabel: Text(verbatim: metric.title),
-                                     valueFormat: format)
+                                     valueFormat: format,
+                                     axisMarks: eventMarks.marks(dayKeys: eventDays, style: .bars))
                     } else {
                         NoopLineChart(points: points, color: redesignAccent, xLabels: labels,
                                       selection: $selectedChartX,
@@ -2359,10 +2363,14 @@ extension MetricDetailView {
                                           "\(redesignDayLabel(point.date, template: "EEEd")) · \(format(point.y))"
                                       },
                                       accessibilityLabel: Text(verbatim: metric.title),
-                                      valueFormat: format)
+                                      valueFormat: format,
+                                      axisMarks: eventMarks.marks(
+                                          dayKeys: eventDays, xs: points.map(\.x),
+                                          domain: NoopLineChart.xDomain(values: points.map(\.x)) ?? 0...1))
                     }
                 }
                 .frame(height: MetricRedesignLayout.chartHeight)
+                PersonalEventChartCaption(eventMarks.caption(dayKeys: eventDays))
                 if splitVo2 {
                     Text("Only the current estimation method is charted. Earlier readings used a different method.")
                         .noopFont(.caption)

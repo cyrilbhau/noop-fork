@@ -119,6 +119,8 @@ struct SettingsView: View {
     // Stage 4 (body record): the two observable flags, laboratory units first (stage-4.md §10.8).
     @ObservedObject private var labReportUnitsFlag = BodyRecordSettings.labReportUnitsFlag
     @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
+    // Stage 5 (events layer): the one observable copy of its flag. An iPhone feature as well.
+    @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
     @State private var weighInReminderStatus: WeighInReminderStatus = .off
     @State private var weighInReminderWeekday = 7
     @State private var weighInReminderMinute = 480
@@ -472,6 +474,7 @@ struct SettingsView: View {
             coachPacketCard.staggeredAppear(index: 5)
             intakeCard.staggeredAppear(index: 5) // Stage 3: third in the one order (ruling A1)
             bodyRecordCard.staggeredAppear(index: 5) // Stage 4: fourth in the one order (ruling A1).
+            personalEventsCard.staggeredAppear(index: 5)   // Stage 5: fifth in the one order (ruling A1)
             syncCard.staggeredAppear(index: 6)
             #endif
 
@@ -2047,6 +2050,23 @@ struct SettingsView: View {
         }
         .toggleStyle(.switch)
         .tint(StrandPalette.accent)
+    // Stage 5: the Events card (stage 5 §10.7), always drawn on iPhone because it holds the flag's
+    // switch; off by default. With it off there is no Health row, no mark, no caption and no note.
+    private var personalEventsCard: some View {
+        SettingsSection(
+            icon: "calendar",
+            title: "Events",
+            blurb: "Mark travel, illness, a diet break or a deload, and charts show when it happened. Off by default."
+        ) {
+            Toggle(isOn: Binding(get: { personalEventsFlag.isEnabled },
+                                 set: { PersonalEventStore.flag.set($0) })) {
+                Text("Personal events")
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textPrimary)
+            }
+            .toggleStyle(.switch)
+            .tint(StrandPalette.accent)
+        }
     }
 
     /// The feature switch moved. On: the readings the flag now admits are read, so every screen

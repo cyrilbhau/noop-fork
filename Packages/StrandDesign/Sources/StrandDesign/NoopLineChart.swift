@@ -83,6 +83,9 @@ public struct NoopLineChart: View {
     public var accessibilityLabel: Text?
     /// Formats a value for the spoken summary, so units match the call site.
     public var valueFormat: (Double) -> String
+    /// Stage 5 event dots in a strip between the plot and the caption row, inset like the plot.
+    /// Nil draws no strip; ignored when `compact`.
+    public var axisMarks: NoopChartAxisMarks?
 
     public init(
         points: [NoopChartPoint],
@@ -99,9 +102,11 @@ public struct NoopLineChart: View {
         animates: Bool = true,
         redrawOnChange: Bool = true,
         accessibilityLabel: Text? = nil,
-        valueFormat: @escaping (Double) -> String = { NoopLineChart.defaultValueString($0) }
+        valueFormat: @escaping (Double) -> String = { NoopLineChart.defaultValueString($0) },
+        axisMarks: NoopChartAxisMarks? = nil
     ) {
         self.points = points
+        self.axisMarks = compact ? nil : axisMarks
         self.color = color
         self.typicalRange = typicalRange
         self.zones = zones
@@ -233,13 +238,17 @@ public struct NoopLineChart: View {
         let plotted = Self.plottable(points)
         VStack(spacing: NoopTheme.Layout.s) {
             plot(plotted)
+            if let axisMarks, !axisMarks.fractions.isEmpty {
+                NoopChartAxisMarkRow(marks: axisMarks, leading: plotInsets.leading, trailing: plotInsets.trailing)
+            }
             if !xLabels.isEmpty {
                 NoopLineChartCaptionRow(labels: xLabels)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel ?? Text(summary(plotted)))
-        .accessibilityValue(accessibilityLabel == nil ? Text(verbatim: "") : Text(summary(plotted)))
+        .accessibilityValue(Text(verbatim: NoopChartAxisMarks.spokenValue(
+            accessibilityLabel == nil ? nil : summary(plotted), appending: axisMarks)))
     }
 
     @ViewBuilder

@@ -27,6 +27,8 @@ struct RedesignHealthView: View {
     @ObservedObject private var intakeFlag = IntakeSettings.flag
     // Stage 4: the body record flag (stage-4.md §10.1): its row shows only while on.
     @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
+    // Stage 5: the personal events flag (stage 5 §10.1): its row shows only while on.
+    @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
@@ -497,11 +499,20 @@ struct RedesignHealthView: View {
                     BodyRecordHealthRowView(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
                                                 || intakeFlag.isEnabled) // Integration: the divider follows the row above.
                 }
+                // Stage 5: Events, the fifth entry of the one order (ruling A1), after Body record and
+                // before Niggle log. With the flag off this row is absent.
+                if personalEventsFlag.isEnabled {
+                    NavigationLink(value: RedesignRoute.personalEvents) {
+                        PersonalEventsHealthRowLabel(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                                         || intakeFlag.isEnabled || bodyRecordFlag.isEnabled) // Integration
+                    }
+                }
                 NavigationLink(value: MoreDestination.live) {
                     NoopListRow("Live heart rate", systemImage: "waveform.path.ecg", color: NoopTheme.heart,
                                 showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
                                     || intakeFlag.isEnabled // Stage 3
-                                    || bodyRecordFlag.isEnabled) // Stage 4: the divider follows the row above.
+                                    || bodyRecordFlag.isEnabled // Stage 4: the divider follows the row above.
+                                    || personalEventsFlag.isEnabled)   // Stage 5
                 }
                 NavigationLink(value: MoreDestination.explore) {
                     NoopListRow("All metrics", systemImage: "square.grid.2x2", color: NoopTheme.hrv)

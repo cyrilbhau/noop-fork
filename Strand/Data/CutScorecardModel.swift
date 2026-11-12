@@ -52,6 +52,8 @@ final class CutScorecardModel: ObservableObject {
     /// Counts loads. A load publishes only while it is still the latest one.
     private var generation = 0
     private var revisionObserver: AnyCancellable?
+    // Stage 5: follows the personal events store, whose events reach the presenter's context only.
+    private var eventsObserver: AnyCancellable?
     /// The weekly reminder, told the newest weigh-in day after each result so that a week which
     /// already has its weigh-in is not reminded. Nil in tests; the app's shared model sets it.
     var reminder: WeighInReminder?
@@ -119,6 +121,8 @@ final class CutScorecardModel: ObservableObject {
         let shownLocale = locale()
         let attention = settings.rulesNeedAttention
         let storedPhaseName = settings.activePhase(on: today)?.name
+        // Stage 5: the personal events, for the note and the marks. Empty while that flag is off.
+        let events = PersonalEventStore.shared.events
         if state == .idle { state = .loading }
         // Before the snapshot is read: a change published while this load is still evaluating then
         // starts another load, instead of being missed.
@@ -143,9 +147,10 @@ final class CutScorecardModel: ObservableObject {
         let source = evaluation.result.currentWeightDay.flatMap { day in
             provider.series(.weight, consumer: .display).last { $0.day == day }?.source
         } ?? .labBook
-        let context = CutScorecardPresentationContext(
+        var context = CutScorecardPresentationContext(
             unitSystem: system, weightSource: source, rulesNeedAttention: attention, locale: shownLocale,
             storedPhaseName: storedPhaseName)
+        context.events = events   // Stage 5: never passed to the evaluation
         let presentation = CutScorecardPresenter.present(evaluation.result, input: evaluation.input, context: context)
         if state != .loaded(presentation) { state = .loaded(presentation) }
         // A weigh-in saved or deleted reaches the reminder here: every such write reloads this model.
@@ -158,6 +163,10 @@ final class CutScorecardModel: ObservableObject {
     private func followProvider() {
         guard revisionObserver == nil else { return }
         revisionObserver = provider.$revision.dropFirst().sink { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.load() }
+        }
+        // Stage 5: a saved, edited or deleted event, or the events flag moving, reloads the note.
+        eventsObserver = PersonalEventStore.shared.$revision.dropFirst().sink { [weak self] _ in
             Task { @MainActor [weak self] in await self?.load() }
         }
     }
