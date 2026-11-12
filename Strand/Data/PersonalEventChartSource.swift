@@ -60,11 +60,11 @@ final class PersonalEventChartSource: ObservableObject {
                                        locale: locale)
     }
 
-    /// The caption of a chart of consecutive day keys: the window from the first key to the last,
-    /// with the last as the reference day.
+    /// The caption of a chart of day keys: the window from the first key to the last, with the last
+    /// as the reference day. Nil exactly when `marks(dayKeys:...)` is nil, so a chart given only the
+    /// days that have a reading never captions an event that falls between them and has no dot.
     func caption(dayKeys: [String]) -> PersonalEventCaption? {
-        guard let first = dayKeys.first, let last = dayKeys.last else { return nil }
-        return caption(firstDay: first, lastDay: last, today: last)
+        windowCaption(events: store.events, slots: dayKeys.map { PersonalEventSlot(firstDay: $0, lastDay: $0) })
     }
 
     /// The day keys of chart points dated at the UTC start of their day, as the redesign's charts
@@ -81,15 +81,26 @@ final class PersonalEventChartSource: ObservableObject {
     private func resolve(slots: [PersonalEventSlot],
                          make: ([Bool], String?) -> NoopChartAxisMarks) -> NoopChartAxisMarks? {
         let events = store.events
+        guard let covered = coveredFlags(events: events, slots: slots) else { return nil }
+        return make(covered, windowCaption(events: events, slots: slots, covered: covered)?.spokenText)
+    }
+
+    /// The covered flag of each slot; nil when no slot is covered.
+    private func coveredFlags(events: [PersonalEvent], slots: [PersonalEventSlot]) -> [Bool]? {
         guard !events.isEmpty, !slots.isEmpty else { return nil }
         let covered = PersonalEvents.coveredSlots(events: events, slots: slots)
-        guard covered.contains(true) else { return nil }
+        return covered.contains(true) ? covered : nil
+    }
+
+    /// The one caption of a chart's slots, read by both its visible caption and its dots' spoken text:
+    /// the window the valid slots span, with its last day as the reference day. Nil when no slot is
+    /// covered.
+    private func windowCaption(events: [PersonalEvent], slots: [PersonalEventSlot],
+                               covered: [Bool]? = nil) -> PersonalEventCaption? {
+        guard (covered ?? coveredFlags(events: events, slots: slots)) != nil else { return nil }
         let valid = slots.filter { CanonicalDay.isValid($0.firstDay) && CanonicalDay.isValid($0.lastDay) }
-        var spoken: String?
-        if let first = valid.map(\.firstDay).min(), let last = valid.map(\.lastDay).max() {
-            spoken = PersonalEventPresenter.caption(events: events, firstDay: first, lastDay: last, today: last,
-                                                    locale: locale)?.spokenText
-        }
-        return make(covered, spoken)
+        guard let first = valid.map(\.firstDay).min(), let last = valid.map(\.lastDay).max() else { return nil }
+        return PersonalEventPresenter.caption(events: events, firstDay: first, lastDay: last, today: last,
+                                              locale: locale)
     }
 }
