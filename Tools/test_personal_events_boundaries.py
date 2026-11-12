@@ -151,6 +151,19 @@ def file_code(path: Path) -> str:
     return "\n".join(strip_comments(path.read_text(encoding="utf-8")))
 
 
+def calls_event_store_write(text: str) -> bool:
+    """True when ``text`` calls one of the events store's writes (§12.5, ruling A23).
+
+    ``add(kind:`` is the events store's own spelling. ``update(`` and ``delete(id:`` are shared with
+    other stores, so they count only in a file that names ``PersonalEventStore``.
+    """
+    if re.search(r"\.add\(\s*kind\s*:", text):
+        return True
+    names_store = "PersonalEventStore" in text
+    return names_store and (re.search(r"\.update\(", text) is not None
+                            or re.search(r"\.delete\(\s*id\s*:", text) is not None)
+
+
 def holders(pattern: str | re.Pattern[str]) -> list[str]:
     """Every product file whose code (comments blanked) contains the literal or matches the pattern."""
     found = []
@@ -237,21 +250,25 @@ class OneStoreTests(unittest.TestCase):
         self.assertEqual(holders('"noop.personalEventsEnabled"'), [STORE])
 
     def test_only_the_models_call_the_store_writes(self) -> None:
-        offenders = []
-        for f in product_files():
-            rel = relative(f)
-            if rel in (STORE, MODELS):
-                continue
-            text = file_code(f)
-            if re.search(r"\.add\(\s*kind\s*:", text) or re.search(r"\.delete\(\s*id\s*:", text):
-                offenders.append(rel)
-            if "PersonalEventStore" in text and re.search(r"\.update\(", text):
-                offenders.append(rel)
-        self.assertEqual(sorted(set(offenders)), [], "only PersonalEventsModel.swift writes events (§4.3)")
+        offenders = [relative(f) for f in product_files()
+                     if relative(f) not in (STORE, MODELS) and calls_event_store_write(file_code(f))]
+        self.assertEqual(sorted(set(offenders)), [], "only PersonalEventsModel.swift writes events (§4.3, A23)")
         models = code(MODELS)
         self.assertRegex(models, r"\.add\(\s*kind\s*:")
         self.assertRegex(models, r"\.update\(")
         self.assertRegex(models, r"\.delete\(\s*id\s*:")
+
+    def test_the_write_matcher_flags_event_store_writes_and_nothing_else(self) -> None:
+        # Ruling A23: a surface that changes an event calls the events model, never the store. The
+        # store's `update(` and `delete(id:` share their spelling with other stores' writes (stage 3's
+        # `IntakeQuickAddStore.delete(id:day:)`, stage 6's `CheckpointTimelineSettings.delete(id:)`),
+        # so they count only in a file that names the events store (§12.5: "on the store").
+        self.assertTrue(calls_event_store_write("model.add(kind: .deload, start: day)"))
+        self.assertTrue(calls_event_store_write("let s = PersonalEventStore.shared\ntry s.delete(id: x)"))
+        self.assertTrue(calls_event_store_write("let s: PersonalEventStore\ntry s.update(event)"))
+        self.assertFalse(calls_event_store_write("let deleted = settings.delete(id: checkpointId)"))
+        self.assertFalse(calls_event_store_write("try await store.delete(id: entry.id, day: entry.day)"))
+        self.assertFalse(calls_event_store_write("try await store.update(entry)"))
 
     def test_the_store_decodes_with_json_serialization_and_has_no_database(self) -> None:
         text = code(STORE)

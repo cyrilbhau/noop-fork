@@ -25,8 +25,8 @@ struct PersonalEventDraft: Equatable {
 
 /// One "Copy stored text": the raw stored list, when it was copied and when the system removes it.
 /// The text can hold private names and notes, so, like the coach packet's copy, it is never offered
-/// to another device; its lifetime is longer than the packet's, as the owner may need time to paste it
-/// somewhere safe before starting again.
+/// to another device, and the system removes it after the same ten minutes as the packet's copy
+/// (ruling A24: one local-only, expiring clipboard write).
 struct PersonalEventStoredTextCopyPlan: Equatable {
     static let lifetimeSeconds: TimeInterval = 600
     let text: String
