@@ -2050,6 +2050,8 @@ struct SettingsView: View {
         }
         .toggleStyle(.switch)
         .tint(StrandPalette.accent)
+    }
+
     // Stage 5: the Events card (stage 5 §10.7), always drawn on iPhone because it holds the flag's
     // switch; off by default. With it off there is no Health row, no mark, no caption and no note.
     private var personalEventsCard: some View {
