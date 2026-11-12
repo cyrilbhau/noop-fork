@@ -7,9 +7,6 @@ import WhoopStore
 // views live in StrandiOS; every rule they follow is held by a type in this file so that it can be
 // tested without a view, and so that the card, the Health row and the screen read one object.
 
-/// One evaluation: the input and the result that was computed from it.
-typealias CutScorecardEvaluation = (input: CutScorecardInput, result: CutScorecardResult)
-
 // MARK: - The feature flag
 
 /// The one observable copy of `noop.cutScorecardEnabled` (ruling R40). Today, Settings and the card
@@ -59,7 +56,7 @@ final class CutScorecardModel: ObservableObject {
     var reminder: WeighInReminder?
 
     /// `evaluate` nil: the stored readings, lifts, protein, phase and rules through
-    /// `CutScorecardInputBuilder`, then `CutScorecard.evaluate`.
+    /// `CutScorecardInputBuilder.evaluation(today:)`, the one evaluation the coach packet also calls.
     init(repository: Repository, provider: BodyMeasurementProvider, settings: CutScorecardSettings,
          unitSystem: @escaping () -> UnitSystem,
          now: @escaping () -> Date = { Date() },
@@ -128,7 +125,9 @@ final class CutScorecardModel: ObservableObject {
         if let evaluate {
             evaluation = await evaluate(today)
         } else {
-            evaluation = await evaluateStored(today: today)
+            evaluation = await CutScorecardInputBuilder(repository: repository, provider: provider,
+                                                        settings: settings, timeZone: timeZone)
+                .evaluation(today: today)
         }
         guard request == generation else { return }
         guard settings.isEnabled else {
@@ -156,28 +155,6 @@ final class CutScorecardModel: ObservableObject {
         revisionObserver = provider.$revision.dropFirst().sink { [weak self] _ in
             Task { @MainActor [weak self] in await self?.load() }
         }
-    }
-
-    /// The stored state as an evaluation. Before a stored cut phase's start day the settings hand
-    /// out no phase, so with no active phase the next stored cut phase is passed instead: the
-    /// result then says the phase has not started, and names its start day.
-    private func evaluateStored(today: String) async -> CutScorecardEvaluation {
-        let builder = CutScorecardInputBuilder(repository: repository, provider: provider, settings: settings,
-                                               timeZone: timeZone)
-        // Captured before the build suspends.
-        let upcoming = settings.activePhase(on: today) == nil
-            ? settings.phases.first { $0.startDay > today } : nil
-        var input = await builder.build(today: today)
-        if input.phase == nil, let upcoming, upcoming.kind == .cut {
-            input = CutScorecardInput(
-                weights: input.weights, waists: input.waists, lifts: input.lifts, proteinDays: input.proteinDays,
-                phase: CutScorecardPhase(name: upcoming.name, startDay: upcoming.startDay,
-                                         targetWeightKg: upcoming.targetWeightKg,
-                                         rateLowPercentPerWeek: upcoming.rateLowPercentPerWeek,
-                                         rateHighPercentPerWeek: upcoming.rateHighPercentPerWeek),
-                parameters: input.parameters, today: input.today)
-        }
-        return (input: input, result: CutScorecard.evaluate(input))
     }
 }
 

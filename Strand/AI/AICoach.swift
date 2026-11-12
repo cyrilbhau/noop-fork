@@ -1633,17 +1633,9 @@ final class AICoachEngine: ObservableObject {
         let last30 = Array(days.suffix(30))
         lines.append("")
         lines.append("30-day averages:")
-        lines.append("  charge: \(avgInt(last30.compactMap { $0.recovery }))"
-                     + ", effort: \(avgOne(last30.compactMap { $0.strain }))"
-                     + ", sleep: \(avgSleepHours(last30))h"
-                     + ", HRV: \(avgInt(last30.compactMap { $0.avgHrv })) ms"
-                     + ", RHR: \(avgInt(last30.compactMap { $0.restingHr.map(Double.init) })) bpm")
+        lines.append("  " + CoachDayFormat.primaryAveragesLine(last30, style: .coachContext))
         // Additional vitals when present (#124, the coach used to see only recovery/strain/sleep/HRV/RHR).
-        lines.append("  SpO2: \(avgInt(last30.compactMap { $0.spo2Pct }))%"
-                     + ", respiration: \(avgOne(last30.compactMap { $0.respRateBpm }))/min"
-                     + ", skin-temp deviation: \(avgOne(last30.compactMap { $0.skinTempDevC }))°C"
-                     + ", steps: \(avgInt(last30.compactMap { $0.steps.map(Double.init) }))/day"
-                     + ", active energy: \(avgInt(last30.compactMap { $0.activeKcalEst }))kcal/day")
+        lines.append("  " + CoachDayFormat.vitalsAveragesLine(last30))
 
         return lines.joined(separator: "\n")
     }
@@ -1681,66 +1673,22 @@ final class AICoachEngine: ObservableObject {
     /// handed the day list — so without this the formatter has no seam and the Swift half of a change
     /// with fifteen Kotlin tests would ship untested.
     func dayLine(_ d: DailyMetric) -> String {
-        var parts: [String] = [d.day + ":"]
-        parts.append("charge " + (d.recovery.map { "\(Int($0.rounded()))" } ?? "—"))
-        parts.append("effort " + (d.strain.map { String(format: "%.1f", $0) } ?? "—"))
-        parts.append("rest " + (d.totalSleepMin.map { String(format: "%.1fh", $0 / 60) } ?? "—"))
-        // The stage breakdown and efficiency, which the coach could not see at all: a user asked why it
-        // said it had no access to sleep stages, and it was answering honestly — `rest 7.8h` was every
-        // word it got about a night. These four sit on the SAME DailyMetric the line already reads, so
-        // nothing new is plumbed; they were simply never included. (#124 widened this context once
-        // before, for the same reason.)
-        //
-        // Always emitted, "—" when absent, like every other field here. A night with no staging then
-        // says so rather than going quiet, which matters more than line length: the alternative — only
-        // appending stages when present — gives the model a schema that changes shape between days and
-        // invites it to read a missing field as a zero.
-        parts.append("deep " + hoursOrDash(d.deepMin))
-        parts.append("REM " + hoursOrDash(d.remMin))
-        parts.append("light " + hoursOrDash(d.lightMin))
-        parts.append("eff " + efficiencyPercentOrDash(d.efficiency))
-        parts.append("HRV " + (d.avgHrv.map { "\(Int($0.rounded()))ms" } ?? "—"))
-        parts.append("RHR " + (d.restingHr.map { "\($0)bpm" } ?? "—"))
-        return parts.joined(separator: ", ")
-    }
-
-    /// Minutes as "1.4h", or "—" when the night has no value. Matches the `rest` field's format so a
-    /// stage total and the total it is part of read on the same scale.
-    private func hoursOrDash(_ minutes: Double?) -> String {
-        minutes.map { String(format: "%.1fh", $0 / 60) } ?? "—"
+        // The words and formats of the line live in `CoachDayFormat`, which the coach packet shares:
+        // the stage breakdown and efficiency are always emitted, "—" when absent, like every other
+        // field, so the model is never handed a schema that changes shape between days and never
+        // reads a missing field as a zero (#124). The Coach style reproduces this line byte for byte.
+        CoachDayFormat.dayLine(d, style: .coachContext)
     }
 
     /// Efficiency as a percentage, NORMALISING the stored value first.
     ///
     /// `DailyMetric.efficiency` is not reliably a 0–1 fraction: it "arrives as % on some import paths",
-    /// which `SleepView` and `StagesCard` each guard against inline with this same `> 1.5` test. A bare
+    /// which `SleepView` and `StagesCard` each guard against inline with the same `> 1.5` test. A bare
     /// `* 100` would therefore hand the coach "eff 9400%" for an imported night — and a model given a
-    /// nonsense number reasons about it confidently rather than ignoring it.
-    ///
-    /// 1.5 rather than 1.0 because a genuine fraction can exceed 1.0 only by floating-point noise, while
-    /// a genuine percentage is 30–100 and nowhere near the threshold. Android's two copies of this guard
-    /// split at 1.0 instead, which is a pre-existing divergence and not this change's to settle.
+    /// nonsense number reasons about it confidently rather than ignoring it. The rule itself is
+    /// `CoachDayFormat.efficiencyPercent`; this stays as the seam the tests call.
     func efficiencyPercentOrDash(_ raw: Double?) -> String {
-        guard var e = raw, e > 0 else { return "—" }
-        if e > 1.5 { e /= 100 }
-        guard e > 0, e <= 1 else { return "—" }
-        return "\(Int((e * 100).rounded()))%"
-    }
-
-    private func avgOne(_ xs: [Double]) -> String {
-        guard !xs.isEmpty else { return "—" }
-        return String(format: "%.1f", xs.reduce(0, +) / Double(xs.count))
-    }
-
-    private func avgInt(_ xs: [Double]) -> String {
-        guard !xs.isEmpty else { return "—" }
-        return "\(Int((xs.reduce(0, +) / Double(xs.count)).rounded()))"
-    }
-
-    private func avgSleepHours(_ days: [DailyMetric]) -> String {
-        let mins = days.compactMap { $0.totalSleepMin }
-        guard !mins.isEmpty else { return "—" }
-        return String(format: "%.1f", (mins.reduce(0, +) / Double(mins.count)) / 60)
+        CoachDayFormat.efficiencyPercent(raw)
     }
 
     private func dateString(_ ts: Int) -> String {

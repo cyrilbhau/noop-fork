@@ -2,6 +2,9 @@ import Foundation
 import StrandAnalytics
 import WhoopStore
 
+/// One evaluation: the input and the result that was computed from it.
+typealias CutScorecardEvaluation = (input: CutScorecardInput, result: CutScorecardResult)
+
 /// Gathers everything `CutScorecard.evaluate` reads (specification §6.3) and is its production
 /// caller.
 ///
@@ -30,6 +33,29 @@ struct CutScorecardInputBuilder {
     /// protein days, phase and rules.
     func evaluate(today: String) async -> CutScorecardResult {
         CutScorecard.evaluate(await build(today: today))
+    }
+
+    /// The stored state as an evaluation, with an upcoming cut phase passed when none is active.
+    ///
+    /// Before a stored cut phase's start day the settings hand out no phase, so with no active
+    /// phase the next stored cut phase is passed instead: the result then says the phase has not
+    /// started, and names its start day. The scorecard screens and the coach packet both call
+    /// this, so they judge one input.
+    func evaluation(today: String) async -> CutScorecardEvaluation {
+        // Captured before the build suspends.
+        let upcoming = settings.activePhase(on: today) == nil
+            ? settings.phases.first { $0.startDay > today } : nil
+        var input = await build(today: today)
+        if input.phase == nil, let upcoming, upcoming.kind == .cut {
+            input = CutScorecardInput(
+                weights: input.weights, waists: input.waists, lifts: input.lifts, proteinDays: input.proteinDays,
+                phase: CutScorecardPhase(name: upcoming.name, startDay: upcoming.startDay,
+                                         targetWeightKg: upcoming.targetWeightKg,
+                                         rateLowPercentPerWeek: upcoming.rateLowPercentPerWeek,
+                                         rateHighPercentPerWeek: upcoming.rateHighPercentPerWeek),
+                parameters: input.parameters, today: input.today)
+        }
+        return (input: input, result: CutScorecard.evaluate(input))
     }
 
     /// Everything `CutScorecard.evaluate` reads, for `today`.

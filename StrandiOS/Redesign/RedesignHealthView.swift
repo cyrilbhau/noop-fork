@@ -21,6 +21,8 @@ struct RedesignHealthView: View {
     @AppStorage(UnitPrefs.systemKey) private var unitSystemRaw = UnitSystem.metric.rawValue
     /// The scorecard flag (stage 1 specification §17, placement P1): its row shows only while on.
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+    /// The coach packet flag (stage 2 specification §10.1): its row shows only while on.
+    @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
@@ -477,9 +479,14 @@ struct RedesignHealthView: View {
                     HealthScorecardRow(model: CutScorecardModel.live(repository: repo, profile: profile),
                                        refreshSequence: repo.refreshSeq)
                 }
+                // Second in the one order (ruling A1), directly beneath Scorecard. With the flag off
+                // this row is absent too.
+                if coachPacketFlag.isEnabled {
+                    HealthCoachPacketRow(showsDivider: scorecardFlag.isEnabled)
+                }
                 NavigationLink(value: MoreDestination.live) {
                     NoopListRow("Live heart rate", systemImage: "waveform.path.ecg", color: NoopTheme.heart,
-                                showsDivider: scorecardFlag.isEnabled)
+                                showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled)
                 }
                 NavigationLink(value: MoreDestination.explore) {
                     NoopListRow("All metrics", systemImage: "square.grid.2x2", color: NoopTheme.hrv)
@@ -533,6 +540,24 @@ private struct HealthScorecardRow: View {
                         detail: CutScorecardPresenter.rowValue(model.card), showsDivider: false)
         }
         .task(id: refreshSequence) { await model.load() }
+    }
+}
+
+// MARK: - Coach packet row
+
+/// The Health tab's way into the coach packet (stage 2 specification §10.1). It presents the packet
+/// sheet; nothing is assembled until the sheet opens. Mounted only while the flag is on.
+private struct HealthCoachPacketRow: View {
+    let showsDivider: Bool
+    @State private var showsSheet = false
+
+    var body: some View {
+        Button { showsSheet = true } label: {
+            NoopListRow(LocalizedStringKey(CoachPacketPresenter.title), systemImage: "doc.plaintext",
+                        color: NoopTheme.textPrimary, detail: CoachPacketPresenter.rowDetail,
+                        showsDivider: showsDivider)
+        }
+        .sheet(isPresented: $showsSheet) { CoachPacketSheet() }
     }
 }
 

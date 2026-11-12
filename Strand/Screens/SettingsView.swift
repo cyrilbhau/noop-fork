@@ -114,6 +114,8 @@ struct SettingsView: View {
     /// Stage 1 (weigh-in and scorecard): the one observable copy of the feature flag, and the
     /// reminder row's state. The scorecard is an iPhone feature; macOS Settings does not show it.
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
+    /// Stage 2 (coach packet): the one observable copy of its flag. An iPhone feature as well.
+    @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
     @State private var weighInReminderStatus: WeighInReminderStatus = .off
     @State private var weighInReminderWeekday = 7
     @State private var weighInReminderMinute = 480
@@ -464,6 +466,7 @@ struct SettingsView: View {
             featuresCard.staggeredAppear(index: 5)
             #if os(iOS)
             scorecardCard.staggeredAppear(index: 5)
+            coachPacketCard.staggeredAppear(index: 5)
             syncCard.staggeredAppear(index: 6)
             #endif
 
@@ -1972,6 +1975,27 @@ struct SettingsView: View {
         // A weigh-in or a Lab Book edit changes the body-metrics rows above without any other
         // state of this screen moving. The revision moves only while the feature is on.
         .onReceive(model.bodyMeasurements.$revision) { bodyMeasurementRevision = $0 }
+    }
+
+    /// The coach packet switch (stage 2 specification §10.3), directly after the Scorecard card
+    /// (ruling A1). Always drawn on iPhone, because it holds the flag's switch; off by default, and
+    /// with it off there is no row, no toolbar item and no sheet. No reminder and no notification.
+    /// Every string comes from `CoachPacketPresenter`.
+    private var coachPacketCard: some View {
+        SettingsSection(
+            icon: "doc.plaintext",
+            title: LocalizedStringKey(CoachPacketPresenter.title),
+            blurb: LocalizedStringKey(CoachPacketPresenter.settingsBlurb)
+        ) {
+            Toggle(isOn: Binding(get: { coachPacketFlag.isEnabled },
+                                 set: { CoachPacketSettings().isEnabled = $0 })) {
+                Text(verbatim: CoachPacketPresenter.title)
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textPrimary)
+            }
+            .toggleStyle(.switch)
+            .tint(StrandPalette.accent)
+        }
     }
 
     /// The feature switch moved. On: the readings the flag now admits are read, so every screen
