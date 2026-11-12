@@ -108,7 +108,10 @@ enum PersonalEventPresenter {
 
     static func kindName(_ kind: PersonalEventKind, locale: Locale) -> String {
         switch kind {
-        case .travel: return String(localized: "Travel")
+        // Its own key: the catalogue's "Travel" is the lower-case confounder word of the skin
+        // temperature cards ("travel"), not a kind name at the start of a line.
+        case .travel: return String(localized: "personalEvent.kind.travel", defaultValue: "Travel",
+                                    comment: "A personal event's kind, as a title")
         case .illness: return String(localized: "Illness")
         case .dietBreak: return String(localized: "Diet break")
         case .deload: return String(localized: "Deload")
