@@ -42,7 +42,7 @@ enum CutStressPresenter {
     static let weeksWithoutPhase = 12
 
     /// The screen's title and the scorecard's link.
-    static var title: String { String(localized: "Recovery context") }
+    static var title: String { Stage6SettingsText.recoveryContextTitle }
 
     static func present(_ result: CutStressResult, restingHrBaseline: BaselineState?, hrvBaseline: BaselineState?,
                         firstWeekStart: String?, locale: Locale) -> CutStressPresentation {

@@ -304,6 +304,77 @@ enum NiggleLogPresenter {
         String(localized: "Write it in your own words. The app shows it back to you and does nothing else with it.")
     }
 
+    // MARK: Screen labels
+
+    static var title: String { String(localized: "Niggle log") }
+    static var professionalTitle: String { String(localized: "Your rule for seeing a professional") }
+    static var openTitle: String { String(localized: "Open") }
+    static var pausedTitle: String { String(localized: "Paused by your coach") }
+    static var observationsTitle: String { String(localized: "Observations") }
+    static var resolvedTitle: String { String(localized: "Resolved") }
+    static var resumedTitle: String { String(localized: "Resumed") }
+    static var logNiggleTitle: String { String(localized: "Log a niggle") }
+    static var setUpRulesTitle: String { String(localized: "Set up your rules") }
+    static var pauseExerciseTitle: String { String(localized: "Pause an exercise") }
+    static var addUpdateTitle: String { String(localized: "Add update") }
+    static var markResolvedTitle: String { String(localized: "Mark resolved") }
+    static var reopenTitle: String { String(localized: "Reopen") }
+    static var addRuleTitle: String { String(localized: "Add a rule") }
+    static var markResumedTitle: String { String(localized: "Mark resumed") }
+    static var editTitle: String { String(localized: "Edit") }
+    static var deleteTitle: String { String(localized: "Delete") }
+    static var updatesTitle: String { String(localized: "Updates") }
+    static var rulesTitle: String { String(localized: "Your rules") }
+    static var ruleTitle: String { String(localized: "Rule") }
+    static var editPauseTitle: String { String(localized: "Edit pause") }
+    static var notUsedTag: String { String(localized: "not used") }
+    static var firstUseText: String {
+        String(localized: "A dated record of a complaint: where, what kind, and how it changes. Labels come only from rules you write.")
+    }
+    static var deleteEntryTitle: String { String(localized: "Delete this entry?") }
+    static var deleteEntryDetail: String {
+        String(localized: "Paused exercises linked to it stay in your list, without the link.")
+    }
+    static var deleteRuleTitle: String { String(localized: "Delete this rule?") }
+    static var deleteRuleDetail: String { String(localized: "Complaints are labelled again without it.") }
+    static var deletePauseTitle: String { String(localized: "Delete this pause?") }
+    static var deletePauseDetail: String { String(localized: "The niggle it is linked to is not changed.") }
+
+    // MARK: Sheet messages (§10.4 to §10.6)
+
+    /// Why a niggle draft cannot be saved; nil when it can.
+    static func draftIssue(_ draft: NiggleDraft) -> String? {
+        if draft.locationIsEmpty { return String(localized: "Enter a location.") }
+        if draft.locationIsTooLong { return String(localized: "A location can be up to 60 characters.") }
+        return nil
+    }
+
+    /// Why a rule cannot be saved; nil when it can.
+    static func ruleIssue(_ rule: StoredTriageRule) -> String? {
+        if rule.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return String(localized: "Enter a label.") }
+        if let from = rule.fromDay, from < 1 { return String(localized: "From day starts at 1.") }
+        if let through = rule.throughDay, through < (rule.fromDay ?? 1) {
+            return String(localized: "Through day cannot be before from day.")
+        }
+        return nil
+    }
+
+    /// Why a paused-exercise draft cannot be saved; nil when it can.
+    static func pauseIssue(_ draft: PausedExerciseDraft) -> String? {
+        if draft.exerciseIsEmpty { return String(localized: "Enter an exercise.") }
+        if draft.reasonIsEmpty { return String(localized: "Enter a reason.") }
+        return nil
+    }
+
+    /// A refused write: the sheet stays open with its values.
+    static var couldNotSave: String { String(localized: "Could not save.") }
+    /// "The list holds up to 20 rules".
+    static var rulesLimitText: String { String(localized: "The list holds up to \(NiggleLogSettings.maxRules) rules") }
+    /// "The log holds up to 100 paused exercises".
+    static var pausedLimitText: String {
+        String(localized: "The log holds up to \(NiggleLogSettings.maxPaused) paused exercises")
+    }
+
     // MARK: Words
 
     static func actionText(_ action: NiggleAction, locale: Locale) -> String {
@@ -432,5 +503,21 @@ enum Stage6DayPicker {
     /// The day key `date` falls on in `timeZone`.
     static func day(for date: Date, timeZone: TimeZone) -> String {
         LocalDayWindows(timeZone: timeZone).dayKey(for: date)
+    }
+}
+
+/// The one-line descriptions of the three stage 6 Settings cards (§10.1, §11), and the Recovery
+/// context title as the Settings card and the scorecard link show it (neither names the cut-stress
+/// types beyond their flag, §12.4).
+enum Stage6SettingsText {
+    static var recoveryContextTitle: String { String(localized: "Recovery context") }
+    static var niggleLogBlurb: String {
+        String(localized: "Record a complaint and see it against your own rules. Off by default.")
+    }
+    static var recoveryContextBlurb: String {
+        String(localized: "Weekly resting heart rate and HRV beside the scorecard. Not a score.")
+    }
+    static var timelineBlurb: String {
+        String(localized: "Phases, checkpoints and your estimate in one list.")
     }
 }

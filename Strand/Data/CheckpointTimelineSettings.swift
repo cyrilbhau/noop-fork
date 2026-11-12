@@ -68,6 +68,8 @@ final class CheckpointTimelineSettings {
 
     static let maxCheckpoints = 200
     static let maxTitle = 60
+    /// Stage 1's weight range, `WeighInStore.weightRangeKg` (a main-actor type), for a waypoint (§9.3).
+    static let waypointRangeKg: ClosedRange<Double> = 30...250
     /// Every key a stored element may carry. An element with any other key (a target weight among
     /// them: a weight on a checkpoint is never a target) is unreadable (§9.3).
     private static let storedKeys: Set<String> = ["approximate", "category", "day", "done", "id", "phaseStartDay",
@@ -103,7 +105,7 @@ final class CheckpointTimelineSettings {
         if isWaypoint, checkpoint.waypointWeightKg == nil { return .weightMissing }
         if !isWaypoint, checkpoint.waypointWeightKg != nil { return .weightNotAllowed }
         if isWaypoint, let weight = checkpoint.waypointWeightKg {
-            guard weight.isFinite, WeighInStore.weightRangeKg.contains(weight) else { return .weightOutOfRange }
+            guard weight.isFinite, waypointRangeKg.contains(weight) else { return .weightOutOfRange }
             if CheckpointTimeline.waypointIssue(weightKg: weight, on: checkpoint.day, phases: timelinePhases(phases)) != nil {
                 return .waypointAtOrBeyondTarget
             }

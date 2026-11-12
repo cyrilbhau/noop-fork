@@ -72,6 +72,16 @@ final class NiggleLogModel: ObservableObject {
                                          rulesNeedAttention: s.rulesNeedAttention, today: s.today, locale: s.locale)
     }
 
+    /// The Health tab's row over the app's own store: nil while the flag is off, and no list is
+    /// read then.
+    static func liveHealthRow(settings: NiggleLogSettings = NiggleLogSettings(), now: Date = Date(),
+                              timeZone: TimeZone = .current) -> NiggleLogHealthRow? {
+        guard settings.isEnabled else { return nil }
+        return NiggleLogPresenter.healthRow(enabled: true, entries: settings.entries,
+                                            today: LocalDayWindows(timeZone: timeZone).dayKey(for: now),
+                                            locale: AppLanguage.activeLocale)
+    }
+
     // MARK: What the sheets edit
 
     /// The stored entry, for an edit.

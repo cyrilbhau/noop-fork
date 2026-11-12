@@ -55,9 +55,11 @@ struct TimelineEventSource {
         self.events = events
     }
 
-    /// State from `store.isEnabled`, events from the synchronous property `store.events`.
-    static func live(store: PersonalEventStore = .shared) -> TimelineEventSource {
-        TimelineEventSource(state: { store.isEnabled ? .on : .off }, events: { store.events })
+    /// State from `store.isEnabled`, events from the synchronous property `store.events`. Nil: the
+    /// shared store.
+    static func live(store: PersonalEventStore? = nil) -> TimelineEventSource {
+        let store = store ?? .shared
+        return TimelineEventSource(state: { store.isEnabled ? .on : .off }, events: { store.events })
     }
 
     /// Stage 5 not in this build.

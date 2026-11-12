@@ -143,6 +143,9 @@ final class CheckpointTimelineModel: ObservableObject {
         await load()
     }
 
+    /// The stored checkpoint with this id, as the latest load read it.
+    func checkpoint(id: String) -> StoredCheckpoint? { checkpoints.first { $0.id == id } }
+
     /// The stored phases a save is checked against: none while they cannot be read (§9.3).
     var phasesForChecks: [CutScorecardStoredPhase] {
         scorecardSettings.phasesNeedAttention ? [] : scorecardSettings.phases
@@ -162,6 +165,11 @@ struct CheckpointDraft: Equatable {
         CheckpointDraft(checkpoint: StoredCheckpoint(id: "", title: "", category: .other, day: today, approximate: false,
                                                      done: false, waypointWeightKg: nil, phaseStartDay: nil),
                         weightText: "")
+    }
+
+    /// The phase a new target date is attached to by default: the phase in force today, else the first.
+    static func defaultPhaseStartDay(phases: [CutScorecardStoredPhase], today: String) -> String? {
+        phases.last { $0.startDay <= today }?.startDay ?? phases.first?.startDay
     }
 
     /// The checkpoint as it would be saved: the weight in kilograms on a waypoint only, the phase on a
