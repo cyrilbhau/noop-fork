@@ -40,8 +40,10 @@ WATCH_GLOB = "NOOPWatch*"
 #   or the Lab Book projection. `waist` is scanned as well: a waist series read would be the same bypass.
 # weight-spark: `sparkValues("weight"` and its variants.
 # lab-marker-key: a Lab Book read or write addressed to the `weight` or `waist` marker. Not in the
-#   specification's list; added because ruling R25 makes the union across strap ids part of the
-#   funnel, and a direct `labMarkers(deviceId:markerKey:)` read would see one id only.
+#   specification's list; added because rulings R25 and R42 make the read across every device id
+#   part of the funnel (`LabBookRows`, labbook-ownership.md §6.2), and a direct
+#   `labMarkers(deviceId:markerKey:)` read would see one id only. Any direct Lab Book read, whatever
+#   its marker, is policed by ``test_lab_book_single_read_path.py``.
 # apple-daily-weight: a `.weightKg` member read in a file that handles `AppleDaily` rows, whose
 #   receiver is not `profile` (those are already profile-weight). See LIMITS.
 LINE_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -314,6 +316,9 @@ class BodyMeasurementSingleResolverTests(unittest.TestCase):
 #   `BodyMeasurementCorrection.route(for:policy:)`, which returns that page only with the flag off.
 # lab-category-read: Lab Book rows read by category, which carries the `weight` and `waist` rows
 #   past the `lab-marker-key` pattern (the Coach roll-up, listed under LIMITS above until R41).
+#   Since ruling R42 the two allowed readers spell it `LabBookRows.all(` and
+#   `LabBookRows.category(` (labbook-ownership.md §6.2); the per-id spelling is still matched, so a
+#   new reader written either way is an occurrence.
 # newest-as-latest: a page of ONE source's series calling its newest point "Latest". Scanned only in
 #   the source pages; the wording comes from `BodyMeasurementSourcePage`. It constrains the labels a
 #   weight or waist series can reach: the generic stat labels of a metric page (`"Latest"`,
@@ -322,7 +327,8 @@ class BodyMeasurementSingleResolverTests(unittest.TestCase):
 #   of either; `NOT_A_BODY_SERIES` lists those strings.
 R41_PATTERNS: dict[str, re.Pattern[str]] = {
     "weight-metric-route": re.compile(r"\.metric\(\s*\"(?:weight|waist)\"\s*\)"),
-    "lab-category-read": re.compile(r"\blabMarkers\([^)]*\bcategory:"),
+    "lab-category-read": re.compile(
+        r"\blabMarkers\([^)]*\bcategory:|\bLabBookRows\s*\.\s*(?:all|category)\("),
     "newest-as-latest": re.compile(r"\"Latest(?: reading)?\"|, latest \\\("),
 }
 
@@ -349,7 +355,8 @@ R41_SCOPE: dict[str, tuple[str, ...] | None] = {
 # File -> (the R41 patterns it may contain, the reason, a spelling the file must ALSO contain).
 R41_ALLOWLIST: dict[str, tuple[frozenset[str], str, str | None]] = {
     "Strand/Screens/LabBookView.swift":
-        (frozenset({"lab-category-read"}), "the Lab Book list: a labelled source page", None),
+        (frozenset({"lab-category-read"}), "the Lab Book list: a labelled source page, read through LabBookRows",
+         None),
     "Strand/AI/AICoach.swift":
         (frozenset({"lab-category-read"}),
          "the Coach roll-up of the OTHER markers; weight and waist come from the provider",
@@ -431,7 +438,10 @@ class OneNumberPerVariableScanTests(unittest.TestCase):
             "weight-metric-route": ['sparkKey: "weight", route: .metric("weight"), opensScorecard: isWeighIn)',
                                     'path.append(TabRoute.metric( "waist" ))'],
             "lab-category-read": [
-                "let rows = (try? await store.labMarkers(deviceId: repo.deviceId, category: category.rawValue)) ?? []"],
+                "let rows = (try? await store.labMarkers(deviceId: repo.deviceId, category: category.rawValue)) ?? []",
+                # The same two reads as labbook-ownership.md §6.2 spells them.
+                "let rows = await LabBookRows.category(category.rawValue, store: store, activeDeviceId: repo.deviceId)",
+                "markers = await LabBookRows.all(store: store, activeDeviceId: repo.deviceId)"],
             "newest-as-latest": ['StatGridItem("Latest", value: latestValue?.value, unit: latestValue?.unit),',
                                  'Text("Latest reading").strandOverline()',
                                  r'.accessibilityLabel("\(displayName(for: key)), latest \(latestLabel(latest, key: key))")'],
@@ -450,6 +460,8 @@ class OneNumberPerVariableScanTests(unittest.TestCase):
                 self.assertTrue(r41_matches(name, line), f"{name} must match: {line}")
         for line in ['route: .metric("steps")', "case .metric(let key):", ".metricDetail(key: \"weight\")",
                      'store.labMarkers(deviceId: id, markerKey: key)', 'private enum Aggregate { case latest, mean }',
+                     'await LabBookRows.marker(kind.markerKey, store: store, activeDeviceId: activeDeviceId)',
+                     'try await LabBookRows.stored(marker: kind.markerKey, store: store)',
                      'String(localized: "latest")', 'StatGridItem("Lowest", value: low.value)',
                      # The steps chart's VoiceOver summaries: one named metric, not a body measurement.
                      r'return String(localized: "Steps chart, \(buckets.count) daily \(noun), latest \(latest.mean) steps, \(period)")',

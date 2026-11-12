@@ -1284,12 +1284,16 @@ final class AICoachEngine: ObservableObject {
         if let store = await repo.storeHandle() {
             var markerSummaries: [String] = []
             for category in LabMarkerCategory.allCases {
-                let rows = (try? await store.labMarkers(deviceId: repo.deviceId, category: category.rawValue)) ?? []
+                // Ruling R42: the readings are the owner's, under whichever strap id they were entered,
+                // so the roll-up reads the one Lab Book path and not the active id alone.
+                let rows = await LabBookRows.category(category.rawValue, store: store, activeDeviceId: repo.deviceId)
                 let byKey = Dictionary(grouping: rows, by: { $0.markerKey })
                 for (key, kRows) in byKey {
                     // The Lab Book's own weight and waist rows are one source of the value stated below.
                     if currentBody != nil, BodyMeasurementKind(markerKey: key) != nil { continue }
-                    guard let latest = kRows.sorted(by: { $0.takenAt < $1.takenAt }).last else { continue }
+                    // Greatest instant, then greatest id: the reading the projection and the
+                    // resolver name when two share an instant.
+                    guard let latest = kRows.max(by: { ($0.takenAt, $0.id) < ($1.takenAt, $1.id) }) else { continue }
                     let name = MarkerCatalog.definition(for: key)?.displayName ?? key
                     let value = latest.value.map { "\(LabBookFormat.value($0, key: key)) \(latest.unit)" } ?? latest.valueText ?? "—"
                     markerSummaries.append("\(name) \(value)")

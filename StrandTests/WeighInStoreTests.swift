@@ -37,8 +37,8 @@ import StrandAnalytics
 //
 //         func delete(_ row: LabMarkerRow) async throws
 //
-//         /// Every weight (or waist) Lab Book row across the ids of ruling R25, de-duplicated,
-//         /// oldest first.
+//         /// Every weight (or waist) Lab Book row under every device id present in `labMarker`
+//         /// (ruling R42, labbook-ownership.md §6.2), a set of copies listed once, oldest first.
 //         func readings(_ kind: BodyMeasurementKind) async -> [LabMarkerRow]
 //
 //         /// Test seam (may be DEBUG-only). Called during a date edit after the new row is inserted
@@ -60,8 +60,11 @@ import StrandAnalytics
 //  6. A date edit writes the new row under the SAME device id as the row it replaces (so no reading
 //     changes id by being edited), with a fresh id and the `day` of the new instant in `timeZone()`,
 //     and keeps the old row's `source`, `note` and `referenceText`.
-//  7. `readings` returns rows in the union of R25 only. A row under an id that is neither the active
-//     id, nor a registered WHOOP, nor the canonical id is not returned (and is never touched).
+//  7. `readings` returns rows under EVERY device id present in `labMarker`, registered or not, any
+//     brand (ruling R42 and labbook-ownership.md, which supersede the union of R25 and R29). Rows
+//     equal in every column except `id`, `deviceId` and `day` are one reading, listed once with the
+//     active id's row standing for it; rows at one instant that differ in content are both listed.
+//     Reading never writes to, re-keys or removes a row.
 //  8. After every successful write the store calls `repository.refresh()` and then
 //     `provider?.refresh()`.
 //
@@ -901,8 +904,10 @@ final class WeighInStoreTests: XCTestCase {
         XCTAssertEqual(all.map(\.deviceId), ["my-whoop", "whoop-old", "whoop-new"])
     }
 
-    /// A duplicate across ids (same marker, instant and source) is listed once, and the copy listed is
-    /// the active id's. Both copies stay stored.
+    /// Superseded by ruling R42 and labbook-ownership.md §7.1: only rows equal in content are one
+    /// reading. A copy across ids (same marker, instant, source, value and every other column but
+    /// `id`, `deviceId` and `day`) is listed once, and the row listed is the active id's. Both copies
+    /// stay stored. Two rows at one instant with different values are two readings, both listed.
     func testDuplicateAcrossIdsCollapsesWithTheActiveCopyWinning() async throws {
         let (store, repo) = try await makeRepo(deviceId: "whoop-new")
         try register(store, "whoop-new", status: .active)
@@ -912,7 +917,7 @@ final class WeighInStoreTests: XCTestCase {
                          category: "bodyMeasurement", day: "2031-01-08", takenAt: 1_925_622_000, value: value,
                          valueText: nil, unit: "kg", source: source, note: nil, referenceText: nil)
         }
-        try await store.upsertLabMarkers([row("my-whoop", "CCCCCCCC", value: 100.4),
+        try await store.upsertLabMarkers([row("my-whoop", "CCCCCCCC", value: 100.0),
                                           row("whoop-new", "AAAAAAAA", value: 100.0),
                                           // Same instant, another source: not a duplicate.
                                           row("my-whoop", "DDDDDDDD", value: 100.2, source: "csv")])
@@ -928,10 +933,23 @@ final class WeighInStoreTests: XCTestCase {
         // With the canonical id active the same data lists the canonical copy.
         let (store2, repo2) = try await makeRepo(deviceId: "my-whoop")
         try register(store2, "whoop-new", status: .paired)
-        try await store2.upsertLabMarkers([row("my-whoop", "CCCCCCCC", value: 100.4),
+        try await store2.upsertLabMarkers([row("my-whoop", "CCCCCCCC", value: 100.0),
                                            row("whoop-new", "AAAAAAAA", value: 100.0)])
         let listed2 = await makeWeighIns(repo2).readings(.weight)
         XCTAssertEqual(listed2.map(\.id), ["weight-1925622000-CCCCCCCC"])
+
+        // The data this test held before ruling R42: the two rows differ in value. They are two
+        // readings, and neither is hidden behind the other, whichever id is active.
+        for active in ["whoop-new", "my-whoop"] {
+            let (store3, repo3) = try await makeRepo(deviceId: active)
+            try register(store3, "whoop-new", status: active == "whoop-new" ? .active : .paired)
+            try await store3.upsertLabMarkers([row("my-whoop", "CCCCCCCC", value: 100.4),
+                                               row("whoop-new", "AAAAAAAA", value: 100.0)])
+            let listed3 = await makeWeighIns(repo3).readings(.weight)
+            XCTAssertEqual(listed3.map(\.id), ["weight-1925622000-AAAAAAAA", "weight-1925622000-CCCCCCCC"],
+                           "active \(active): both readings, ordered by instant then id")
+            XCTAssertEqual(listed3.map(\.value), [100.0, 100.4], "active \(active)")
+        }
     }
 
     /// Edit and delete act on the row under the id it was stored under. The count under every id is
@@ -988,8 +1006,9 @@ final class WeighInStoreTests: XCTestCase {
         XCTAssertEqual(newAfter, [new])
     }
 
-    /// Deleting one copy of a duplicate removes that copy only. The other id's copy is still stored,
-    /// and is what the list then shows: nothing was silently deleted on the owner's behalf.
+    /// Two rows at one instant under two ids with different values. Superseded by ruling R42 and
+    /// labbook-ownership.md §7.1: they are two readings and both are listed from the start. Deleting
+    /// one removes that row only; the other id's row is still stored and still listed.
     func testDeletingTheActiveCopyOfADuplicateLeavesTheOtherIdsCopy() async throws {
         let (store, repo) = try await makeRepo(deviceId: "whoop-new")
         try register(store, "whoop-new", status: .active)
@@ -1004,7 +1023,7 @@ final class WeighInStoreTests: XCTestCase {
         let weighIns = makeWeighIns(repo)
 
         let listed = await weighIns.readings(.weight)
-        XCTAssertEqual(listed, [active])
+        XCTAssertEqual(listed, [active, canonical], "different values: neither row hides the other")
         try await weighIns.delete(active)
 
         let activeRows = try await rows(store, "weight", deviceId: "whoop-new")
@@ -1015,10 +1034,11 @@ final class WeighInStoreTests: XCTestCase {
         XCTAssertEqual(after, [canonical])
     }
 
-    /// Assumption 7 at the top of this file. The union is the one the repository already uses for
-    /// imported history: the active id, registered WHOOPs and the canonical id. A row under any other
-    /// id is outside it. It is not listed, and it is never written to, re-keyed or removed.
-    func testRowsOutsideTheUnionAreNotListedAndNeverTouched() async throws {
+    /// Assumption 7 at the top of this file, as ruling R42 and labbook-ownership.md set it. A row
+    /// under an id nothing registered, or under another brand's id, is the owner's reading like any
+    /// other: it is listed, and it is never written to, re-keyed or removed. Before R42 this test
+    /// (`testRowsOutsideTheUnionAreNotListedAndNeverTouched`) pinned that such rows were not listed.
+    func testRowsUnderAnUnregisteredOrOtherBrandIdAreListedAndNeverTouched() async throws {
         let (store, repo) = try await makeRepo(deviceId: "whoop-new")
         try register(store, "whoop-new", status: .active)
         try register(store, "oura-ring", brand: "Oura", status: .paired)
@@ -1034,7 +1054,8 @@ final class WeighInStoreTests: XCTestCase {
         let weighIns = makeWeighIns(repo)
 
         let listed = await weighIns.readings(.weight)
-        XCTAssertTrue(listed.isEmpty, "rows under an unregistered id or another brand's id are outside the union")
+        XCTAssertEqual(listed, [unregistered, otherBrand],
+                       "rows under an unregistered id and under another brand's id are listed, oldest first")
 
         let saved = try await weighIns.save(weight: 98.4, waist: nil, unitSystem: .metric, takenAt: week3)
         try await weighIns.edit(saved[0], value: 98.2, unitSystem: .metric, takenAt: week3)

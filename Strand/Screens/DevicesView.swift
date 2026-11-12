@@ -308,7 +308,9 @@ private struct DevicesContent: View {
                 deleteDataTarget = nil
             }
         } message: { device in
+            // Ruling R42: a strap delete keeps the readings the owner entered, and says so.
             Text("This permanently deletes all data recorded from \(device.displayName). This can't be undone.")
+                + Text(verbatim: " ") + Text("Lab Book readings you entered are kept.")
         }
         // Hard-delete confirm (reached from a REMOVED card's ⋮ menu): purge the registry entry itself,
         // not just its data — the only way to get a duplicate/stale strap out of the list for good (#1193).
@@ -2103,7 +2105,9 @@ private struct ForgetDeviceSheet: ViewModifier {
                     target = nil
                 }
             } message: { _ in
+                // Ruling R42: forgetting a strap keeps the readings the owner entered, and says so.
                 Text("NOOP removes this device from your list and deletes its recorded data here. You can re-pair the strap to pull its recent history back.")
+                    + Text(verbatim: " ") + Text("Lab Book readings you entered are kept.")
             }
     }
 }

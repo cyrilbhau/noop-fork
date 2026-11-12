@@ -213,9 +213,9 @@ public enum LabMarkerUnion {
 
 public struct LabBookProjectionRepair: Equatable, Sendable {
     public let inserted: Int      // cells that were missing
-    public let updated: Int       // cells replaced by the correct value
-    public let unchanged: Int     // cells already correct
-    public let unbackedKept: Int  // cells left exactly as stored (§7.3)
+    public let updated: Int       // always 0 since ruling A11 (§7.5): no stored cell is replaced
+    public let unchanged: Int     // cells left as stored that hold a stored reading's value
+    public let unbackedKept: Int  // cells left as stored that no stored reading's value matches (§7.3)
 }
 
 extension WhoopStore {
@@ -249,10 +249,13 @@ extension WhoopStore {
     struct LabBookDayCell: Hashable {
         let markerKey: String
         let day: String
+        /// A number the transaction took out of the cell. The cell is erased only while it still
+        /// holds such a number (ruling A11, §7.5).
+        var vacated: Double? = nil
     }
     /// §7.4 owner-scope upsert, without the projection step. `written` is the number of stored rows
-    /// inserted or updated; `touched` holds every cell to recompute, the old day of an updated row
-    /// included.
+    /// inserted or updated; `touched` holds the cells to re-derive: those of the readings written,
+    /// by the rule of §7.5.
     func ownerUpsert(_ db: Database, rows: [LabMarkerRow]) throws -> (written: Int, touched: Set<LabBookDayCell>)
     /// §7.4 delete of a row and its copies, without the projection step. `deleted` is ascending and
     /// empty when `id` is not stored.
@@ -374,7 +377,8 @@ holds, for copies only. The resolver's same-day rule (stage 1 §8.2: greatest `t
 
 For one cell `(markerKey, day)`: the value is that of the row with the greatest `takenAt`, then the
 greatest `id`, among **all** rows of that marker and day with a non-null `value`, under any device
-id. With no such row the cell is deleted. `reprojectCells` (`LabMarkerStore.swift:217-241`) drops its
+id. With no such row the cell is deleted, but only while it still holds the value of a reading the
+same transaction removed (ruling A11, §7.5); a cell no stored row backs is never erased. `reprojectCells` (`LabMarkerStore.swift:217-241`) drops its
 device-id filter and its cells lose the device id (`LabBookDayCell`, §6.1). The tie-break matches
 `LabBookProjection.project(.latest)` fed in (`takenAt`, `id`) order
 (`Packages/StrandAnalytics/Sources/StrandAnalytics/LabBookProjection.swift:139-146`), and matches the
@@ -387,37 +391,50 @@ implementer may fold all touched cells from one query per touched marker key.
 
 One write transaction:
 
-1. `expected`: fold every row with a non-null `value` into cells by §7.2.
+1. `expected`: fold every row with a non-null `value` into cells by §7.2, keeping for each cell the
+   set of values its rows hold.
 2. `stored`: every `metricSeries` row with `deviceId = 'lab-book'`.
-3. For each expected cell: absent from `stored`, insert it (`inserted`); present and equal,
-   leave it (`unchanged`); present and different, and the stored value equals the `value` of at least
-   one existing row of that marker and day, replace it (`updated`); present and different, and the
-   stored value matches no existing row of that marker and day, leave it (`unbackedKept`).
+3. For each expected cell: absent from `stored`, insert it with the §7.2 value (`inserted`); present
+   and equal to the `value` of **any** existing row of that marker and day, leave it (`unchanged`);
+   present and matching no existing row of that marker and day, leave it (`unbackedKept`).
 4. For each stored cell with no expected cell, leave it (`unbackedKept`).
 
-Why step 3 distinguishes: a cell whose value no surviving row holds is the last trace of a reading
-that an earlier strap delete or adoption removed. The repair never destroys it. It is idempotent: a
-second run reports `inserted == 0` and `updated == 0`. Comparison is `==` on the stored doubles.
+The repair inserts and does nothing else (ruling A11, §7.5). It never replaces a stored cell, so
+`updated` is always 0: a cell holding another of the day's readings holds a number the owner entered,
+and where two ids hold different readings the repair cannot know which was entered last. A cell
+whose value no surviving row holds is the last trace of a reading that an earlier strap delete or
+adoption removed, and the repair never destroys it. It is idempotent: a second run reports
+`inserted == 0`. Comparison is `==` on the stored doubles. As first written, step 3 replaced a cell
+that held another of the day's readings; ruling A11 overrides that.
 
-An unbacked cell stays until the owner writes or deletes a reading on that marker and day, when §7.2
-recomputes the cell as it does today.
+An unbacked cell is not erased by a later write either (§7.5). It is replaced only when a reading
+written on that marker and day becomes the day's latest.
 
 The repository calls it once per launch, straight after the store opens, in the single-flight open at
 `Repository.swift:769-803` (after `:797`), ignoring a thrown error. It logs one line through the
-existing strap log only when `inserted + updated > 0`, carrying the four counts and no value.
+existing strap log only when `inserted + updated > 0`, carrying the four counts and no value. Since
+ruling A11 `updated` is always 0, so the line appears only when a cell was inserted.
 
 ### 7.4 Writes
 
 - **`upsertOwnerLabMarkers(rows)`**, one transaction. For each incoming row: find every stored row
   with the same `(markerKey, takenAt, source)` under any id. If there is none, insert the row as
-  given. Otherwise update each of those stored rows in place: `category`, `day`, `value`, `valueText`,
+  given. Otherwise the write lands on **one** stored reading and never on a conflicting one (ruling
+  A10, §7.5): the row with the incoming `id`, else the row under the incoming `deviceId`, else, when
+  every stored row at the identity is a copy of the others, that one reading. The landed row and its
+  copies are updated in place, each selected by its own `id`: `category`, `value`, `valueText`,
   `unit`, `note` and `referenceText` take the incoming values; `id` and `deviceId` keep the stored
-  ones. Then recompute the cell of every `(markerKey, day)` touched, the old day of an updated row
-  included. This is the store's existing rule, "re-importing the same reading updates it"
-  (`LabMarkerStore.swift:100-103`), applied without regard to which strap was active.
+  ones. The landed row takes the incoming `day`, as does a copy stored under the same day; a copy
+  stored under another day keeps it. Where the identity holds different readings and none is under
+  the incoming `id` or `deviceId`, no stored row changes: an incoming row equal to one of them writes
+  nothing, and any other is inserted as given, as one more reading at that instant. Then re-derive the
+  cells of the readings written (§7.5). This is the store's existing rule, "re-importing the same
+  reading updates it" (`LabMarkerStore.swift:100-103`), applied without regard to which strap was
+  active. As first written this bullet updated every stored row at the identity; ruling A10
+  overrides that.
 - **`deleteLabMarkerAndCopies(id)`**, one transaction. Load the row; load every row with its
-  identity; delete those for which `LabMarkerUnion.isCopy` holds, the row itself included; recompute
-  their cells. A conflicting row at the same identity is not deleted. Reason: the list shows a set of
+  identity; delete those for which `LabMarkerUnion.isCopy` holds, the row itself included; re-derive
+  their cells (§7.5). A conflicting row at the same identity is not deleted. Reason: the list shows a set of
   copies once, so deleting only the representative would make the reading reappear, the
   visible-but-undeletable defect recorded at `Repository.swift:290-297`.
 - **Lab Book screen.** `save` and the CSV import call `upsertOwnerLabMarkers`; `delete` calls
@@ -425,7 +442,9 @@ existing strap log only when `inserted + updated > 0`, carrying the four counts 
 - **Weigh-in store.** A new row is still written under `repo.deviceId` (R25 stands). "Unioned ids"
   becomes "every id":
   - `save`: a manual row of the marker at that instant under the active id is the row the save lands
-    on (R34, unchanged). With none there, a manual row of the marker at that instant under **any**
+    on (R34, unchanged); each stored copy of that row under another id takes the same value and unit
+    under its own id in the same `upsertLabMarkers` call, and a conflicting row at the instant is not
+    touched (ruling A10, review finding 4). With none there, a manual row of the marker at that instant under **any**
     other id refuses the weigh-in with `instantOccupied` (R36, widened).
   - `edit`, same instant: the row and each of its copies take the new value and unit, each under its
     own id, in one `upsertLabMarkers` call.
@@ -437,6 +456,47 @@ existing strap log only when `inserted + updated > 0`, carrying the four counts 
   - `delete`: `deleteLabMarkerAndCopies`.
 - **Strap delete and adoption.** Both iterate `strapScopedTables`. Neither issues any statement
   against `labMarker` or against `metricSeries` rows of `lab-book` on behalf of Lab Book.
+
+### 7.5 Rulings A10 to A12
+
+Three rulings of `RULINGS-ADDENDUM.md` followed an independent review of this change. They are
+binding and override the text above wherever it disagreed; §7.2 to §7.4 are corrected to match.
+
+**A10: two different readings at one instant are two readings.** Rows that share an identity and
+differ in content are conflicting readings, both kept and both listed. Every statement that updates
+or deletes a `labMarker` row selects by row `id`:
+
+| Write | Rows it selects |
+|---|---|
+| An edit (the incoming row carries a stored `id`) | That row and its copies |
+| A save or import landing on an instant (a fresh `id`, the active `deviceId`) | The row under that `deviceId` and its copies; when every stored row at the identity is one reading, that reading |
+| A save onto different readings, none under the incoming `id` or `deviceId` | No stored row. The incoming row is inserted, or writes nothing when it equals one of them |
+| A delete | The named row and its copies |
+| A weigh-in save, same-instant edit or delete | The active id's or the edited row and its copies |
+
+A copy is what `LabMarkerUnion.isCopy` decides (§7.1); the stored `day` is not compared, which is
+why copies can carry different days. A conflicting row is never a copy, so no write reaches it.
+
+**A11: the projection is never a reason to lose information.**
+
+- The repair only inserts missing cells (§7.3). It replaces and erases nothing.
+- A write re-derives only the cell of a reading it wrote. With the reading's day and value as they
+  were, the cell is left alone unless it is missing. A number that left a cell (a delete, another
+  day, another value) re-derives that cell only when the cell is missing or holds that number. A
+  number that arrived re-derives its cell only when the cell is missing or the reading is now the
+  latest of its marker and day by §7.2.
+- So a cell holding one of two conflicting readings keeps the value already there through writes to
+  other readings of the day. A cell that is derived takes the reading with the greatest `takenAt`,
+  then the greatest `id`: the reading the Lab Book history, which is newest first, shows first.
+- A cell is erased only when no numeric reading of the marker and day remains **and** it still holds
+  the number of a reading the same transaction removed. A cell no stored row backs is never erased.
+- Where copies of one reading carry different stored days, each day keeps its cell, through the
+  repair and through writes. A derived chart may show that reading on two days; no value is lost.
+
+**A12: the in-app Coach.** After this change the Coach context can include Lab Book readings stored
+under earlier strap ids that it did not see before, because the roll-up reads `LabBookRows.category`
+(§6.3). That is the intended effect of "nothing is hidden". Consent to send health context to the
+Coach is unchanged and still the owner's separate choice.
 
 ## 8. Design decision
 
@@ -488,16 +548,17 @@ owner's go-ahead and neither is proposed.
 | Existing state | After the first launch of the new build |
 |---|---|
 | Rows under the active id | Untouched. Listed as before |
-| Rows under another registered id (archived or paired, any brand) | Untouched. Now listed in Lab Book and the Coach roll-up |
+| Rows under another registered id (archived or paired, any brand) | Untouched. Now listed in Lab Book and the Coach roll-up, so the Coach context can include them (ruling A12, §7.5) |
 | Rows under an id with no registry row (a forgotten strap, an id left by adoption) | Untouched. Now listed everywhere, weigh-in history and resolver included |
 | Copies under two ids | Both stay stored. Listed once |
 | Conflicting rows at one instant under two ids | Both stay stored. Both listed (stage 1 listed one) |
-| A projected cell that is missing or holds the wrong one of the day's readings | Inserted or corrected by the repair |
+| A projected cell that is missing | Inserted by the repair |
+| A projected cell that holds another of the day's readings | Left exactly as stored (ruling A11, §7.5) |
 | A projected cell no surviving reading backs | Left exactly as stored and counted |
 | Rows an earlier strap delete already removed | Not recoverable from `labMarker`. See §15 Q3 |
 
-No existing `labMarker` row is deleted, overwritten, moved or hidden by upgrading. The only stored
-values the upgrade changes are derived projection cells whose correct value is still held by a row.
+No existing `labMarker` row is deleted, overwritten, moved or hidden by upgrading. The upgrade
+changes no stored value: the only thing it writes is a derived projection cell that was missing.
 
 ### 8.4 Decisions where the plan left a choice
 
@@ -929,7 +990,7 @@ Repair variants, each starting from the ten rows with correctly projected cells:
 | Variant | Stored cell before | Expected result |
 |---|---|---|
 | V1 | `weight` `2031-01-22` absent | `inserted` 1, `unchanged` 5, cell 98.4 |
-| V2 | `weight` `2031-01-22` = 98.0 (F3's value, a surviving row) | `updated` 1, `unchanged` 5, cell 98.4 |
+| V2 | `weight` `2031-01-22` = 98.0 (F3's value, a surviving row) | `updated` 0, `unchanged` 6, cell stays 98.0 (ruling A11, §7.5; first written as `updated` 1, cell 98.4) |
 | V3 | `weight` `2031-01-22` = 90.0 (no row holds it) | `unbackedKept` 1, `unchanged` 5, cell stays 90.0 |
 | V4 | extra cell `weight` `2031-02-05` = 97.5, no rows that day | `unbackedKept` 1, `unchanged` 6, cell stays |
 | V5 | no difference | `inserted` 0, `updated` 0, `unchanged` 6, `unbackedKept` 0 |

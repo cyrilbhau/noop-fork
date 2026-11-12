@@ -155,9 +155,26 @@ public struct DeviceRegistryStore: Sendable {
     /// the pairing; the Kotlin twin is `WhoopRepository.computedDeviceId`.
     public static let computedSuffix = "-noop"
 
-    /// Every table whose rows are keyed by `deviceId` (the per-device sample/derived tables). This is
-    /// the authoritative list `deleteAllData` clears — kept in sync with the `deviceId`-keyed tables in
-    /// `Database.swift`. The `pairedDevice` registry row itself is NOT here (a delete-data operation
+    /// Tables whose rows the owner entered by hand. A strap never owns them: `deleteAllData` and
+    /// `adoptSerialIdentity` iterate `strapScopedTables`, which leaves these out, so a strap being
+    /// deleted, forgotten or re-keyed onto its serial id can neither remove nor drop one of these rows
+    /// (personal fork, stage 1 ruling R42; docs/personal/superapp/specs/labbook-ownership.md §6.1).
+    /// After any upstream merge of this file, check by hand that `labMarker` is still here and that
+    /// both strap loops still iterate `strapScopedTables`.
+    /// No Kotlin twin, by the owner's decision (stage 1 ruling R43): on Android a strap delete still
+    /// removes Lab Book readings and an adoption still re-keys them.
+    static let ownerEnteredTables: Set<String> = ["labMarker"]
+
+    /// `deviceScopedTables` without `ownerEnteredTables`, in the same order: the tables a strap delete
+    /// and a serial-identity adoption act on.
+    static var strapScopedTables: [String] {
+        deviceScopedTables.filter { !ownerEnteredTables.contains($0) }
+    }
+
+    /// Every table whose rows are keyed by `deviceId` (the per-device sample/derived tables), kept in
+    /// sync with the `deviceId`-keyed tables in `Database.swift`. It is the schema-coverage list, and
+    /// `strapScopedTables` (this list without `ownerEnteredTables`) is what `deleteAllData` clears.
+    /// The `pairedDevice` registry row itself is NOT here (a delete-data operation
     /// empties the device's recordings; archiving/removing the registry entry is a separate op).
     static let deviceScopedTables = [
         "hrSample", "rrInterval", "spo2Sample", "skinTempSample", "respSample", "gravitySample",
@@ -170,6 +187,9 @@ public struct DeviceRegistryStore: Sendable {
         // (liveSession) behind — a privacy defect for a delete-means-gone app. `DeviceRegistryStoreTests`
         // asserts this list covers every deviceId-keyed table in Database.swift so future migrations
         // can't reintroduce the gap.
+        // Personal fork (ruling R42): `labMarker` stays in THIS list, which is about schema coverage, and
+        // is taken back out of the strap loops by `ownerEnteredTables`. The readings are the owner's,
+        // not the strap's, so a strap delete keeps them.
         "rawBatch", "labMarker", "sleepStateSample", "liveSession",
         // v25-oura-raw: the opt-in Oura cloud-import raw archive is deviceId-keyed too, so "delete this
         // device's data" must clear it — else an imported Oura source's payloads would survive deletion.
@@ -198,13 +218,17 @@ public struct DeviceRegistryStore: Sendable {
     ]
 
     /// Permanently delete every recorded sample/derived row belonging to one device, across all
-    /// `deviceId`-keyed tables, in a single transaction (all-or-nothing). The `pairedDevice` registry
+    /// strap-scoped tables, in a single transaction (all-or-nothing). The `pairedDevice` registry
     /// row is left intact — the caller archives/removes that separately. Tables are deleted defensively
     /// with `DELETE FROM <table> WHERE deviceId = ?`; a missing table would throw, but every table here
     /// is created unconditionally by the migrator, so the set is stable.
+    ///
+    /// Owner-entered tables (`ownerEnteredTables`: the Lab Book readings) are NOT cleared, and no
+    /// statement here names them or their daily projection: a reading the owner typed in is kept
+    /// whichever strap was active when it was entered (ruling R42).
     public func deleteAllData(deviceId: String) throws {
         try dbQueue.write { db in
-            for table in Self.deviceScopedTables {
+            for table in Self.strapScopedTables {
                 try db.execute(sql: "DELETE FROM \(table) WHERE deviceId = ?", arguments: [deviceId])
             }
             // Provenance also references the physical/import source separately from its computed
@@ -260,8 +284,14 @@ public struct DeviceRegistryStore: Sendable {
             // history under an id nothing reads again: the orphaned-history failure this adoption exists
             // to PREVENT, displaced onto the computed half. The ring path never hit it because a ring has
             // no computed sibling to strand, which is why the shipped migration looked proven.
+            //
+            // Strap-scoped tables ONLY (ruling R42). The pair below is "the target id's row wins": a row
+            // whose natural key already exists under the target id is ignored by the UPDATE and then
+            // removed by the DELETE. That is right for duplicate strap samples and wrong for a reading
+            // the owner entered, so owner-entered tables are not moved at all: their rows stay under the
+            // provisional id, which every Lab Book reader includes, and nothing can be dropped.
             for (from, to) in [(activeId, serialId), (activeId + Self.computedSuffix, serialId + Self.computedSuffix)] {
-                for table in Self.deviceScopedTables {
+                for table in Self.strapScopedTables {
                     try db.execute(sql: "UPDATE OR IGNORE \(table) SET deviceId = ? WHERE deviceId = ?", arguments: [to, from])
                     try db.execute(sql: "DELETE FROM \(table) WHERE deviceId = ?", arguments: [from])
                 }

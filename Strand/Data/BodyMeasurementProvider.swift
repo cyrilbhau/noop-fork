@@ -219,34 +219,17 @@ final class BodyMeasurementProvider: ObservableObject {
         }
     }
 
-    /// The device ids `labBookRows` reads across, in its order of precedence (rulings R25 and R29).
-    /// `WeighInStore` checks the same ids before a write, so a write cannot store a reading the
-    /// readers would then collapse onto another (ruling R36). Reads the registry only.
-    static func unionedDeviceIds(store: WhoopStore, activeDeviceId: String) -> [String] {
-        let paired = (try? DeviceRegistryStore(dbQueue: store.registryWriter).all()) ?? []
-        let registeredWhoops = paired.filter {
-            $0.brand.caseInsensitiveCompare("WHOOP") == .orderedSame
-        }.map(\.id)
-        return Repository.rawWhoopSourceIds(activeDeviceId: activeDeviceId,
-                                            registeredWhoopIds: registeredWhoops)
-    }
-
-    /// Every Lab Book row of `kind` across the ids the repository unions for imported history
-    /// (rulings R25 and R29): the active strap, every other registered WHOOP, the canonical id.
-    /// A reading stored under two ids (same marker, instant and source) is listed once, the copy
-    /// under the earlier id in that order standing for it. Oldest first. Reads only.
+    /// Every Lab Book row of `kind` under every device id present in the table, registered or not
+    /// (ruling R42, which widens rulings R25 and R29): one call to the app's single Lab Book read
+    /// path. Rows equal in content under two ids are listed once, the active id's copy standing for
+    /// them; rows at one instant that differ are different readings and are both listed, and the
+    /// resolver's same-day rule picks between them. Oldest first. Reads only.
+    ///
+    /// There is deliberately no device-id list here any more: a list built from the registry hid
+    /// the readings entered under a strap that was later forgotten.
     static func labBookRows(_ kind: BodyMeasurementKind, store: WhoopStore,
                             activeDeviceId: String) async -> [LabMarkerRow] {
-        let ids = unionedDeviceIds(store: store, activeDeviceId: activeDeviceId)
-        var seen: Set<String> = []
-        var rows: [LabMarkerRow] = []
-        for id in ids {
-            let stored = (try? await store.labMarkers(deviceId: id, markerKey: kind.markerKey)) ?? []
-            for row in stored where seen.insert("\(row.takenAt)\u{1F}\(row.source)").inserted {
-                rows.append(row)
-            }
-        }
-        return rows.sorted { ($0.takenAt, $0.id) < ($1.takenAt, $1.id) }
+        await LabBookRows.marker(kind.markerKey, store: store, activeDeviceId: activeDeviceId)
     }
 
     // MARK: - Reads of the snapshot

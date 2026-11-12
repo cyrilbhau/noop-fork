@@ -25,8 +25,10 @@ import StrandAnalytics
 //     The row it returns is the occupying row as stored. The replacement is the edited row with the
 //     new `takenAt`, the `day` of the new instant, the converted `value` and its unit, as assumed in
 //     `WeighInStoreTests.swift` (assumption 6): `deviceId`, `category`, `valueText`, `source`, `note`
-//     and `referenceText` are the edited row's. A copy under another unioned id differs in `deviceId`
-//     and is therefore not the exception.
+//     and `referenceText` are the edited row's. Superseded by ruling R42 and labbook-ownership.md
+//     §7.4: the device id is not compared either. When every row at the target instant, under any
+//     id, is a copy of the replacement, the edit completes; one row there that is not a copy refuses
+//     it.
 //  3. `WeighInStore.save(weight:waist:unitSystem:takenAt:)`: a manual row at the instant under the
 //     ACTIVE id is updated as ruling R34 says, whatever the other ids hold. A manual row at the
 //     instant held ONLY under another unioned id makes the save throw `.instantOccupied`.
@@ -34,7 +36,9 @@ import StrandAnalytics
 //     held under another unioned id, neither row is written: the check precedes every write, as the
 //     range validation does (`WeighInStoreTests.swift`, assumption 4). This is this file's reading of
 //     "writes nothing"; it is pinned by its own test so that a different decision fails one test.
-//  5. An id outside the union (unregistered, or registered to another brand) occupies nothing.
+//  5. Superseded by ruling R42 and labbook-ownership.md §7.4: there is no id outside the union. A
+//     row under an unregistered id, or under an id registered to another brand, is listed like any
+//     other, so it occupies its instant for an edit and for a save.
 //  6. The rest of `WeighInStore`, `BodyMeasurementProvider` and `CutScorecard` as assumed at the top
 //     of `WeighInStoreTests.swift` and `BodyMeasurementSingleSourceTests.swift`.
 //
@@ -204,7 +208,8 @@ final class WeighInCrossIdOccupancyTests: XCTestCase {
         await assertThrows(.instantOccupied, "the earlier strap's reading onto the active id's instant") {
             try await weighIns.edit(other, value: 99.2, unitSystem: .metric, takenAt: self.week1)
         }
-        // The same value as the occupying row is still another reading: the device id differs.
+        // The same value as the occupying row is still another reading: its note and its reference
+        // text differ from the edited row's.
         await assertThrows(.instantOccupied, "with the occupying row's own value") {
             try await weighIns.edit(mine, value: 99.2, unitSystem: .metric, takenAt: self.week2)
         }
@@ -407,11 +412,13 @@ final class WeighInCrossIdOccupancyTests: XCTestCase {
         XCTAssertEqual(countsAfter, countsBefore, "the save updated one row and added none")
     }
 
-    // MARK: - An id outside the union
+    // MARK: - An unregistered id and another brand's id
 
-    /// A row at the target instant under an id nothing registered, or under another brand's id, is
-    /// outside the union: the readers never show it, so it hides nothing and blocks nothing.
-    func testAnInstantHeldUnderAnIdOutsideTheUnionDoesNotBlockAnEditOrASave() async throws {
+    /// Superseded by ruling R42 and labbook-ownership.md §7.4. A row at the target instant under an
+    /// id nothing registered, or under another brand's id, is a listed reading, so it blocks a date
+    /// edit and a save exactly as a row under a registered strap does. Before R42 this test
+    /// (`testAnInstantHeldUnderAnIdOutsideTheUnionDoesNotBlockAnEditOrASave`) pinned the opposite.
+    func testAnInstantHeldUnderAnUnregisteredOrOtherBrandIdBlocksAnEditAndASave() async throws {
         let (store, repo) = try await makeRepo()
         try register(store, "oura-ring", brand: "Oura", status: .paired)
         let mine = row(id: "weight-1925622000-0000AAAA", day: "2031-01-08", takenAt: week1Epoch, value: 100.0,
@@ -424,33 +431,37 @@ final class WeighInCrossIdOccupancyTests: XCTestCase {
                                     takenAt: week3Epoch, value: 98.4)
         try await store.upsertLabMarkers([mine, unregistered, otherBrand, unregisteredLater])
         let weighIns = makeWeighIns(repo)
+        var seamFired = 0
+        weighIns.interruptDateEditForTesting = { seamFired += 1 }
+        let before = try await everything(store)
+        let countsBefore = try await counts(store)
+        XCTAssertEqual(countsBefore, ["my-whoop": 1, "whoop-old": 0, "whoop-new": 0, "whoop-gone": 2, "oura-ring": 1])
 
-        let moved = try await weighIns.edit(mine, value: 99.6, unitSystem: .metric, takenAt: week2)
-
-        XCTAssertEqual(moved.deviceId, "my-whoop")
-        XCTAssertEqual(moved.takenAt, week2Epoch)
-        XCTAssertEqual(moved.day, "2031-01-15")
-        XCTAssertEqual(moved.value, 99.6)
-        XCTAssertEqual(moved.note, "first week")
-        XCTAssertEqual(moved.referenceText, "home scale")
-        XCTAssertNotEqual(moved.id, mine.id)
-        let mineRows = try await store.labMarkers(deviceId: "my-whoop", markerKey: "weight")
-        XCTAssertEqual(mineRows, [moved], "one reading under the edited row's id, at the new instant")
-
-        let saved = try await weighIns.save(weight: 98.0, waist: nil, unitSystem: .metric, takenAt: week3)
-        XCTAssertEqual(saved.count, 1)
-        XCTAssertEqual(saved.first?.deviceId, "my-whoop")
-        XCTAssertEqual(saved.first?.takenAt, week3Epoch)
-        XCTAssertNotEqual(saved.first?.id, unregisteredLater.id)
-
-        for expected in [unregistered, otherBrand, unregisteredLater] {
-            let now = try await stored(store, id: expected.id)
-            assertSameColumns(now, expected, "the row \(expected.id) outside the union")
+        await assertThrows(.instantOccupied, "a date edit onto the instant the unregistered id and the ring hold") {
+            try await weighIns.edit(mine, value: 99.6, unitSystem: .metric, takenAt: self.week2)
         }
+        await assertThrows(.instantOccupied, "a date edit onto the instant only the unregistered id holds") {
+            try await weighIns.edit(mine, value: 99.6, unitSystem: .metric, takenAt: self.week3)
+        }
+        await assertThrows(.instantOccupied, "a save onto the instant only the unregistered id holds") {
+            try await weighIns.save(weight: 98.0, waist: nil, unitSystem: .metric, takenAt: self.week3)
+        }
+        await assertThrows(.instantOccupied, "a save onto the instant the ring holds") {
+            try await weighIns.save(weight: 98.0, waist: nil, unitSystem: .metric, takenAt: self.week2)
+        }
+
+        XCTAssertEqual(seamFired, 0, "a refused date edit must not get as far as the insert")
+        for expected in [mine, unregistered, otherBrand, unregisteredLater] {
+            let now = try await stored(store, id: expected.id)
+            assertSameColumns(now, expected, "the row \(expected.id)")
+        }
+        let after = try await everything(store)
+        XCTAssertEqual(after, before, "a refused write added, removed or changed a row")
         let countsAfter = try await counts(store)
-        XCTAssertEqual(countsAfter, ["my-whoop": 2, "whoop-old": 0, "whoop-new": 0, "whoop-gone": 2, "oura-ring": 1])
+        XCTAssertEqual(countsAfter, countsBefore)
         let listed = await weighIns.readings(.weight)
-        XCTAssertEqual(listed, [moved] + saved, "the list shows the union's readings only")
+        XCTAssertEqual(listed, [mine, unregistered, otherBrand, unregisteredLater],
+                       "the list shows every reading, under whichever id it is stored")
     }
 
     // MARK: - The exception: completing an interrupted date edit
@@ -679,10 +690,28 @@ final class WeighInCrossIdOccupancyTests: XCTestCase {
         let all = try await everything(store)
         XCTAssertEqual(all, [occupier], "the old row is gone and the occupying row is byte-identical")
         XCTAssertEqual(moved, occupier, "the returned row is the row as stored")
+
+        // Ruling R42 and labbook-ownership.md §7.4: the device id is not part of the comparison. The
+        // same occupying row stored under another id is the same reading, so the edit completes the
+        // same way. Before R42 this was a variant of the refusal test below.
+        let (store2, repo2) = try await makeRepo()
+        var elsewhere = occupier
+        elsewhere.deviceId = "whoop-old"
+        try await store2.upsertLabMarkers([edited, elsewhere])
+        let weighIns2 = makeWeighIns(repo2)
+        var seamFired = 0
+        weighIns2.interruptDateEditForTesting = { seamFired += 1 }
+
+        let moved2 = try await weighIns2.edit(edited, value: 99.5, unitSystem: .metric, takenAt: week2)
+
+        XCTAssertEqual(seamFired, 0, "nothing new is written")
+        let all2 = try await everything(store2)
+        XCTAssertEqual(all2, [elsewhere], "the old row is gone and the row under the other id is byte-identical")
+        XCTAssertEqual(moved2, elsewhere, "the returned row is the row as stored")
     }
 
-    /// One column of the occupying row differs from the replacement, one column at a time: every one
-    /// of them is another reading, and the edit is refused with both rows untouched.
+    /// One content column of the occupying row differs from the replacement, one column at a time:
+    /// every one of them is another reading, and the edit is refused with both rows untouched.
     func testEditOntoAnOccupiedInstantWhoseRowDiffersInAnySingleColumnStillThrows() async throws {
         let variants: [(column: String, change: (inout LabMarkerRow) -> Void)] = [
             ("value", { $0.value = 99.4 }),
@@ -697,7 +726,8 @@ final class WeighInCrossIdOccupancyTests: XCTestCase {
             // derives from the instant and the zone of the original write. The zone-change tests below
             // pin that case.
             ("valueText", { $0.valueText = "taken standing" }),
-            ("deviceId (another unioned id)", { $0.deviceId = "whoop-old" }),
+            // No "deviceId" variant: ruling R42 and labbook-ownership.md §7.4 leave the device id out
+            // of the comparison too. The control test above pins that the edit then completes.
         ]
         for variant in variants {
             let (store, repo) = try await makeRepo()
