@@ -121,6 +121,8 @@ struct SettingsView: View {
     @ObservedObject private var bodyRecordFlag = BodyRecordSettings.enabledFlag
     // Stage 5 (events layer): the one observable copy of its flag. An iPhone feature as well.
     @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
+    // Packet v2: the private-events packet setting (stage 5 §9.6), drawn by the Events card.
+    @ObservedObject private var personalEventsPacketFlag = PersonalEventStore.packetSensitiveFlag
     // Stage 6: the three flags (stage 6 §9.4), in the one order: Niggle log, Recovery context, Timeline.
     @ObservedObject private var niggleLogFlag = NiggleLogSettings.flag
     @ObservedObject private var cutStressFlag = CutStressModel.flag
@@ -2071,14 +2073,35 @@ struct SettingsView: View {
             title: "Events",
             blurb: "Mark travel, illness, a diet break or a deload, and charts show when it happened. Off by default."
         ) {
-            Toggle(isOn: Binding(get: { personalEventsFlag.isEnabled },
-                                 set: { PersonalEventStore.flag.set($0) })) {
-                Text("Personal events")
-                    .font(StrandFont.subhead)
-                    .foregroundStyle(StrandPalette.textPrimary)
+            VStack(alignment: .leading, spacing: NoopMetrics.space2 + 2) {
+                Toggle(isOn: Binding(get: { personalEventsFlag.isEnabled },
+                                     set: { PersonalEventStore.flag.set($0) })) {
+                    Text("Personal events")
+                        .font(StrandFont.subhead)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                }
+                .toggleStyle(.switch)
+                .tint(StrandPalette.accent)
+                // Packet v2 (stage 5 §9.6, §10.7): mounted only while both features are on, so it is
+                // never shown when nothing would read it. Its one writer; the packet assembler reads it.
+                if personalEventsFlag.isEnabled && coachPacketFlag.isEnabled {
+                    rowDivider
+                    Toggle(isOn: Binding(get: { personalEventsPacketFlag.isEnabled },
+                                         set: { PersonalEventStore.shared.packetIncludesSensitive = $0 })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Include private events in the coach packet")
+                                .font(StrandFont.subhead)
+                                .foregroundStyle(StrandPalette.textPrimary)
+                            Text("Private events and their notes stay out of the packet unless this is on.")
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .tint(StrandPalette.accent)
+                }
             }
-            .toggleStyle(.switch)
-            .tint(StrandPalette.accent)
         }
     }
 

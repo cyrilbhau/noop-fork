@@ -40,6 +40,7 @@ final class CoachPacketV2AppTests: XCTestCase {
     // MARK: - Harness
 
     /// The stage 2 harness with an events store and an intake provider over the harness's own suite.
+    @MainActor
     private struct V2 {
         let h: CoachPacketHarness
         let events: PersonalEventStore
@@ -187,7 +188,8 @@ final class CoachPacketV2AppTests: XCTestCase {
     func testIntakeDaysEqualTheProvidersSeries() async throws {
         let v = try await harness()
         try await seedIntake(v)
-        let input = try XCTUnwrap(await v.assembler().input())
+        let gathered = await v.assembler().input()
+        let input = try XCTUnwrap(gathered)
         guard case .days(let days) = input.intake else { return XCTFail("intake is on: \(input.intake)") }
         let first = v.h.clock.day(-(v.h.packetSettings.rangeDays - 1))
         let series = v.intake.series().filter { $0.day >= first && $0.day <= v.h.today }

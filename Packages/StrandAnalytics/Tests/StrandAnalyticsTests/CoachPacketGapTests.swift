@@ -56,7 +56,7 @@ final class CoachPacketGapTests: XCTestCase {
                            file: file, line: line)
             XCTAssertFalse(row.hasPrefix("== FORGED"), "\(note)", file: file, line: line)
         }
-        XCTAssertTrue(text.hasSuffix("end of NOOP-COACH-PACKET v1\n"), note, file: file, line: line)
+        XCTAssertTrue(text.hasSuffix("end of NOOP-COACH-PACKET v2\n"), note, file: file, line: line)
     }
 
     /// Strings that would break the line structure if they were printed as they are.
@@ -217,7 +217,7 @@ final class CoachPacketGapTests: XCTestCase {
             let lines = F.lines(text)
             XCTAssertEqual(lines.count, full.count, "\"\(value)\"")
             guard lines.count == full.count else { continue }
-            XCTAssertEqual(lines[0], "NOOP-COACH-PACKET v1")
+            XCTAssertEqual(lines[0], "NOOP-COACH-PACKET v2")
             XCTAssertTrue(lines[1].hasPrefix("generated:"), lines[1])
             XCTAssertEqual(Array(lines[2...]), Array(full[2...]), "\"\(value)\"")
             XCTAssertEqual(lines.filter { $0 == "== NOTES ==" }.count, 1, "\"\(value)\"")
@@ -300,13 +300,15 @@ final class CoachPacketGapTests: XCTestCase {
     /// every range whose budget fits a whole number; beyond that the call still returns. What it
     /// returns there is not decided by the specification and is not asserted.
     func testTheByteBudgetIsTotalAtTheEdgesOfTheWholeNumbers() {
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 0), 8000)
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 7), 9540)
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 14), 11080)
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 28), 14160)
+        // Packet v2 (ruling A5): 8000 + 290 × days + the events allowance.
+        let allowance = PersonalEvents.packetByteAllowance
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 0), 8000 + allowance)
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 7), 12_030)
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 14), 14_060)
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 28), 18_120)
         // The largest range whose budget is representable: the formula still holds exactly.
-        let largest = (Int.max - 8000) / 220
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: largest), 8000 + 220 * largest)
+        let largest = (Int.max - 8000 - allowance) / 290
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: largest), 8000 + 290 * largest + allowance)
         // Past it the product overflows. Reaching the next line is the assertion.
         _ = CoachPacket.byteBudget(rangeDays: largest + 1)
         _ = CoachPacket.byteBudget(rangeDays: Int.max)

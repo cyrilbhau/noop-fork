@@ -439,7 +439,10 @@ class EntryPointTests(unittest.TestCase):
     def test_the_settings_card_switches_the_one_flag(self) -> None:
         text = code(SETTINGS_VIEW)
         self.assertIn("PersonalEventStore.flag.set(", text)
-        self.assertNotIn("packetIncludesSensitive", text, "the second switch arrives with packet v2 (§10.7)")
+        # Packet v2 has landed: the second switch is mounted behind both flags and is the setting's
+        # one writer (§9.6, §10.7). `test_coach_packet_v2_sources` pins the writer and the reader.
+        self.assertIn("PersonalEventStore.shared.packetIncludesSensitive = ", text)
+        self.assertIn("personalEventsFlag.isEnabled && coachPacketFlag.isEnabled", text)
 
     def test_nothing_at_launch_reads_the_store(self) -> None:
         for rel in (APP_MODEL, APP, "StrandiOS/App/AppModel+iOS.swift", "Strand/App/StrandApp.swift"):

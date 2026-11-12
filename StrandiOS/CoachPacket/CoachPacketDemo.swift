@@ -17,6 +17,7 @@ import WhoopStore
 //   packet-b7    every section off                packet-b14   larger than the budget
 //   packet-b15, packet-b16, packet-b17            b2, b9 and b12 again, for the largest text size
 //                                                 (pair them with the app's text-size argument)
+//   packet-b18   intake and events off in the app  packet-b19   private events included (packet v2)
 //   packet-live  the real sheet on this simulator's own store and settings (not synthetic: pair it
 //                with `-noop.coachPacketEnabled YES`). Compiled for the simulator only, because its
 //                switches store the owner's choices
@@ -50,6 +51,8 @@ enum CoachPacketDemo {
         case "packet-b12", "packet-b17": return host(DemoFrame(phaseName: Fixture.accountAddress))
         case "packet-b13": return host(DemoFrame(data: .unreadable))
         case "packet-b14": return host(DemoFrame(overBudget: true))
+        case "packet-b18": return host(DemoFrame(intakeOff: true, eventsOff: true))
+        case "packet-b19": return host(DemoFrame(privateEventsIncluded: true))
         default: return nil
         }
     }
@@ -74,6 +77,10 @@ private struct DemoFrame {
     var overBudget = false
     var sharesAtOnce = false
     var script = Script.none
+    /// Packet v2: the intake and events features as the app has them, and the private-events choice.
+    var intakeOff = false
+    var eventsOff = false
+    var privateEventsIncluded = false
 }
 
 /// A pasteboard writer that writes nothing: the demo leaves the simulator's clipboard alone.
@@ -294,6 +301,19 @@ private enum Fixture {
                            durationMinutes: 30, avgHr: 128, energyKcal: 300, distanceKm: nil),
     ]
 
+    // MARK: Packet v2: stage 5's events (stage 5 §13.1). Stage 1 states no intake in this range.
+
+    /// Stage 5's rows for its eight fixture events over the ranges the sheet offers, ending on
+    /// 2031-03-16, written out so that the assembler stays the one caller of `packetLines`. No
+    /// private event overlaps these ranges, so the rows are the same with the switch on or off.
+    static func eventRows(rangeDays: Int, measured: Bool) -> [String] {
+        guard measured else { return ["events: none listed in range"] }
+        var rows = ["entered by the owner, whole local days, oldest first:"]
+        if rangeDays >= 28 { rows.append("  2031-02-22..2031-02-24: travel") }
+        rows.append("  2031-03-10..2031-03-16: travel; note \"Fixture trip\"")
+        return rows
+    }
+
     // MARK: The packet for a frame
 
     /// What an assembly would return for this frame's data and the stored choices: rendered by
@@ -312,13 +332,17 @@ private enum Fixture {
                 CoachPacketBodyReading(kind: .waist, value: 97.0, source: .labBook, day: "2031-03-05"),
             ] : [],
             hrvBaseline: measured ? hrvBaseline : nil, restingHrBaseline: measured ? restingHrBaseline : nil,
-            steps: measured ? steps : [], workouts: measured ? workouts : [])
+            steps: measured ? steps : [], workouts: measured ? workouts : [],
+            intake: scene.intakeOff ? .switchedOff : .days([]),
+            events: scene.eventsOff ? .switchedOff : .rows(eventRows(rangeDays: rangeDays, measured: measured)))
         let text = CoachPacket.render(input)
         let findings = CoachPacket.privacyViolations(in: text, identifiers: identifiers)
         guard findings.isEmpty else { return .blocked(findings: findings.count) }
         let byteCount = scene.overBudget ? CoachPacket.byteBudget(rangeDays: rangeDays) + 1 : text.utf8.count
+        let eventsShown = !scene.eventsOff && sections.contains(.events)
         return .ready(CoachPacketDocument(text: text, byteCount: byteCount, generatedAt: generatedAt,
-                                          rangeDays: rangeDays, sections: sections, nothingMeasured: !measured))
+                                          rangeDays: rangeDays, sections: sections, nothingMeasured: !measured,
+                                          privateEventsIncluded: eventsShown ? scene.privateEventsIncluded : nil))
     }
 }
 #endif

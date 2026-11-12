@@ -26,6 +26,9 @@ enum PersonalEventStoreError: Error, Equatable {
 final class PersonalEventStore: ObservableObject {
     static let enabledKey = "noop.personalEventsEnabled"
     static let itemsKey = "personalEvents.items"
+    /// Packet v2 (§9.6): whether private events go into the coach packet. Off by default; never in
+    /// the App Group suite and not on the backup whitelist.
+    static let packetSensitiveKey = "personalEvents.packetIncludesSensitive"
     /// The version every element is written with; an element of a higher version is kept unread.
     private static let elementVersion = 1
 
@@ -77,6 +80,14 @@ final class PersonalEventStore: ObservableObject {
 
     /// The feature flag, read from this store's own defaults.
     var isEnabled: Bool { defaults.bool(forKey: Self.enabledKey) }
+
+    /// Packet v2 (§9.6): include private events in the coach packet. Read and written in this
+    /// store's own defaults at each access, nothing cached, and independent of `isEnabled`. The
+    /// Settings switch is its one writer and the packet assembler its one reader.
+    var packetIncludesSensitive: Bool {
+        get { defaults.bool(forKey: Self.packetSensitiveKey) }
+        set { defaults.set(newValue, forKey: Self.packetSensitiveKey) }
+    }
 
     /// The readable events in `normalized` order. Empty while the flag is off (the list is then not
     /// read at all) and while the stored value is unreadable. Read at each access; nothing cached.
@@ -265,4 +276,6 @@ final class PersonalEventStore: ObservableObject {
 extension PersonalEventStore {
     /// The one observable copy of the feature flag. Views observe it; the Settings switch calls `set`.
     static let flag = ObservableDefaultsFlag(key: PersonalEventStore.enabledKey)
+    /// The observable copy of the private-events packet setting, for the Settings switch to draw.
+    static let packetSensitiveFlag = ObservableDefaultsFlag(key: PersonalEventStore.packetSensitiveKey)
 }

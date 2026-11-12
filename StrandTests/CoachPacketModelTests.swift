@@ -324,7 +324,8 @@ final class CoachPacketModelTests: XCTestCase {
 
         script.then(.ready(second))
         await model.setSection(.activity, on: false)
-        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .recoverySleep, .trends], "the choice is stored")
+        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .intake, .recoverySleep, .trends, .events],
+                       "the choice is stored")
         XCTAssertEqual(script.calls, 2, "and the packet is assembled again")
         XCTAssertEqual(model.state, .ready(second))
         XCTAssertEqual(model.copyState, .none, "the confirmation clears")
@@ -399,7 +400,7 @@ final class CoachPacketModelTests: XCTestCase {
         XCTAssertTrue(after.contains("switched-off: activity\n"), after)
         XCTAssertFalse(after.contains("== ACTIVITY =="))
         guard case let .ready(document) = model.state else { return XCTFail("\(model.state)") }
-        XCTAssertEqual(document.sections, [.scorecard, .weighIns, .recoverySleep, .trends])
+        XCTAssertEqual(document.sections, [.scorecard, .weighIns, .intake, .recoverySleep, .trends, .events])
         XCTAssertEqual(present(model).body, .preview(text: after, dimmed: false))
     }
 
@@ -627,7 +628,7 @@ final class CoachPacketModelTests: XCTestCase {
         let ordinary = CoachPacketPresenter.sizeLine(byteCount: budget + 1, rangeDays: 14, locale: Self.british)
         let line = sheet.statusLine
         XCTAssertNotEqual(line, ordinary, "the size line says the packet is larger than expected")
-        XCTAssertTrue(line?.contains("11.1 kB") ?? false, "\(String(describing: line))")
+        XCTAssertTrue(line?.contains("14.1 kB") ?? false, "\(String(describing: line))")
         XCTAssertTrue(line?.contains("14") ?? false, "\(String(describing: line))")
         XCTAssertTrue(sheet.copyAndShareEnabled, "the actions stay enabled")
         XCTAssertEqual(model.shareText, over.text)

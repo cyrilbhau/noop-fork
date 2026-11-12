@@ -138,14 +138,14 @@ final class CoachPacketSettingsTests: XCTestCase {
 
     func testSectionsDefaultToOnAndStoredChoicesWin() {
         XCTAssertEqual(settings.sections, Set(CoachPacketSection.allCases))
-        XCTAssertEqual(CoachPacketSection.allCases.filter(\.isOnByDefault).count, 5)
+        XCTAssertEqual(CoachPacketSection.allCases.filter(\.isOnByDefault).count, 7)
 
         settings.setSection(.activity, on: false)
-        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .recoverySleep, .trends])
+        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .intake, .recoverySleep, .trends, .events])
         settings.setSection(.scorecard, on: false)
-        XCTAssertEqual(settings.sections, [.weighIns, .recoverySleep, .trends])
+        XCTAssertEqual(settings.sections, [.weighIns, .intake, .recoverySleep, .trends, .events])
         settings.setSection(.activity, on: true)
-        XCTAssertEqual(settings.sections, [.weighIns, .recoverySleep, .trends, .activity])
+        XCTAssertEqual(settings.sections, [.weighIns, .intake, .recoverySleep, .trends, .activity, .events])
         XCTAssertEqual(CoachPacketSettings(defaults: defaults).sections, settings.sections,
                        "the choice is stored, not held by the object")
 
@@ -181,14 +181,14 @@ final class CoachPacketSettingsTests: XCTestCase {
     }
 
     func testUnreadableStoredSectionsReadAsTheDefaults() {
-        for stored in ["", "not json", "[]", "{\"scorecard\":\"no\"}", "{\"intake\":false,\"events\":false}", "null"] {
+        for stored in ["", "not json", "[]", "{\"scorecard\":\"no\"}", "{\"niggles\":false,\"scan\":false}", "null"] {
             defaults.set(stored, forKey: CoachPacketSettings.sectionsKey)
             XCTAssertEqual(settings.sections, Set(CoachPacketSection.allCases), "stored: \(stored)")
         }
         defaults.set(7, forKey: CoachPacketSettings.sectionsKey)
         XCTAssertEqual(settings.sections, Set(CoachPacketSection.allCases), "a value that is not a string")
-        defaults.set("{\"activity\":false,\"intake\":false}", forKey: CoachPacketSettings.sectionsKey)
-        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .recoverySleep, .trends],
+        defaults.set("{\"activity\":false,\"niggles\":false}", forKey: CoachPacketSettings.sectionsKey)
+        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .intake, .recoverySleep, .trends, .events],
                        "a key that is no section is ignored and the valid one is kept")
     }
 
@@ -227,7 +227,7 @@ final class CoachPacketSettingsTests: XCTestCase {
         XCTAssertEqual(defaults.object(forKey: CoachPacketSettings.rangeDaysKey) as? Int, range)
         XCTAssertEqual(defaults.string(forKey: CoachPacketSettings.sectionsKey), sections)
         XCTAssertEqual(settings.rangeDays, 28)
-        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .recoverySleep, .activity])
+        XCTAssertEqual(settings.sections, [.scorecard, .weighIns, .intake, .recoverySleep, .activity, .events])
     }
 
     /// The packet's flag and the scorecard's flag are two keys: neither switches the other.
