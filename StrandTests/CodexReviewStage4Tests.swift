@@ -108,4 +108,31 @@ final class CodexReviewStage4Tests: XCTestCase {
         XCTAssertEqual(model.state.unit, "kg")
         XCTAssertTrue(model.state.canSave)
     }
+
+    // MARK: 3. A custom name that derives no benchmark key
+
+    func testPunctuationOnlyCustomNameIsRefusedWithAMessageNamingTheField() {
+        for name in ["!!!", "-", "…"] {
+            let state = P.benchmarkEntry(BenchmarkEntry(key: nil, customName: name, customUnit: "reps", text: "10"),
+                                         decimalSeparator: ".")
+            XCTAssertFalse(state.canSave, name)
+            XCTAssertNil(state.key, "\(name): no key the store would refuse")
+            XCTAssertEqual(state.errorText, P.customNameUnusableText, name)
+            XCTAssertTrue(state.errorText?.localizedCaseInsensitiveContains("name") == true,
+                          "\(name): the message names the field")
+        }
+        let blankValue = P.benchmarkEntry(BenchmarkEntry(key: nil, customName: "!!!", customUnit: "reps"),
+                                          decimalSeparator: ".")
+        XCTAssertEqual(blankValue.errorText, P.customNameUnusableText, "said before a value is typed")
+    }
+
+    func testAnyCustomNameTheSheetAcceptsIsAKeyTheStoreAccepts() {
+        for name in ["Fixture carry", "%", "Fixture 2", "Überzug"] {
+            let state = P.benchmarkEntry(BenchmarkEntry(key: nil, customName: name, customUnit: "reps", text: "10"),
+                                         decimalSeparator: ".")
+            XCTAssertTrue(state.canSave, name)
+            XCTAssertNil(state.errorText, name)
+            XCTAssertTrue(state.key.map(MarkerCatalog.isBenchmark) == true, name)
+        }
+    }
 }
