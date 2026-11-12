@@ -96,6 +96,9 @@ PASTEBOARD_ALLOWLIST: dict[str, str] = {
     "Strand/System/Platform.swift": "the shared cross-platform clipboard write, as before this stage",
     "Strand/Screens/CoachView.swift": "copying one Coach reply, as before this stage",
     PASTEBOARD: "the packet's local-only, expiring item",
+    "StrandiOS/Events/PersonalEventsView.swift": (
+        "ruling A24: the events list's \"Copy stored text\" writes the same local-only, expiring item"
+        " as the packet's writer (setItems with .localOnly and .expirationDate, never a plain string)"),
 }
 
 
