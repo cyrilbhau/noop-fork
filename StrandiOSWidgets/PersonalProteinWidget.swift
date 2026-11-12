@@ -40,9 +40,10 @@ private struct PersonalProteinWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: PersonalProteinEntry
 
-    /// Only the entry's own day: yesterday's figure is never drawn as today's.
+    /// Only the entry's own day: yesterday's figure and time are never drawn as today's.
     private var reading: PersonalIntakeReading? { PersonalWidgetMetrics(intake: entry.reading).todayIntake(now: entry.date) }
-    private var state: PersonalIntakeWidgetState { reading?.widgetState ?? .notSetUp }
+    /// After midnight a set-up feature reads "Nothing logged today", never "Set up in NOOP".
+    private var state: PersonalIntakeWidgetState { PersonalWidgetMetrics(intake: entry.reading).intakeWidgetState(now: entry.date) }
     private var stale: Bool { reading?.isStale(now: entry.date) ?? false }
     private var time: String? { reading?.readAt.map { $0.formatted(date: .omitted, time: .shortened) } }
 
@@ -70,7 +71,8 @@ private struct PersonalProteinWidgetView: View {
                 if family == .systemMedium || ringFraction != nil {
                     Spacer(minLength: 0)
                     WidgetRing(fraction: ringFraction, tint: stale ? NoopTheme.textTertiary : NoopTheme.textPrimary,
-                               diameter: family == .systemMedium ? 64 : 44, lineWidth: family == .systemMedium ? 6 : 5,
+                               diameter: family == .systemMedium ? NoopWidgetArt.mediumRing : NoopWidgetArt.smallRing,
+                               lineWidth: NoopWidgetArt.ringWidth,
                                labelled: false)
                 }
             }

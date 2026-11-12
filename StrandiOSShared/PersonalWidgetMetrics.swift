@@ -42,6 +42,15 @@ public struct PersonalWidgetMetrics: Codable, Equatable {
         return intake
     }
 
+    /// Stage 3: what the protein widget draws at `now`. Not set up only when nothing was published
+    /// or the reading has no source (§10.8). A set-up reading from an earlier day is "Nothing logged
+    /// today" with its floor: its figure and time are never drawn as today's.
+    public func intakeWidgetState(now: Date, calendar: Calendar = .current) -> PersonalIntakeWidgetState {
+        guard let intake, intake.source != nil else { return .notSetUp }
+        guard intake.day == Self.dayKey(now, calendar: calendar) else { return .nothingLogged(floorGrams: intake.floorGrams) }
+        return intake.widgetState
+    }
+
     public func recentSleep(now: Date, calendar: Calendar = .current) -> PersonalSleepReading? {
         guard let sleep, sleep.end <= now,
               let yesterday = calendar.date(byAdding: .day, value: -1, to: now) else { return nil }
