@@ -157,6 +157,8 @@ struct ScorecardContent: View {
                 .padding(.horizontal, NoopTheme.Layout.gutter)
                 .padding(.top, NoopTheme.Layout.l)
                 .noopEntrance(index: 2)
+            // Stage 5: the personal events note directly under the verdict; nothing without one.
+            ScorecardEventNoteView(presentation: shown)
 
             ScorecardSectionHeader(title: CutScorecardPresenter.signalsTitle, trailing: shown.weekLabel)
             signalsCard
@@ -469,7 +471,8 @@ struct ScorecardContent: View {
                     .padding(.top, NoopTheme.Layout.xs)
                 SourceCaption(verbatim: curve.provenance)
                     .padding(.top, NoopTheme.Layout.s)
-                ScorecardWeekChart(points: curve.points, firstLabel: curve.firstLabel, lastLabel: curve.lastLabel)
+                ScorecardWeekChart(points: curve.points, firstLabel: curve.firstLabel, lastLabel: curve.lastLabel,
+                                   axisMarks: .points(covered: curve.marked))   // Stage 5: event dots
                     .padding(.top, NoopTheme.Layout.m)
                 factGrid(curve.facts)
                     .padding(.top, NoopTheme.Layout.rowVerticalPadding)

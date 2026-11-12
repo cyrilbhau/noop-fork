@@ -11,6 +11,9 @@ enum RedesignRoute: Hashable {
     case scorecard
     /// The weigh-in history (specification §10.4), pushed from the scorecard.
     case weighInHistory
+    // Stage 5: the Events screen (stage 5 §10.2), pushed from the Health tab's row. Reachable only
+    // while `noop.personalEventsEnabled` is on.
+    case personalEvents
 
     @ViewBuilder var destination: some View {
         switch self {
@@ -18,6 +21,7 @@ enum RedesignRoute: Hashable {
         case .strain(let dayKey): StrainDetailView(dayKey: dayKey)
         case .scorecard: ScorecardView()
         case .weighInHistory: WeighInHistoryView()
+        case .personalEvents: PersonalEventsView()   // Stage 5
         }
     }
 }

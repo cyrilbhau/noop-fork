@@ -24,6 +24,8 @@ struct StrainDetailView: View {
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
     @State private var model: StrainDetailModel?
+    /// Stage 5: personal event dots and their caption under the thirty-day bars.
+    @ObservedObject private var eventMarks = PersonalEventChartSource.shared
     @State private var showTrends = false
 
     private var loading: Bool { model == nil }
@@ -245,9 +247,11 @@ struct StrainDetailView: View {
                     xLabels: ScoreDetailFormat.barCaptions(keys: keys, isToday: model?.day.isToday ?? true),
                     animates: !reduceMotion && model != nil,
                     accessibilityLabel: Text("Last 30 days"),
-                    valueFormat: { ScoreDetailFormat.score($0, decimals: decimals) }
+                    valueFormat: { ScoreDetailFormat.score($0, decimals: decimals) },
+                    axisMarks: eventMarks.marks(dayKeys: keys, style: .bars)
                 )
                 .frame(height: StrainLayout.chartHeight)
+                PersonalEventChartCaption(eventMarks.caption(dayKeys: keys))
             }
         }
     }

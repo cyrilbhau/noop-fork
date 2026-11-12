@@ -28,6 +28,8 @@ struct TrainingHubView: View {
 
     @State private var sessions: [TrainingSession] = []
     @State private var strainBars: [String: Double] = [:]
+    /// Stage 5: personal event dots and their caption under the week's Strain bars.
+    @ObservedObject private var eventMarks = PersonalEventChartSource.shared
     @State private var loaded = false
     @State private var detail: DetailTarget?
     @State private var liftDetail: LiftTarget?
@@ -219,8 +221,10 @@ struct TrainingHubView: View {
                          animates: NoopTheme.Motion.ringsAnimate(reduceMotion: reduceMotion,
                                                                 fillOnLoad: ringsFillOnLoad),
                          accessibilityLabel: Text("Daily Strain this week"),
-                         valueFormat: { String(format: "%.1f", $0) })
+                         valueFormat: { String(format: "%.1f", $0) },
+                         axisMarks: eventMarks.marks(dayKeys: weekDays.map(Self.dayKey), style: .bars))
                 .frame(height: TrainingLayout.weekBarsHeight)
+            PersonalEventChartCaption(eventMarks.caption(dayKeys: weekDays.map(Self.dayKey)))
             VStack(alignment: .leading, spacing: NoopTheme.Layout.xs / 2) {
                 Text("Strain").noopFont(.rowTitle)
                 Text("Each day this week").noopFont(.footnote)

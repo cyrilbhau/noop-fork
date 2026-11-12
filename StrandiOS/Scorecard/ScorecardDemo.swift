@@ -62,6 +62,16 @@ enum ScorecardDemo {
     }
 }
 
+extension ScorecardDemo {
+    /// Stage 5: the one Fixture Person's input on `today`, with the weeks in `without` left out, so
+    /// the events demo shows the stage 1 series and defines no second set of weights.
+    static func fixtureInput(today: String, without: Set<Int> = []) -> CutScorecardInput {
+        var options = Fixture.Options(today: today)
+        options.without = without
+        return Fixture.input(options)
+    }
+}
+
 // MARK: - The fixture (specification §13)
 
 private enum Fixture {

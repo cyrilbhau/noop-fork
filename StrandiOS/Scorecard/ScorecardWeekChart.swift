@@ -13,6 +13,9 @@ struct ScorecardWeekChart: View {
     let firstLabel: String
     let lastLabel: String
     var color: Color = NoopTheme.textPrimary
+    /// Stage 5: event dots in a strip between the plot and the date labels, one position per week.
+    /// The missed-week ring stays on the baseline; a dot sits in the strip beneath it.
+    var axisMarks: NoopChartAxisMarks? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var motion = NoopMotionState.shared
@@ -29,6 +32,10 @@ struct ScorecardWeekChart: View {
                 plot(in: geometry.size)
             }
             .frame(height: plotHeight)
+            if let axisMarks, !axisMarks.fractions.isEmpty {
+                NoopChartAxisMarkRow(marks: axisMarks, leading: ScorecardLayout.chartInset,
+                                     trailing: ScorecardLayout.chartInset)
+            }
             HStack(alignment: .firstTextBaseline) {
                 axisLabel(firstLabel)
                 Spacer(minLength: NoopTheme.Layout.s)
