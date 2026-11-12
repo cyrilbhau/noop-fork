@@ -469,6 +469,8 @@ enum BodyRecordPresenter {
     static var valueTitle: String { String(localized: "Value") }
     static var nameTitle: String { String(localized: "Name") }
     static var unitTitle: String { String(localized: "Unit") }
+    /// K3: a custom name that gives no benchmark key.
+    static var customNameUnusableText: String { String(localized: "The name needs at least one letter or digit.") }
     static var benchmarkTitle: String { String(localized: "Benchmark") }
     static var durationHint: String { String(localized: "Seconds, or minutes and seconds: 45 or 1:30") }
     /// The existing Lab Book note, reused (§11).
@@ -840,14 +842,28 @@ enum BodyRecordPresenter {
             + [BenchmarkChoice(key: nil, name: customBenchmarkTitle)]
     }
 
+    /// The unit an existing custom benchmark is kept in: its newest readable reading's, when that is one
+    /// of the custom units; nil for an empty history.
+    static func existingBenchmarkUnit(_ readings: [LabMarkerRow]) -> String? {
+        readings.last { $0.value?.isFinite == true && customBenchmarkUnits.contains($0.unit) }?.unit
+    }
+
     static func benchmarkEntry(_ entry: BenchmarkEntry, decimalSeparator: Character) -> BenchmarkEntryState {
         let custom = entry.key == nil
         let name = entry.customName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = entry.key ?? (name.isEmpty ? nil : LabMarkerCsvImport.customKey("bench " + name))
+        // §5.3: the key is the helper's and the prefix rule stays. A name of punctuation alone derives
+        // `custom_bench`, which is no benchmark key, so the sheet refuses it and says why (C7 review).
+        let derived = name.isEmpty ? nil : LabMarkerCsvImport.customKey("bench " + name)
+        let nameUnusable = custom && derived.map { !MarkerCatalog.isBenchmark($0) } == true
+        let key = entry.key ?? (nameUnusable ? nil : derived)
         let unit = entry.key.flatMap { MarkerCatalog.definition(for: $0)?.canonicalUnit } ?? entry.customUnit
         var state = BenchmarkEntryState(key: key, unit: unit, unitOptions: custom ? customBenchmarkUnits : [unit],
                                         acceptsDuration: BenchmarkRules.acceptsDuration(unit: unit), value: nil,
                                         errorText: nil, canSave: false)
+        if nameUnusable {
+            state.errorText = customNameUnusableText
+            return state
+        }
         let text = entry.text.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return state }
         let parsed = state.acceptsDuration
