@@ -19,6 +19,8 @@ struct RecoveryDetailView: View {
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
     @State private var model: RecoveryDetailModel?
+    /// Stage 5: personal event dots and their caption under the thirty-day bars.
+    @ObservedObject private var eventMarks = PersonalEventChartSource.shared
     @State private var showTrends = false
 
     private var loading: Bool { model == nil }
@@ -192,9 +194,11 @@ struct RecoveryDetailView: View {
                     xLabels: ScoreDetailFormat.barCaptions(keys: model?.barKeys ?? [], isToday: model?.day.isToday ?? true),
                     animates: !reduceMotion && model != nil,
                     accessibilityLabel: Text("Last 30 days"),
-                    valueFormat: { "\(ScoreDetailFormat.score($0, decimals: 0))%" }
+                    valueFormat: { "\(ScoreDetailFormat.score($0, decimals: 0))%" },
+                    axisMarks: eventMarks.marks(dayKeys: model?.barKeys ?? [], style: .bars)
                 )
                 .frame(height: RecoveryLayout.chartHeight)
+                PersonalEventChartCaption(eventMarks.caption(dayKeys: model?.barKeys ?? []))
             }
         }
     }
