@@ -834,6 +834,9 @@ final class Repository: ObservableObject {
     /// Expose the shared store handle (used by the importer to persist mapped rows).
     func storeHandle() async -> WhoopStore? { await ensureStore() }
 
+    /// Whether the shared store can be opened now. Asks for the handle and reads no table.
+    func storeIsReadable() async -> Bool { await storeHandle() != nil }
+
     /// CAPTURE-D (#797): the on-device DATA VOLUME read FRESH from the STORE (never the `@Published`
     /// dashboard caches), for the Display & Performance test mode's `dataVolume` line. dbRows is the raw
     /// decoded-stream footprint; importedDays is the count of imported daily-metric rows under the active
