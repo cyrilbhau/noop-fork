@@ -89,13 +89,16 @@ struct IntakePresenterInput: Equatable {
         return input
     }
 
-    /// As `gather(provider:settings:day:)`, with the day's quick-add entries and a restored total.
+    /// As `gather(provider:settings:day:)`, with the quick-add entries and a restored total of
+    /// `entriesDay` (default `day`): the screen's entries card may list one of the seven days
+    /// before today while the ring and totals stay on `day`.
     @MainActor
     static func gather(provider: IntakeProvider, settings: IntakeSettings, day: String,
-                       quickAdd: IntakeQuickAddStore) async -> IntakePresenterInput {
+                       quickAdd: IntakeQuickAddStore, entriesDay: String? = nil) async -> IntakePresenterInput {
         var input = gather(provider: provider, settings: settings, day: day)
-        input.entries = quickAdd.entries(day: day)
-        input.restoredTotal = await quickAdd.restoredTotal(day: day)
+        let listed = entriesDay ?? day
+        input.entries = quickAdd.entries(day: listed)
+        input.restoredTotal = await quickAdd.restoredTotal(day: listed)
         return input
     }
 }

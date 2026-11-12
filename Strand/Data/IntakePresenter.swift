@@ -19,7 +19,7 @@ enum IntakePresenter {
     static var cardSubtitle: String { String(localized: "Today against your floor") }
     static var settingsTitle: String { String(localized: "Intake") }
     static var settingsBlurb: String {
-        String(localized: "Protein and calories against your own floor and range. Off by default. Everything stays on this iPhone.")
+        String(localized: "Protein and calories against your own floor and range. Off by default.")
     }
     static var energyTitle: String { String(localized: "Calories eaten") }
     static var quickAddSaveFailed: String { String(localized: "Could not save. Nothing was changed.") }
@@ -30,6 +30,8 @@ enum IntakePresenter {
         String(localized: "Silent on days when it falls within 30 minutes of your wind-down reminder.")
     }
     static var targetsNeedAttention: String { String(localized: "Your targets need attention") }
+    /// The scorecard's own sentence for unusable stored rules, shown at the floor field.
+    static var rulesNeedAttention: String { String(localized: "Your rules need attention") }
     static var setupPrompt: String { String(localized: "Choose where intake comes from") }
     static var appleHealthName: String { String(localized: "Apple Health") }
     static var enteredHere: String { String(localized: "Entered here") }
@@ -350,6 +352,42 @@ enum IntakePresenter {
         return (0...7).map { CanonicalDay.key(number - $0) }
     }
 
+    /// The day the screen's entries card lists: the picked day while it is one of `quickAddDays`,
+    /// else today. Entries on any of those days can be seen, edited and deleted (§9.3).
+    static func entriesDay(requested: String?, today: String) -> String {
+        guard let requested, quickAddDays(today: today).contains(requested) else { return today }
+        return requested
+    }
+
+    /// A day in the backdating pickers: "Today", or the day's short date ("Mon 9 Nov").
+    static func dayLabel(_ day: String, today: String, timeZone: TimeZone, locale: Locale) -> String {
+        if day == today { return String(localized: "Today") }
+        guard CanonicalDay.isValid(day), let (year, month, date) = WeeklyDigestEngine.parseYMD(day) else { return day }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        guard let noon = calendar.date(from: DateComponents(year: year, month: month, day: date, hour: 12)) else { return day }
+        var style = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(locale)
+        style.timeZone = timeZone
+        return noon.formatted(style)
+    }
+
+    /// The amounts of an entry as one line: "30 g · 150 kcal".
+    static func entryAmounts(_ entry: IntakeEntry, locale: Locale) -> String {
+        var parts: [String] = []
+        if let grams = entry.proteinGrams {
+            parts.append(String(localized: "\(grams.formatted(.number.precision(.fractionLength(0...1)).locale(locale))) g"))
+        }
+        if let kcal = entry.energyKcal {
+            parts.append(String(localized: "\(kcal.formatted(.number.precision(.fractionLength(0)).locale(locale))) kcal"))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// A stored amount as an editable field's text: whole numbers without a decimal point.
+    static func editableAmountText(_ value: Double) -> String {
+        value == value.rounded() && abs(value) < 1e15 ? String(Int(value)) : String(value)
+    }
+
     // MARK: - Settings (§10.5)
 
     /// The floor field: empty is no floor; otherwise valid exactly when stage 1's rule accepts it.
@@ -437,6 +475,15 @@ enum IntakePresenter {
     }
 
     // MARK: - Scorecard protein row (§10.4)
+
+    /// The sources of the days the scorecard's protein signal counts: the seven days before the
+    /// judged weigh-in day `anchorDay`, as `CutScorecard` counts them (`(anchor - 7)...(anchor - 1)`).
+    /// Empty when `anchorDay` is not a canonical key.
+    static func scorecardProteinSources(_ series: [ResolvedIntakeDay], anchorDay: String) -> [IntakeSource] {
+        guard let anchor = CanonicalDay.number(anchorDay) else { return [] }
+        let first = CanonicalDay.key(anchor - 7), last = CanonicalDay.key(anchor - 1)
+        return series.filter { $0.day >= first && $0.day <= last }.compactMap { $0.protein?.source }
+    }
 
     /// The source caption of the scorecard's protein row; nil with the intake flag off, so the row
     /// is exactly stage 1's.
