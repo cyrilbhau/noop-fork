@@ -91,12 +91,16 @@ final class IntakeWidgetPayloadTests: XCTestCase {
 
     func testPayloadWithNilIntakeEncodesNoIntakeKey() throws {
         let metrics = PersonalWidgetMetrics(steps: .health(value: 6_500, day: today), stepGoal: 8_000)
-        let bytes = try JSONEncoder().encode(metrics)
+        // Sorted keys: JSONEncoder's key order is not stable from one encoding to the next, so
+        // equal payloads are compared in one canonical order.
+        let canonical = JSONEncoder()
+        canonical.outputFormatting = .sortedKeys
+        let bytes = try canonical.encode(metrics)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
         XCTAssertNil(object["intake"], "flag off: the payload bytes are what they were")
         XCTAssertEqual(Set(object.keys), ["steps", "stepGoal"])
         // The bytes equal those of the same payload decoded from an older build's JSON.
-        let reencoded = try JSONEncoder().encode(try JSONDecoder().decode(PersonalWidgetMetrics.self, from: bytes))
+        let reencoded = try canonical.encode(try JSONDecoder().decode(PersonalWidgetMetrics.self, from: bytes))
         XCTAssertEqual(reencoded, bytes)
 
         var with = metrics
