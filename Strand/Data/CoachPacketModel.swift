@@ -141,10 +141,12 @@ final class CoachPacketModel: ObservableObject {
 
     // MARK: Copy and share
 
-    /// The document that may leave now: the previewed one, while it is the packet for the stored
-    /// choices and has at least one section.
+    /// The document that may leave now: the previewed one, while the feature is on, it is the
+    /// packet for the stored choices and it has at least one section. The flag is read here, at
+    /// the moment text would leave, so switching the feature off revokes a packet already shown.
     private var leavingDocument: CoachPacketDocument? {
-        guard !isRegenerating, case .ready(let document) = state, !document.sections.isEmpty else { return nil }
+        guard settings.isEnabled, !isRegenerating, case .ready(let document) = state,
+              !document.sections.isEmpty else { return nil }
         return document
     }
 
@@ -191,5 +193,42 @@ final class CoachPacketModel: ObservableObject {
         guard now() >= expiry else { return }
         copyState = .none
         earlierCopyExpiresAt = nil
+    }
+}
+
+// MARK: - The Shortcuts action
+
+/// How the Shortcuts action ends: the packet text, or why there is none. `GetCoachPacketIntent`
+/// returns the text or throws the matching error.
+enum CoachPacketShortcutResult: Equatable {
+    case text(String)
+    case switchedOff, notReady, blocked, unavailable
+}
+
+/// The Shortcuts action's steps (specification §9.3), held here so that tests on macOS can run
+/// them. The intent supplies the app's readiness, the pause between checks and its assembler.
+@MainActor
+enum CoachPacketShortcut {
+    /// Checks the flag, waits up to `attempts` pauses for the app to be ready, then assembles.
+    /// `assemble` returns nil when the app is still not ready. The flag is read again after the
+    /// waits and after assembly, so switching the feature off revokes a request already waiting.
+    static func run(settings: CoachPacketSettings, attempts: Int, isReady: () -> Bool,
+                    pause: () async -> Void,
+                    assemble: () async -> CoachPacketOutcome?) async -> CoachPacketShortcutResult {
+        guard settings.isEnabled else { return .switchedOff }
+        // A background launch hands the action its first tick before the app's model exists, its
+        // first refresh has finished or its device registry is open.
+        for _ in 0..<attempts {
+            if isReady() { break }
+            await pause()
+        }
+        guard settings.isEnabled else { return .switchedOff }
+        guard let outcome = await assemble() else { return .notReady }
+        guard settings.isEnabled else { return .switchedOff }
+        switch outcome {
+        case .ready(let document): return .text(document.text)
+        case .blocked: return .blocked
+        case .unavailable: return .unavailable
+        }
     }
 }
