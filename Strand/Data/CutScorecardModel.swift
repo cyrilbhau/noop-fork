@@ -60,6 +60,20 @@ final class CutScorecardModel: ObservableObject {
     private var revisionObserver: AnyCancellable?
     // Stage 5: follows the personal events store, whose events reach the presenter's context only.
     private var eventsObserver: AnyCancellable?
+    // Ruling A29: follows the intake provider's snapshot and the stored rules (floor included).
+    private var intakeObserver: AnyCancellable?
+    private var rulesObserver: AnyCancellable?
+    /// The stored rules as the latest load read them; a defaults write that leaves them as they
+    /// were costs no evaluation.
+    private var loadedRulesFingerprint: String?
+    /// The intake provider every load reads and the model follows: the injected one, else the app's
+    /// live one for the repository, held here so that it is the same instance from load to load.
+    private lazy var intakeProvider: IntakeProvider = intake ?? .live(repository: repository)
+    /// An injected evaluator with no injected provider reads no intake, so none is created for it.
+    private var followsIntake: Bool { intake != nil || evaluate == nil }
+    /// The intake refreshes a load is awaiting itself. A revision those publish is that load's own
+    /// read, not a change it missed, so it starts no further load.
+    private var ownIntakeRefreshes = 0
     /// The weekly reminder, told the newest weigh-in day after each result so that a week which
     /// already has its weigh-in is not reminded. Nil in tests; the app's shared model sets it.
     var reminder: WeighInReminder?
@@ -128,12 +142,20 @@ final class CutScorecardModel: ObservableObject {
         let shownLocale = locale()
         let attention = settings.rulesNeedAttention
         let storedPhaseName = settings.activePhase(on: today)?.name
+        loadedRulesFingerprint = settings.storedRulesFingerprint   // Ruling A29
         // Stage 5: the personal events, for the note and the marks. Empty while that flag is off.
         let events = PersonalEventStore.shared.events
         if state == .idle { state = .loading }
         // Before the snapshot is read: a change published while this load is still evaluating then
         // starts another load, instead of being missed.
         followProvider()
+        // Ruling A29: the intake snapshot this load reads, refreshed here so that its own read is
+        // not taken for a later change (the builder's refresh then finds it current).
+        if followsIntake {
+            ownIntakeRefreshes += 1
+            await intakeProvider.refresh()
+            ownIntakeRefreshes -= 1
+        }
 
         let evaluation: CutScorecardEvaluation
         if let evaluate {
@@ -141,7 +163,7 @@ final class CutScorecardModel: ObservableObject {
         } else {
             evaluation = await CutScorecardInputBuilder(repository: repository, provider: provider,
                                                         settings: settings,
-                                                        intake: intake ?? .live(repository: repository), // Stage 3
+                                                        intake: intakeProvider, // Stage 3
                                                         timeZone: timeZone)
                 .evaluation(today: today)
         }
@@ -178,6 +200,31 @@ final class CutScorecardModel: ObservableObject {
         eventsObserver = PersonalEventStore.shared.$revision.dropFirst().sink { [weak self] _ in
             Task { @MainActor [weak self] in await self?.load() }
         }
+        // Ruling A29: a quick-add, Health read or import that changes the intake snapshot reloads
+        // the protein figures; the revision moves only when the provider read something new. The
+        // provider publishes on the main actor, so the check of a load's own refresh is synchronous.
+        if followsIntake {
+            intakeObserver = intakeProvider.$revision.dropFirst().sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.ownIntakeRefreshes == 0 else { return }
+                    Task { @MainActor [weak self] in await self?.load() }
+                }
+            }
+        }
+        // Ruling A29: a rules or floor write from any editor reloads the model. The notification is
+        // posted for every defaults write, so only a changed rules fingerprint costs a load.
+        rulesObserver = NotificationCenter.default
+            .publisher(for: UserDefaults.didChangeNotification, object: settings.observedDefaults)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in self?.followRules() }
+            }
+    }
+
+    /// Ruling A29: reloads when the stored rules differ from those the latest load read.
+    private func followRules() {
+        guard let loaded = loadedRulesFingerprint, loaded != settings.storedRulesFingerprint else { return }
+        loadedRulesFingerprint = settings.storedRulesFingerprint
+        Task { @MainActor [weak self] in await self?.load() }
     }
 }
 

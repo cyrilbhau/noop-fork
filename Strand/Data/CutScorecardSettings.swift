@@ -212,6 +212,17 @@ final class CutScorecardSettings {
         defaults.string(forKey: Self.rulesKey) != nil && storedParameters() == nil
     }
 
+    /// Ruling A29: the defaults whose change notification announces a write to these settings,
+    /// whichever editor made it (the rules sheet, the intake settings or a restore).
+    var observedDefaults: UserDefaults { defaults }
+
+    /// Ruling A29: what is stored under the rules and phases keys, as found. Two equal fingerprints
+    /// mean the scorecard's rules, floor included, and phases have not been written in between.
+    var storedRulesFingerprint: String {
+        "\(String(describing: defaults.object(forKey: Self.rulesKey)))|"
+            + "\(String(describing: defaults.object(forKey: Self.phasesKey)))"
+    }
+
     /// The stored rules when they are present, readable and valid. One invalid field makes the whole
     /// object unusable; it is not merged field by field with the defaults.
     private func storedParameters() -> CutScorecardParameters? {
