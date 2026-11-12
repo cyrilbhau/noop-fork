@@ -453,6 +453,20 @@ enum BodyRecordPresenter {
     static var earlierTitle: String { String(localized: "Earlier") }
     static var laterTitle: String { String(localized: "Later") }
     static var changeTitle: String { String(localized: "Change") }
+
+    /// Codex C19: a two-scan comparison row's spoken value, whatever the visual layout: the unit,
+    /// then each figure named as earlier, later and change, then the direction and percentage. The
+    /// columns' position carries those names on screen; VoiceOver hears them here.
+    static func comparisonAccessibilityValue(_ row: BodyScanComparisonRow) -> String {
+        var parts: [String] = []
+        if !row.unit.isEmpty { parts.append(row.unit) }
+        parts.append(String(localized: "\(earlierTitle): \(row.earlierText)"))
+        parts.append(String(localized: "\(laterTitle): \(row.laterText)"))
+        if let change = row.changeText { parts.append(String(localized: "\(changeTitle): \(change)")) }
+        if let direction = row.directionText { parts.append(direction) }
+        if let percent = row.percentText { parts.append(percent) }
+        return parts.joined(separator: ", ")
+    }
     static var conditionTitle: String { String(localized: "Condition (optional)") }
     static var conditionPrompt: String { String(localized: "e.g. surface height or grip") }
     static var customBenchmarkTitle: String { String(localized: "Custom benchmark") }

@@ -892,11 +892,17 @@ public enum CoachPacket {
         }
         var lines: [String] = []
         var indented = 0
+        var sentinelKept = false
         for row in rows {
             // SPEC-NOTE: a row with a control character (a line break, a tab) would break the line
             // grammar of §7.12 G-2, so it is malformed and dropped like a row without the indent.
             guard !row.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) else { continue }
             if row == PersonalEvents.packetIntroRow || row == PersonalEvents.packetNoneListedRow {
+                // Stage 5 returns one of the two, once: the lead line before its rows, or "none
+                // listed" alone. The first is kept and any repeat dropped, so the allowance, which
+                // counts one lead line and the indented row limit, holds for any rows (Codex C16).
+                guard !sentinelKept else { continue }
+                sentinelKept = true
                 lines.append(row)
             } else if row.hasPrefix(PersonalEvents.packetRowIndent) {
                 // A row that is only its indent, or ends in spaces, would print a trailing space.

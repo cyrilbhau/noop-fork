@@ -139,11 +139,11 @@ struct NiggleSheet: View {
                     trendPicker($draft.niggle.trend)
                 }
                 FormKitControlRow("Any weakness") {
-                    Toggle("", isOn: $draft.niggle.weakness).labelsHidden().tint(NoopTheme.recovery)
+                    Toggle("Any weakness", isOn: $draft.niggle.weakness).labelsHidden().tint(NoopTheme.recovery)
                 }
             }
             FormKitControlRow(isComplaint ? "Started" : "Noted") {
-                DatePicker("", selection: $day, in: ...todayDate, displayedComponents: .date)
+                DatePicker(isComplaint ? "Started" : "Noted", selection: $day, in: ...todayDate, displayedComponents: .date)
                     .labelsHidden()
             }
         }
@@ -161,12 +161,12 @@ struct NiggleSheet: View {
     private var updateFields: some View {
         Stage6FormCard {
             FormKitControlRow("Date", showsDivider: false) {
-                DatePicker("", selection: $day, in: onsetDate...max(onsetDate, todayDate), displayedComponents: .date)
+                DatePicker("Date", selection: $day, in: onsetDate...max(onsetDate, todayDate), displayedComponents: .date)
                     .labelsHidden()
             }
             FormKitControlRow("How it is changing") { trendPicker($trend) }
             FormKitControlRow("Any weakness") {
-                Toggle("", isOn: $weakness).labelsHidden().tint(NoopTheme.recovery)
+                Toggle("Any weakness", isOn: $weakness).labelsHidden().tint(NoopTheme.recovery)
             }
         }
         noteCard($note)
@@ -175,7 +175,7 @@ struct NiggleSheet: View {
     private var resolveFields: some View {
         Stage6FormCard {
             FormKitControlRow("Resolved on", showsDivider: false) {
-                DatePicker("", selection: $day, in: onsetDate...max(onsetDate, todayDate), displayedComponents: .date)
+                DatePicker("Date", selection: $day, in: onsetDate...max(onsetDate, todayDate), displayedComponents: .date)
                     .labelsHidden()
             }
         }

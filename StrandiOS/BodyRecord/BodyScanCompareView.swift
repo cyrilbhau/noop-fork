@@ -157,7 +157,7 @@ struct BodyScanCompareScreen: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
+        .modifier(ComparisonRowAccessibility(row: row, oneScan: oneScan))
     }
 
     private func cell(_ text: String) -> some View {
@@ -167,5 +167,25 @@ struct BodyScanCompareScreen: View {
             .foregroundStyle(NoopTheme.textPrimary)
             .multilineTextAlignment(.trailing)
             .frame(width: column, alignment: .trailing)
+    }
+}
+
+/// Codex C19: a two-scan row is one element named by its field, whose value names each figure as
+/// earlier, later and change, so the spoken row is the same in the columns and in the stacked
+/// layout. A one-scan row keeps its children combined: it has one figure and no columns.
+private struct ComparisonRowAccessibility: ViewModifier {
+    let row: BodyScanComparisonRow
+    let oneScan: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if oneScan {
+            content.accessibilityElement(children: .combine)
+        } else {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: row.label))
+                .accessibilityValue(Text(verbatim: BodyRecordPresenter.comparisonAccessibilityValue(row)))
+        }
     }
 }

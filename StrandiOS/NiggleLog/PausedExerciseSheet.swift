@@ -56,10 +56,11 @@ struct PausedExerciseSheet: View {
                             TextField(text: Binding(get: { draft.pause.until ?? "" },
                                                     set: { draft.pause.until = $0.isEmpty ? nil : $0 })) { Text("Optional") }
                                 .multilineTextAlignment(.trailing)
+                                .accessibilityLabel(Text("Until"))
                                 .noopFont(.body)
                         }
                         FormKitControlRow("Paused on") {
-                            DatePicker("", selection: $pausedOn, in: ...todayDate, displayedComponents: .date).labelsHidden()
+                            DatePicker("Paused on", selection: $pausedOn, in: ...todayDate, displayedComponents: .date).labelsHidden()
                         }
                         FormKitControlRow("Linked niggle") {
                             Picker(selection: $draft.pause.niggleId) {
@@ -78,11 +79,11 @@ struct PausedExerciseSheet: View {
                     if editing != nil {
                         Stage6FormCard {
                             FormKitControlRow(LocalizedStringKey(NiggleLogPresenter.markResumedTitle), showsDivider: false) {
-                                Toggle("", isOn: $resumes).labelsHidden().tint(NoopTheme.recovery)
+                                Toggle(isOn: $resumes) { Text(verbatim: NiggleLogPresenter.markResumedTitle) }.labelsHidden().tint(NoopTheme.recovery)
                             }
                             if resumes {
                                 FormKitControlRow("Resumed on") {
-                                    DatePicker("", selection: $resumedOn, in: pausedOn...max(pausedOn, todayDate),
+                                    DatePicker("Resumed on", selection: $resumedOn, in: pausedOn...max(pausedOn, todayDate),
                                                displayedComponents: .date).labelsHidden()
                                 }
                             }

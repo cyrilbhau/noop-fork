@@ -163,7 +163,10 @@ private struct PersonalProteinWidgetView: View {
         }
         .gaugeStyle(.accessoryCircularCapacity)
         .opacity(stale ? 0.5 : 1)
+        // Codex C19: the gauge alone says neither the state nor the time; its spoken value does.
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Protein"))
+        .accessibilityValue(Text(verbatim: state.spokenDescription(time: time, stale: stale)))
     }
 
     // MARK: Values

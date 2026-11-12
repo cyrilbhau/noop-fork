@@ -303,6 +303,33 @@ enum IntakePresenter {
                                        message: measured < 2 ? String(localized: "More days will appear here") : nil)
     }
 
+    /// Codex C19: what the history chart says to VoiceOver, which hears no point of the curve. The
+    /// days measured out of the days shown (an unmeasured day stays missing, never zero), the floor
+    /// state of the measured days or that no floor is set, the lowest and highest figures, and the
+    /// shown day's figure.
+    static func chartAccessibilitySummary(_ points: [IntakeScreenModel.ChartPoint]) -> String {
+        let measured = points.compactMap { point in point.grams.map { (grams: Int($0.rounded()), meets: point.meetsFloor) } }
+        var parts = [String(localized: "Days measured: \(measured.count) of \(points.count)")]
+        let judged = measured.compactMap(\.meets)
+        if !measured.isEmpty, judged.isEmpty {
+            parts.append(String(localized: "No floor set"))
+        } else if !judged.isEmpty {
+            parts.append(String(localized: "Days at or above your floor: \(judged.filter { $0 }.count)"))
+            parts.append(String(localized: "Days below your floor: \(judged.filter { !$0 }.count)"))
+        }
+        if let lowest = measured.map(\.grams).min(), let highest = measured.map(\.grams).max() {
+            parts.append(String(localized: "Lowest \(lowest) g, highest \(highest) g"))
+        }
+        if let last = points.last {
+            if let grams = last.grams {
+                parts.append(String(localized: "Shown day: \(Int(grams.rounded())) g"))
+            } else {
+                parts.append(String(localized: "Shown day: not measured"))
+            }
+        }
+        return parts.joined(separator: ". ")
+    }
+
     // MARK: - The widget reading (§8.4, §10.8)
 
     /// What the widget may show for `input.day`; nil when Intake is off or has no source. A figure
@@ -400,6 +427,12 @@ enum IntakePresenter {
     }
 
     // MARK: - Settings (§10.5)
+
+    /// Codex C19: each calorie field's own spoken name, with its purpose and unit. The row title beside
+    /// the fields is not their programmatic name, and the range row holds two fields.
+    static var calorieRangeLowFieldLabel: String { String(localized: "Lower end of the calorie range, kcal") }
+    static var calorieRangeHighFieldLabel: String { String(localized: "Upper end of the calorie range, kcal") }
+    static var hardFloorFieldLabel: String { String(localized: "Hard floor, kcal") }
 
     /// The floor field: empty is no floor; otherwise valid exactly when stage 1's rule accepts it.
     /// The typed value is never rounded.

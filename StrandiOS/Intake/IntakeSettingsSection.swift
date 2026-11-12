@@ -98,9 +98,9 @@ struct IntakeSettingsSection: View {
             VStack(alignment: .leading, spacing: NoopMetrics.space1) {
                 FormRow(label: "Calorie range") {
                     HStack(spacing: NoopMetrics.space1) {
-                        numberField($lowText)
-                        Text(verbatim: "–").foregroundStyle(StrandPalette.textTertiary)
-                        numberField($highText)
+                        numberField($lowText, label: IntakePresenter.calorieRangeLowFieldLabel)
+                        Text(verbatim: "–").foregroundStyle(StrandPalette.textTertiary).accessibilityHidden(true)
+                        numberField($highText, label: IntakePresenter.calorieRangeHighFieldLabel)
                         Text(verbatim: "kcal").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
                     }
                 }
@@ -109,7 +109,7 @@ struct IntakeSettingsSection: View {
         case .hardFloor:
             FormRow(label: "Hard floor") {
                 HStack(spacing: NoopMetrics.space1) {
-                    numberField($hardText)
+                    numberField($hardText, label: IntakePresenter.hardFloorFieldLabel)
                     Text(verbatim: "kcal").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
                 }
             }
@@ -192,7 +192,8 @@ struct IntakeSettingsSection: View {
         IntakeSettings.appleHealthReadAvailable ? [.none, .appleHealth, .quickAdd] : [.none, .quickAdd]
     }
 
-    private func numberField(_ text: Binding<String>) -> some View {
+    /// Codex C19: `label` is the field's spoken name, its purpose and unit.
+    private func numberField(_ text: Binding<String>, label: String) -> some View {
         TextField("", text: text)
             .keyboardType(.numberPad)
             .multilineTextAlignment(.trailing)
@@ -201,6 +202,7 @@ struct IntakeSettingsSection: View {
             .foregroundStyle(rangeMessage == nil ? StrandPalette.textPrimary : NoopTheme.recoveryLow)
             .onSubmit(saveRange)
             .onChangeCompat(of: focused) { if !$0 { saveRange(); saveFloor() } }
+            .accessibilityLabel(Text(verbatim: label))
     }
 
     private func caption(_ text: String, danger: Bool = false) -> some View {

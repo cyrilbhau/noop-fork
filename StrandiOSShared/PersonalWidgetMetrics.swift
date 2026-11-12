@@ -129,6 +129,46 @@ public enum PersonalIntakeWidgetState: Equatable {
     case above(grams: Int, floorGrams: Int, overGrams: Int)
 }
 
+extension PersonalIntakeWidgetState {
+    /// Codex C19: the whole state in words, for a family that draws only a gauge (the circular Lock
+    /// Screen widget). Grams eaten against the floor, what remains or is over, and when the figure was
+    /// read or entered, or that it is stale; `time` nil with a figure says the time is not known.
+    public func spokenDescription(time: String?, stale: Bool) -> String {
+        var parts: [String] = []
+        var hasFigure = true
+        switch self {
+        case .notSetUp:
+            return String(localized: "Set up in NOOP")
+        case .nothingLogged(let floor):
+            parts.append(String(localized: "Nothing logged today"))
+            if let floor { parts.append(String(localized: "Floor \(floor) g")) }
+            hasFigure = false
+        case .noFloor(let grams):
+            parts.append(String(localized: "\(grams) g logged"))
+            parts.append(String(localized: "No floor set"))
+        case .below(let grams, let floor, let remaining):
+            parts.append(String(localized: "\(grams) g of \(floor) g"))
+            parts.append(String(localized: "\(remaining) g to go"))
+        case .atFloor(let grams, let floor):
+            parts.append(String(localized: "\(grams) g of \(floor) g"))
+            parts.append(String(localized: "Floor met"))
+        case .above(let grams, let floor, let over):
+            parts.append(String(localized: "\(grams) g of \(floor) g"))
+            parts.append(String(localized: "Floor met"))
+            parts.append(String(localized: "+\(over) g over"))
+        }
+        if hasFigure {
+            if let time {
+                parts.append(stale ? String(localized: "Last read \(time)") : String(localized: "as of \(time)"))
+            } else {
+                parts.append(String(localized: "Time not known"))
+            }
+            if stale { parts.append(String(localized: "Open NOOP to refresh")) }
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
 /// Today's protein for the widget: whole grams, the printed floor, where the figure came from and
 /// when it was read or entered. No calories, labels, app names or supplements.
 public struct PersonalIntakeReading: Codable, Equatable {
