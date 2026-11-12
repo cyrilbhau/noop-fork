@@ -14,7 +14,6 @@ struct NiggleLogView: View {
     @StateObject private var model: NiggleLogModel
     @ObservedObject private var flag = NiggleLogSettings.flag
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
     private let isLoading: Bool
     private let followsFlag: Bool
     @State private var sheet: NiggleLogSheet?
@@ -53,11 +52,9 @@ struct NiggleLogView: View {
             }
         }
         .sheet(item: $sheet) { which in NiggleLogSheetHost(sheet: which, model: model) }
+        // A new local day or a return to the foreground reads again through the model (ruling A27).
         .task { if !isLoading { await model.load() } }
         .onChangeCompat(of: flag.isEnabled) { enabled in if !enabled && followsFlag { dismiss() } }
-        .onChangeCompat(of: scenePhase) { phase in
-            if phase == .active { Task { await model.load() } }
-        }
     }
 
     private var canAdd: Bool {
@@ -440,5 +437,7 @@ struct NiggleLogHealthRowLabel: View {
         NoopListRow(LocalizedStringKey(row?.title ?? NiggleLogPresenter.title), systemImage: "list.bullet.clipboard",
                     color: NoopTheme.textPrimary, value: row?.detail, showsDivider: showsDivider)
             .task(id: refreshSequence) { row = NiggleLogModel.liveHealthRow() }
+            // The open count is taken against today (ruling A27).
+            .onReceive(LocalDayChange.publisher()) { _ in row = NiggleLogModel.liveHealthRow() }
     }
 }

@@ -23,6 +23,9 @@ final class NiggleLogModel: ObservableObject {
     private let locale: () -> Locale
     /// What the latest load read, so a detail is the same moment as the list.
     private var snapshot: Snapshot?
+    /// Set by the first load; a model no screen has loaded reads nothing on a day change.
+    private var hasLoaded = false
+    private var dayObserver: AnyCancellable?
 
     private struct Snapshot {
         let entries: [StoredNiggle]
@@ -35,16 +38,24 @@ final class NiggleLogModel: ObservableObject {
 
     init(settings: NiggleLogSettings = NiggleLogSettings(), now: @escaping () -> Date = Date.init,
          timeZone: @escaping () -> TimeZone = { .current },
-         locale: @escaping () -> Locale = { AppLanguage.activeLocale }) {
+         locale: @escaping () -> Locale = { AppLanguage.activeLocale },
+         notificationCenter: NotificationCenter = .default) {
         self.settings = settings
         self.now = now
         self.timeZone = timeZone
         self.locale = locale
+        // Ruling A27: once a screen has loaded it, a new local day (midnight, a new time zone, or a return
+        // to the foreground) reads again, so no day count or day-derived label stays on yesterday.
+        dayObserver = LocalDayChange.observe(notificationCenter) { [weak self] in
+            guard let self, self.hasLoaded else { return }
+            Task { await self.load() }
+        }
     }
 
     /// Flag off: `.idle`, and no list is read. Flag on: the stored lists through the presenter, for
-    /// the day the clock is on (read once).
+    /// the day the clock is on (read once). Read again on a new local day (ruling A27).
     func load() async {
+        hasLoaded = true
         guard settings.isEnabled else {
             snapshot = nil
             if state != .idle { state = .idle }
@@ -57,12 +68,18 @@ final class NiggleLogModel: ObservableObject {
         let pausedNeedAttention = settings.pausedNeedAttention
         let read = Snapshot(entries: settings.entries, rules: settings.rules, paused: settings.paused,
                             rulesNeedAttention: rulesNeedAttention, today: today, locale: shownLocale)
+        // A detail reads the snapshot, not the published list: a new day alone must still redraw it.
+        let dayMoved = snapshot.map { $0.today != today } ?? false
         snapshot = read
         let presentation = NiggleLogPresenter.present(
             entries: read.entries, rules: read.rules, paused: read.paused, entriesNeedAttention: entriesNeedAttention,
             rulesNeedAttention: rulesNeedAttention, pausedNeedAttention: pausedNeedAttention, today: today,
             locale: shownLocale)
-        if state != .loaded(presentation) { state = .loaded(presentation) }
+        if state != .loaded(presentation) {
+            state = .loaded(presentation)
+        } else if dayMoved {
+            objectWillChange.send()
+        }
     }
 
     /// The detail of one entry as of the latest load; nil when it no longer exists (the screen pops).

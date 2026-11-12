@@ -33,23 +33,34 @@ final class CutStressModel: ObservableObject {
     private let now: () -> Date
     private let timeZone: () -> TimeZone
     private let locale: () -> Locale
+    /// Set by the first load; a model no screen has loaded reads nothing on a day change.
+    private var hasLoaded = false
+    private var dayObserver: AnyCancellable?
 
     init(repository: Repository, scorecardSettings: CutScorecardSettings = CutScorecardSettings(),
          defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init,
          timeZone: @escaping () -> TimeZone = { .current },
-         locale: @escaping () -> Locale = { AppLanguage.activeLocale }) {
+         locale: @escaping () -> Locale = { AppLanguage.activeLocale },
+         notificationCenter: NotificationCenter = .default) {
         self.repository = repository
         self.scorecardSettings = scorecardSettings
         self.defaults = defaults
         self.now = now
         self.timeZone = timeZone
         self.locale = locale
+        // Ruling A27: once a screen has loaded it, a new local day (midnight, a new time zone, or a return
+        // to the foreground) reads again, so no day count or day-derived label stays on yesterday.
+        dayObserver = LocalDayChange.observe(notificationCenter) { [weak self] in
+            guard let self, self.hasLoaded else { return }
+            Task { await self.load() }
+        }
     }
 
     /// Whether the screen may be shown: both its own flag and the scorecard's.
     var isReachable: Bool { defaults.bool(forKey: Self.enabledKey) && scorecardSettings.isEnabled }
 
     func load() async {
+        hasLoaded = true
         guard isReachable else {
             input = nil
             result = nil
