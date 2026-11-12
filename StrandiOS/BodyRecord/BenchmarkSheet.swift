@@ -69,6 +69,7 @@ struct BenchmarkSheetScreen: View {
             .padding(.vertical, NoopTheme.Layout.l)
         }
         .background(NoopTheme.sheet.ignoresSafeArea())
+        .task { await model.prepare() }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
