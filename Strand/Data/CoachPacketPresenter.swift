@@ -31,6 +31,11 @@ struct CoachPacketSheetPresentation: Equatable {
     var showsRetry: Bool
     /// True when `statusLine` is the copied confirmation, which the sheet marks with a check.
     var statusIsCopyConfirmation = false
+    /// Packet v2: under the Events switch, read-only, "Private events: left out" or "... included".
+    /// Worded from the document's captured choice; nil when the document has none. No count.
+    var privateEventsCaption: String? = nil
+    /// "Change this in Settings.", beside `privateEventsCaption` and only with it.
+    var privateEventsHint: String? = nil
 }
 
 enum CoachPacketPresenter {
@@ -58,8 +63,16 @@ enum CoachPacketPresenter {
         case .recoverySleep: return String(localized: "Recovery and sleep")
         case .trends: return String(localized: "Trends")
         case .activity: return String(localized: "Activity")
+        case .intake: return String(localized: "Intake")
+        case .events: return String(localized: "Events")
         }
     }
+
+    // MARK: Private events (packet v2; stage 5 §9.6 and §11)
+
+    static var privateEventsLeftOut: String { String(localized: "Private events: left out") }
+    static var privateEventsIncluded: String { String(localized: "Private events: included") }
+    static var privateEventsChangeInSettings: String { String(localized: "Change this in Settings.") }
 
     // MARK: Size and copy
 
@@ -153,11 +166,15 @@ enum CoachPacketPresenter {
             else if everyOff { caption = everySectionOff }
             else if document.nothingMeasured { caption = nothingMeasured }
             else { caption = nil }
+            // The caption names the choice the previewed text was built with, so it cannot disagree
+            // with the text beneath it.
+            let privateCaption = document.privateEventsIncluded.map { $0 ? privateEventsIncluded : privateEventsLeftOut }
             return CoachPacketSheetPresentation(
                 body: .preview(text: document.text, dimmed: isRegenerating), statusLine: statusLine,
                 caption: caption, scorecardCaption: scorecardCaption, showsCopyAndShare: true,
                 copyAndShareEnabled: !isRegenerating && !everyOff, showsRetry: false,
-                statusIsCopyConfirmation: confirmsCopy)
+                statusIsCopyConfirmation: confirmsCopy, privateEventsCaption: privateCaption,
+                privateEventsHint: privateCaption == nil ? nil : privateEventsChangeInSettings)
         }
     }
 }

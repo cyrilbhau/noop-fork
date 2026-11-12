@@ -91,8 +91,8 @@ final class CoachPacketPresenterTests: XCTestCase {
 
     func testSectionSwitches() {
         XCTAssertEqual(CoachPacketSection.allCases.map(CoachPacketPresenter.sectionLabel),
-                       ["Scorecard", "Weigh-ins", "Recovery and sleep", "Trends", "Activity"])
-        XCTAssertEqual(CoachPacketSection.allCases.count, 5, "version 1 has no switch for intake or events")
+                       ["Scorecard", "Weigh-ins", "Intake", "Recovery and sleep", "Trends", "Activity", "Events"])
+        XCTAssertEqual(CoachPacketSection.allCases.count, 7, "packet v2 adds the intake and events switches")
     }
 
     func testSizeLine() {

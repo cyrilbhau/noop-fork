@@ -3,8 +3,9 @@ import StrandAnalytics
 import StrandDesign
 
 // Stage 2 (coach packet), specification §10.2, frames B1 to B17 of
-// `design/round-s2-coach-packet/`. Top to bottom: title, range, five section switches, the size
-// line, the preview, Copy, Share.
+// `design/round-s2-coach-packet/`. Top to bottom: title, range, seven section switches (packet v2
+// adds Intake after Weigh-ins and Events last, with a read-only private-events caption under it),
+// the size line, the preview, Copy, Share.
 //
 // The sheet draws a `CoachPacketSheetPresentation` and decides nothing: which parts exist, every
 // word and whether an action is enabled are the presenter's, and the text is the model's. The
@@ -199,6 +200,22 @@ struct CoachPacketSheet: View {
                         .noopFont(.caption)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.bottom, NoopTheme.Layout.s)
+                }
+                // Packet v2: read-only, no control. Worded from the choice the previewed text was
+                // built with; the setting itself is changed in Settings.
+                if section == .events, let caption = shown.privateEventsCaption {
+                    VStack(alignment: .leading, spacing: FormKitLayout.detailGap) {
+                        Text(verbatim: caption)
+                            .noopFont(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let hint = shown.privateEventsHint {
+                            Text(verbatim: hint)
+                                .noopFont(.caption)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .padding(.bottom, NoopTheme.Layout.s)
                 }
             }
         }

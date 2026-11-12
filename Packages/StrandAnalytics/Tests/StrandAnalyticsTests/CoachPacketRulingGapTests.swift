@@ -160,15 +160,15 @@ final class CoachPacketRulingGapTests: XCTestCase {
     }
 
     /// A17: for an invalid range "the switched-off line reports the owner's switches as usual": the
-    /// version-1 sections the owner switched off, in the fixed order of §7.2, or `none`. It is not
-    /// all five because nothing was rendered.
+    /// sections the owner switched off, in the fixed order (version 2, §7.12), or `none`. It is not
+    /// all seven because nothing was rendered.
     func testAnInvalidRangeSwitchedOffLineReportsTheOwnersSwitches() {
         let cases: [(Set<CoachPacketSection>, String)] = [
             (F.allSections, "switched-off: none"),
-            ([.activity, .weighIns, .trends], "switched-off: scorecard, recovery-sleep"),
-            ([.scorecard, .weighIns, .recoverySleep, .trends], "switched-off: activity"),
-            ([.recoverySleep], "switched-off: scorecard, weigh-ins, trends, activity"),
-            ([], "switched-off: scorecard, weigh-ins, recovery-sleep, trends, activity"),
+            ([.activity, .weighIns, .trends], "switched-off: scorecard, intake, recovery-sleep, events"),
+            ([.scorecard, .weighIns, .intake, .recoverySleep, .trends, .events], "switched-off: activity"),
+            ([.recoverySleep], "switched-off: scorecard, weigh-ins, intake, trends, activity, events"),
+            ([], "switched-off: scorecard, weigh-ins, intake, recovery-sleep, trends, activity, events"),
         ]
         for (start, end) in invalidRanges {
             for (sections, expected) in cases {

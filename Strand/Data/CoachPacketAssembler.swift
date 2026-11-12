@@ -19,6 +19,10 @@ struct CoachPacketDocument: Equatable {
     /// True when the gathered input holds no daily row, no step day and no workout in the range,
     /// no body reading and no weekly weigh-in point.
     let nothingMeasured: Bool
+    /// Packet v2: the private-events choice the text was built with, read once in this assembly.
+    /// Nil when the events feature is off in the app or the Events section is switched off. The
+    /// sheet's caption is worded from this value and never from a second read of the setting.
+    var privateEventsIncluded: Bool? = nil
 }
 
 enum CoachPacketOutcome: Equatable {
@@ -40,6 +44,8 @@ struct CoachPacketAssembler {
     private let effortScale: () -> EffortScale
     private let identifiers: () -> [String]?
     private let intake: IntakeProvider? // Stage 3: the protein days' funnel; nil is the live one
+    /// Packet v2: the events store; nil is the app's shared one.
+    private let events: PersonalEventStore?
     private let storeReadable: @MainActor () async -> Bool
 
     /// `identifiers` is read once per `assemble()`, at scan time. Nil means the list of known
@@ -53,8 +59,10 @@ struct CoachPacketAssembler {
          effortScale: @escaping () -> EffortScale,
          identifiers: @escaping () -> [String]?,
          intake: IntakeProvider? = nil, // Stage 3: nil is IntakeProvider.live(repository:)
+         events: PersonalEventStore? = nil, // Packet v2: nil is PersonalEventStore.shared
          storeReadable: (@MainActor () async -> Bool)? = nil) {
         self.intake = intake // Stage 3
+        self.events = events
         self.repository = repository
         self.provider = provider
         self.scorecardSettings = scorecardSettings
@@ -72,6 +80,9 @@ struct CoachPacketAssembler {
         let generatedAt: Date
         let rangeDays: Int
         let nothingMeasured: Bool
+        let privateEventsIncluded: Bool?
+        /// The raw labels and notes behind the events rows, for the scan before the cut (ruling A20).
+        let eventFreeText: [String]
     }
 
     /// The renderer's input for this moment, or nil when the store could not be read.
@@ -85,11 +96,13 @@ struct CoachPacketAssembler {
     func assemble() async -> CoachPacketOutcome {
         guard let gathered = await gather() else { return .unavailable }
         let text = CoachPacket.render(gathered.input)
-        let findings = CoachPacket.scan(gathered.input, rendered: text, identifiers: identifiers())
+        let findings = CoachPacket.scan(gathered.input, rendered: text, identifiers: identifiers(),
+                                        freeText: gathered.eventFreeText)
         guard findings.isEmpty else { return .blocked(findings: findings.count) }
         return .ready(CoachPacketDocument(text: text, byteCount: text.utf8.count, generatedAt: gathered.generatedAt,
                                           rangeDays: gathered.rangeDays, sections: gathered.input.sections,
-                                          nothingMeasured: gathered.nothingMeasured))
+                                          nothingMeasured: gathered.nothingMeasured,
+                                          privateEventsIncluded: gathered.privateEventsIncluded))
     }
 
     private func gather() async -> Gathered? {
@@ -101,6 +114,14 @@ struct CoachPacketAssembler {
         let sections = settings.sections
         let strainFactor = effortScale() == .whoop ? UnitFormatter.effortScaleFactor : 1.0
         let scorecardEnabled = scorecardSettings.isEnabled
+        // Packet v2: whether each new feature is on, and the private-events choice, read once here.
+        // A section the owner switched off reads nothing for it.
+        let intakeProvider = intake ?? .live(repository: repository) // Stage 3: the one provider
+        let intakeEnabled = sections.contains(.intake) && intakeProvider.settings.isEnabled
+        let eventStore = events ?? .shared
+        let eventsEnabled = sections.contains(.events) && eventStore.isEnabled
+        let includeSensitive = eventsEnabled ? eventStore.packetIncludesSensitive : false
+        let storedEvents = eventsEnabled ? eventStore.events : []
 
         let days = LocalDayWindows(timeZone: zone)
         let today = days.dayKey(for: instant)
@@ -126,7 +147,7 @@ struct CoachPacketAssembler {
         if scorecardEnabled {
             let evaluation = await CutScorecardInputBuilder(repository: repository, provider: provider,
                                                             settings: scorecardSettings,
-                                                            intake: intake ?? .live(repository: repository), // Stage 3
+                                                            intake: intakeProvider, // Stage 3
                                                             timeZone: { zone })
                 .evaluation(today: today)
             let phase = evaluation.input.phase.map {
@@ -156,16 +177,43 @@ struct CoachPacketAssembler {
                 distanceKm: row.distanceM.map { $0 / 1000 })
         }.filter { inRange($0.day) }
 
+        // Packet v2, intake: the provider's resolved days, filtered to the range. The packet reads no
+        // intake store and names no intake key.
+        let intakeSection: CoachPacketIntake
+        if intakeEnabled {
+            await intakeProvider.refresh()
+            intakeSection = .days(intakeProvider.series().filter { inRange($0.day) }.map(Self.intakeDay))
+        } else {
+            intakeSection = .switchedOff
+        }
+
+        // Packet v2, events: stage 5's rows for the one range of this assembly, and the raw text
+        // behind them for the scan.
+        let eventsSection: CoachPacketEvents
+        var eventFreeText: [String] = []
+        if eventsEnabled {
+            eventsSection = .rows(PersonalEvents.packetLines(events: storedEvents, firstDay: start, lastDay: today,
+                                                             includeSensitive: includeSensitive))
+            let listed = PersonalEvents.events(overlapping: start, today,
+                                               in: PersonalEvents.visible(storedEvents, includeSensitive: includeSensitive))
+            eventFreeText = listed.flatMap { [$0.label, $0.note].compactMap { $0 } }
+        } else {
+            eventsSection = .switchedOff
+        }
+
         let input = CoachPacketInput(
             generatedAt: Self.generatedAt(instant, today: today, in: zone),
             rangeStartDay: start, rangeEndDay: today, sections: sections, days: rows,
             strainFactor: strainFactor, scorecard: scorecard, body: body,
             hrvBaseline: Self.baseline(baselines?.hrv), restingHrBaseline: Self.baseline(baselines?.restingHR),
-            steps: steps, workouts: workouts)
+            steps: steps, workouts: workouts, intake: intakeSection, events: eventsSection)
         guard await storeReadable() else { return nil }
 
+        // Ruling A26: an intake amount the packet prints is a measurement; an event is not.
         let nothingMeasured = rows.isEmpty && steps.isEmpty && workouts.isEmpty && body.isEmpty && !hasWeeklyPoint
-        return Gathered(input: input, generatedAt: instant, rangeDays: rangeDays, nothingMeasured: nothingMeasured)
+            && !CoachPacket.printsIntakeAmount(input)
+        return Gathered(input: input, generatedAt: instant, rangeDays: rangeDays, nothingMeasured: nothingMeasured,
+                        privateEventsIncluded: eventsEnabled ? includeSensitive : nil, eventFreeText: eventFreeText)
     }
 
     // MARK: - Mapping onto the packet's closed tokens
@@ -192,6 +240,28 @@ struct CoachPacketAssembler {
         guard let state else { return nil }
         return CoachPacketBaseline(center: state.baseline, typical: ChargeTypicalBand.range(state),
                                    status: state.status.rawValue, nights: state.nValid)
+    }
+
+    /// One resolved intake day under the packet's own source token: the one source both values came
+    /// from, or `mixed` when protein and energy came from two different sources.
+    private static func intakeDay(_ day: ResolvedIntakeDay) -> CoachPacketIntakeDay {
+        let sources = [day.protein?.source, day.energy?.source].compactMap { $0 }
+        let source: CoachPacketIntakeSource?
+        if let first = sources.first {
+            source = sources.allSatisfy { $0 == first } ? intakeSource(first) : .mixed
+        } else {
+            source = nil
+        }
+        return CoachPacketIntakeDay(day: day.day, proteinGrams: day.protein?.value, energyKcal: day.energy?.value,
+                                    source: source)
+    }
+
+    private static func intakeSource(_ source: IntakeSource) -> CoachPacketIntakeSource {
+        switch source {
+        case .appleHealth: return .appleHealth
+        case .quickAdd: return .quickAdd
+        case .nutritionCsv: return .nutritionFile
+        }
     }
 
     private static func stepSource(_ point: ResolvedMetricPoint) -> CoachPacketStepSource {

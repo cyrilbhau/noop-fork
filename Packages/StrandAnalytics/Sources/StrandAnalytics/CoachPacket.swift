@@ -13,15 +13,18 @@ import WhoopStore
 
 // MARK: - Input types
 
-/// A section of the packet. The raw value is the id printed in the header.
+/// A section of the packet. The raw value is the id printed in the header. The declaration order
+/// is the fixed order of the packet (version 2, §7.12).
 public enum CoachPacketSection: String, CaseIterable, Equatable, Sendable {
     case scorecard
     case weighIns = "weigh-ins"
+    case intake
     case recoverySleep = "recovery-sleep"
     case trends
     case activity
+    case events
 
-    /// Whether the section is on when the owner has never chosen. True for all five.
+    /// Whether the section is on when the owner has never chosen. True for all seven.
     public var isOnByDefault: Bool { true }
 
     /// The heading line of the section (§7.12 G-1).
@@ -29,9 +32,11 @@ public enum CoachPacketSection: String, CaseIterable, Equatable, Sendable {
         switch self {
         case .scorecard: return "== SCORECARD =="
         case .weighIns: return "== WEIGH-INS =="
+        case .intake: return "== INTAKE =="
         case .recoverySleep: return "== RECOVERY AND SLEEP =="
         case .trends: return "== TRENDS =="
         case .activity: return "== ACTIVITY =="
+        case .events: return "== EVENTS =="
         }
     }
 }
@@ -149,6 +154,42 @@ public struct CoachPacketWorkout: Equatable, Sendable {
     }
 }
 
+/// The events section's input: stage 5's rows, or the feature switched off in the app.
+public enum CoachPacketEvents: Equatable, Sendable {
+    /// The events feature is off in the app.
+    case switchedOff
+    /// Exactly what `PersonalEvents.packetLines` returned.
+    case rows([String])
+}
+
+/// Where one day's intake came from. A closed set: no stored source id is ever printed. `mixed`:
+/// the day's protein and energy came from two different sources.
+public enum CoachPacketIntakeSource: String, Equatable, Sendable {
+    case appleHealth = "apple-health", quickAdd = "quick-add", nutritionFile = "nutrition-file", mixed
+}
+
+/// One day's logged protein and energy.
+public struct CoachPacketIntakeDay: Equatable, Sendable {
+    public let day: String
+    public let proteinGrams: Double?
+    public let energyKcal: Double?
+    public let source: CoachPacketIntakeSource?
+
+    public init(day: String, proteinGrams: Double?, energyKcal: Double?, source: CoachPacketIntakeSource?) {
+        self.day = day
+        self.proteinGrams = proteinGrams
+        self.energyKcal = energyKcal
+        self.source = source
+    }
+}
+
+/// The intake section's input: the resolved days, or the feature switched off in the app.
+public enum CoachPacketIntake: Equatable, Sendable {
+    /// The intake feature is off in the app.
+    case switchedOff
+    case days([CoachPacketIntakeDay])
+}
+
 /// Everything one packet is rendered from.
 public struct CoachPacketInput: Equatable {
     // SPEC-NOTE: §6.2 lists this type as `Sendable` and allows dropping it when `DailyMetric` cannot
@@ -170,12 +211,15 @@ public struct CoachPacketInput: Equatable {
     public let restingHrBaseline: CoachPacketBaseline?
     public let steps: [CoachPacketStepDay]
     public let workouts: [CoachPacketWorkout]
+    public let intake: CoachPacketIntake
+    public let events: CoachPacketEvents
 
     public init(generatedAt: String, rangeStartDay: String, rangeEndDay: String,
                 sections: Set<CoachPacketSection>, days: [DailyMetric], strainFactor: Double,
                 scorecard: CoachPacketScorecard, body: [CoachPacketBodyReading],
                 hrvBaseline: CoachPacketBaseline?, restingHrBaseline: CoachPacketBaseline?,
-                steps: [CoachPacketStepDay], workouts: [CoachPacketWorkout]) {
+                steps: [CoachPacketStepDay], workouts: [CoachPacketWorkout],
+                intake: CoachPacketIntake, events: CoachPacketEvents) {
         self.generatedAt = generatedAt
         self.rangeStartDay = rangeStartDay
         self.rangeEndDay = rangeEndDay
@@ -188,6 +232,8 @@ public struct CoachPacketInput: Equatable {
         self.restingHrBaseline = restingHrBaseline
         self.steps = steps
         self.workouts = workouts
+        self.intake = intake
+        self.events = events
     }
 }
 
@@ -196,7 +242,7 @@ public struct CoachPacketInput: Equatable {
 /// The packet renderer, its limits, and the privacy scan that decides whether a text may leave.
 public enum CoachPacket {
     public static let formatName = "NOOP-COACH-PACKET"
-    public static let formatVersion = 1
+    public static let formatVersion = 2
     /// The most weekly weigh-in rows printed.
     public static let weeklyRowLimit = 8
     /// The most workout rows printed.
@@ -206,8 +252,13 @@ public enum CoachPacket {
 
     /// The fixed part of the size budget, in UTF-8 bytes.
     static let budgetBaseBytes = 8000
-    /// The per-day part of the size budget, in UTF-8 bytes.
-    static let budgetBytesPerDay = 220
+    /// The per-day part of the size budget, in UTF-8 bytes: version 1's 220 and an intake row of
+    /// five-digit amounts, 70 with its line break. Like a step count, a larger amount is printed in
+    /// full rather than dropped (ruling A25); a packet it widens past the budget is reported as over
+    /// budget, never shortened by turning a value into absence.
+    static let budgetBytesPerDay = 290
+    /// The longest events row printed, in UTF-8 bytes: stage 5's widest row with its line break.
+    static let eventRowByteLimit = 141
     /// The trailing window of the trends section's second mean, in calendar days.
     static let recentWindowDays = 7
     /// The shortest identifier the privacy scan searches for, in characters.
@@ -235,14 +286,17 @@ public enum CoachPacket {
         return blocks.map { $0.joined(separator: "\n") }.joined(separator: "\n\n") + "\n"
     }
 
-    /// The size the packet must stay under, in UTF-8 bytes: 8000 + 220 × rangeDays.
+    /// The size the packet must stay under, in UTF-8 bytes:
+    /// 8000 + 290 × rangeDays + `PersonalEvents.packetByteAllowance` (version 2, ruling A5).
     public static func byteBudget(rangeDays: Int) -> Int {
-        // SPEC-NOTE: §7.10 gives the formula for a range of 7, 14 or 28 days. A negative count is
+        // SPEC-NOTE: §7.12 gives the formula for a range of 7, 14 or 28 days. A negative count is
         // read as zero days and an overflowing product saturates, so the function is total.
         let (perDay, overflowed) = budgetBytesPerDay.multipliedReportingOverflow(by: max(0, rangeDays))
         guard !overflowed else { return Int.max }
         let (total, overflowedSum) = budgetBaseBytes.addingReportingOverflow(perDay)
-        return overflowedSum ? Int.max : total
+        guard !overflowedSum else { return Int.max }
+        let (withEvents, overflowedEvents) = total.addingReportingOverflow(PersonalEvents.packetByteAllowance)
+        return overflowedEvents ? Int.max : withEvents
     }
 
     /// Every calendar day from `start` to `end` inclusive, ascending; empty when either key is
@@ -310,14 +364,17 @@ public enum CoachPacket {
     }
 
     /// What the assembler's scan finds (ruling A20): the rendered text and, each on its own, every
-    /// string of `freeText(of:)` before it is sanitised and cut. A workout the row limit leaves out
-    /// can therefore block the packet, which is the fail-closed direction. `identifiers` nil means
-    /// the list of known identifiers could not be read; that is a finding, never an empty list.
-    /// A description found more than once is listed once.
-    public static func scan(_ input: CoachPacketInput, rendered text: String, identifiers: [String]?) -> [String] {
+    /// string of `freeText(of:)` and of `freeText` before it is sanitised and cut. `freeText` is what
+    /// the assembler gathered beside the input: the raw labels and notes behind the events rows,
+    /// which the input carries only as rows already cut. A workout the row limit leaves out can
+    /// therefore block the packet, which is the fail-closed direction. `identifiers` nil means the
+    /// list of known identifiers could not be read; that is a finding, never an empty list. A
+    /// description found more than once is listed once.
+    public static func scan(_ input: CoachPacketInput, rendered text: String, identifiers: [String]?,
+                            freeText extra: [String] = []) -> [String] {
         guard let identifiers else { return [unreadableIdentifiersFinding] }
         var findings: [String] = []
-        for source in [text] + freeText(of: input) {
+        for source in [text] + freeText(of: input) + extra {
             for finding in privacyViolations(in: source, identifiers: identifiers) where !findings.contains(finding) {
                 findings.append(finding)
             }
@@ -548,8 +605,9 @@ public enum CoachPacket {
             rangeLine,
             "sections: " + (included.isEmpty ? "none" : included.joined(separator: ", ")),
             "switched-off: " + (off.isEmpty ? "none" : off.joined(separator: ", ")),
-            "not-recorded-by-app: intake, events",
-            "units: kg, cm, hours (h), ms, bpm, steps, kcal, km; dates are YYYY-MM-DD in the phone's time zone",
+            // Version 2: both sections exist, so the app names nothing it does not hold.
+            "not-recorded-by-app: none",
+            "units: kg, cm, g, hours (h), ms, bpm, steps, kcal, km; dates are YYYY-MM-DD in the phone's time zone",
             "missing: \"\(dash)\" means NOT MEASURED, never zero",
         ]
     }
@@ -558,8 +616,9 @@ public enum CoachPacket {
         [
             "== NOTES ==",
             "measured: weight and waist as entered, heart rate, HRV and resting heart rate from the strap, steps marked apple-health or strap.",
-            "estimated by the app: recovery and strain scores (not WHOOP's scores), sleep duration and stages, steps marked strap-estimate, calories, the projection date.",
-            "the app cannot know: food intake, lifting loads beyond imported sessions, anything on a day the strap was not worn, how the owner feels.",
+            "estimated by the app: recovery and strain scores (not WHOOP's scores), sleep duration and stages, steps marked strap-estimate, workout calories, the projection date.",
+            "logged by the owner: intake (protein and energy) and events; a day with no intake value was not logged, which is not zero.",
+            "the app cannot know: food intake the owner did not log, lifting loads beyond imported sessions, anything on a day the strap was not worn, how the owner feels.",
             "the verdict is the owner's own rule applied to the owner's own numbers; the app changed nothing and makes no medical claim.",
             "end of \(formatName) v\(formatVersion)",
         ]
@@ -570,9 +629,11 @@ public enum CoachPacket {
         switch section {
         case .scorecard: return scorecardLines(input.scorecard)
         case .weighIns: return weighInLines(input)
+        case .intake: return intakeLines(input.intake, range)
         case .recoverySleep: return recoverySleepLines(input, range)
         case .trends: return trendLines(input, range)
         case .activity: return stepLines(input, range) + workoutLines(input, range)
+        case .events: return eventLines(input.events)
         }
     }
 
@@ -761,6 +822,111 @@ public enum CoachPacket {
         else { return "current \(label): \(dash)" }
         let day = reading.day.map { ", \($0)" } ?? ""
         return "current \(label): \(fixed(value, 1)) \(unit) (\(reading.source.rawValue)\(day))"
+    }
+
+    // MARK: - Intake (§7.12)
+
+    /// The lead line of the intake section.
+    static let intakeLead = "per day, oldest first, as the owner logged it; "
+        + "the source is \"mixed\" when protein and energy came from different sources:"
+
+    /// Whether the rendered packet prints at least one intake amount (ruling A26: an intake value is
+    /// a measurement, so the sheet does not say nothing was measured). False while the Intake section
+    /// is not selected or the feature is off. Read from the same rows `render` prints.
+    public static func printsIntakeAmount(_ input: CoachPacketInput) -> Bool {
+        guard input.sections.contains(.intake), let first = CanonicalDay.number(input.rangeStartDay) else {
+            return false
+        }
+        let keys = dayKeys(from: input.rangeStartDay, to: input.rangeEndDay)
+        guard !keys.isEmpty else { return false }
+        let rows = intakeRows(input.intake, PacketRange(firstNumber: first, keys: keys)) ?? []
+        return rows.contains { $0.protein != nil || $0.energy != nil }
+    }
+
+    /// One printed intake row per day of the range; nil while the feature is off in the app.
+    private static func intakeRows(_ intake: CoachPacketIntake, _ range: PacketRange)
+        -> [(key: String, protein: Int?, energy: Int?, source: CoachPacketIntakeSource?)]? {
+        guard case let .days(days) = intake else { return nil }
+        // Two entries for one day: the last wins, as for days and steps.
+        var byDay: [Int: CoachPacketIntakeDay] = [:]
+        for day in days {
+            if let number = range.number(of: day.day) { byDay[number] = day }
+        }
+        return range.keys.enumerated().map { offset, key in
+            let day = byDay[range.firstNumber + offset]
+            return (key: key, protein: day.flatMap { intakeAmount($0.proteinGrams) },
+                    energy: day.flatMap { intakeAmount($0.energyKcal) }, source: day?.source)
+        }
+    }
+
+    private static func intakeLines(_ intake: CoachPacketIntake, _ range: PacketRange) -> [String] {
+        guard let rows = intakeRows(intake, range) else {
+            return ["not available: intake is switched off in the app"]
+        }
+        var lines = [intakeLead]
+        for row in rows {
+            var line = "  \(row.key): protein \(row.protein.map { "\($0) g" } ?? dash), "
+                + "energy \(row.energy.map { "\($0) kcal" } ?? dash)"
+            // The source says where a printed value came from, so a day with none prints no source.
+            if row.protein != nil || row.energy != nil, let source = row.source { line += " [\(source.rawValue)]" }
+            lines.append(line)
+        }
+        return lines
+    }
+
+    /// A logged amount as a whole number, or nil when it is no number at all: not finite or above
+    /// rule F1's limit, or below zero. Ruling A25: the packet adds no limit of its own, so every
+    /// amount the app accepted, and a day's sum past the store's per-entry limit, is printed.
+    private static func intakeAmount(_ value: Double?) -> Int? {
+        nonNegative(value).map(rounded)
+    }
+
+    // MARK: - Events (§7.12)
+
+    /// The renderer prints the rows stage 5 returned and adds nothing to them. It treats them as text
+    /// it did not write: a row that is not the lead line, the "none listed" row or a two-space row is
+    /// dropped, and a longer row is cut, so `render` stays total and the budget true by construction.
+    private static func eventLines(_ events: CoachPacketEvents) -> [String] {
+        guard case let .rows(rows) = events else {
+            return ["not available: events is switched off in the app"]
+        }
+        var lines: [String] = []
+        var indented = 0
+        for row in rows {
+            // SPEC-NOTE: a row with a control character (a line break, a tab) would break the line
+            // grammar of §7.12 G-2, so it is malformed and dropped like a row without the indent.
+            guard !row.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) else { continue }
+            if row == PersonalEvents.packetIntroRow || row == PersonalEvents.packetNoneListedRow {
+                lines.append(row)
+            } else if row.hasPrefix(PersonalEvents.packetRowIndent) {
+                // A row that is only its indent, or ends in spaces, would print a trailing space.
+                let kept = cut(row, toBytes: eventRowByteLimit)
+                guard kept.count > PersonalEvents.packetRowIndent.count else { continue }
+                // SPEC-NOTE: §7.12 bounds each row, not their number. Stage 5 returns at most the
+                // "earlier" row and twelve event rows, so at most that many indented rows are kept and
+                // the allowance covers the section for any input.
+                guard indented < PersonalEvents.packetRowLimit + 1 else { continue }
+                indented += 1
+                lines.append(kept)
+            }
+        }
+        // SPEC-NOTE: G-6 says an empty list in words. Rows that leave nothing are worded as stage 5
+        // words an empty listing; stage 5 itself never returns none.
+        return lines.isEmpty ? [PersonalEvents.packetNoneListedRow] : lines
+    }
+
+    /// `text` cut at a character boundary to at most `limit` UTF-8 bytes, without a trailing space.
+    private static func cut(_ text: String, toBytes limit: Int) -> String {
+        var kept = ""
+        var bytes = 0
+        for character in text {
+            let width = character.utf8.count
+            guard bytes + width <= limit else { break }
+            kept.append(character)
+            bytes += width
+        }
+        while kept.hasSuffix(" ") { kept.removeLast() }
+        return kept
     }
 
     // MARK: - Recovery and sleep (§7.5)

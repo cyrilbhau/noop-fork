@@ -58,8 +58,8 @@ enum CoachPacketFixture {
         "2031-03-15", "2031-03-16",
     ]
 
-    static let allSections: Set<CoachPacketSection> = [.scorecard, .weighIns, .recoverySleep, .trends,
-                                                       .activity]
+    /// Every section of version 2 (packet v2, §7.12).
+    static let allSections: Set<CoachPacketSection> = Set(CoachPacketSection.allCases)
 
     // MARK: - Daily rows (§13.2)
 
@@ -281,13 +281,18 @@ enum CoachPacketFixture {
         var restingHrBaseline: CoachPacketBaseline? = CoachPacketFixture.restingHrBaseline
         var steps = CoachPacketFixture.steps
         var workouts = CoachPacketFixture.workouts
+        /// Packet v2: the Fixture Person logs no intake in the fixture range (stage 1 §13.2).
+        var intake = CoachPacketIntake.days(CoachPacketV2Fixture.intakeSeries)
+        /// Packet v2: stage 5's rows for the fixture range, private events left out.
+        var events = CoachPacketV2Fixture.eventRows(from: CoachPacketFixture.rangeStart,
+                                                    to: CoachPacketFixture.rangeEnd)
 
         var input: CoachPacketInput {
             CoachPacketInput(generatedAt: generatedAt, rangeStartDay: rangeStartDay,
                              rangeEndDay: rangeEndDay, sections: sections, days: days,
                              strainFactor: strainFactor, scorecard: scorecard, body: body,
                              hrvBaseline: hrvBaseline, restingHrBaseline: restingHrBaseline,
-                             steps: steps, workouts: workouts)
+                             steps: steps, workouts: workouts, intake: intake, events: events)
         }
 
         /// The packet text for this draft.
@@ -313,6 +318,8 @@ enum CoachPacketFixture {
         draft.restingHrBaseline = nil
         draft.steps = []
         draft.workouts = []
+        draft.intake = .days([])
+        draft.events = CoachPacketV2Fixture.eventRows([], from: rangeStart, to: rangeEnd)
         return draft
     }
 

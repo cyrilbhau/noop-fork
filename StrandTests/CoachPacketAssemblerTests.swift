@@ -127,7 +127,7 @@ final class CoachPacketAssemblerTests: XCTestCase {
         XCTAssertEqual(document.generatedAt, fixed)
         XCTAssertEqual(document.rangeDays, 14)
         let lines = CoachPacketText.lines(document.text)
-        XCTAssertEqual(lines.first, "NOOP-COACH-PACKET v1")
+        XCTAssertEqual(lines.first, "NOOP-COACH-PACKET v2")
         XCTAssertEqual(lines.dropFirst().first, "generated: 2031-03-16T07:42:10+01:00")
         XCTAssertEqual(lines.dropFirst(2).first,
                        "range: 2031-03-03..2031-03-16 (14 days; the last day is today and is partial)")
@@ -209,14 +209,14 @@ final class CoachPacketAssemblerTests: XCTestCase {
         h.packetSettings.setSection(.trends, on: false)
         h.packetSettings.rangeDays = 7
         built = try await input(h.assembler())
-        XCTAssertEqual(built.sections, [.scorecard, .weighIns, .recoverySleep])
+        XCTAssertEqual(built.sections, [.scorecard, .weighIns, .intake, .recoverySleep, .events])
         XCTAssertEqual([built.rangeStartDay, built.rangeEndDay], [h.clock.day(-6), h.today])
 
         let document = try await h.document()
         XCTAssertEqual(document.rangeDays, 7)
-        XCTAssertEqual(document.sections, [.scorecard, .weighIns, .recoverySleep])
+        XCTAssertEqual(document.sections, [.scorecard, .weighIns, .intake, .recoverySleep, .events])
         XCTAssertEqual(CoachPacketText.line(document.text, startingWith: "sections: "),
-                       "sections: scorecard, weigh-ins, recovery-sleep")
+                       "sections: scorecard, weigh-ins, intake, recovery-sleep, events")
         XCTAssertEqual(CoachPacketText.line(document.text, startingWith: "switched-off: "), "switched-off: trends, activity")
         XCTAssertFalse(document.text.contains("== ACTIVITY =="))
         XCTAssertFalse(document.text.contains("== TRENDS =="))
@@ -574,7 +574,8 @@ final class CoachPacketAssemblerTests: XCTestCase {
             let document = try await h.document()
             XCTAssertEqual(document.byteCount, document.text.utf8.count)
             XCTAssertLessThanOrEqual(document.byteCount, CoachPacket.byteBudget(rangeDays: days), "\(days) days")
-            XCTAssertEqual(CoachPacket.byteBudget(rangeDays: days), 8_000 + 220 * days)
+            // Packet v2 (ruling A5).
+            XCTAssertEqual(CoachPacket.byteBudget(rangeDays: days), 8_000 + 290 * days + PersonalEvents.packetByteAllowance)
         }
     }
 
@@ -585,7 +586,7 @@ final class CoachPacketAssemblerTests: XCTestCase {
         let document = try await h.document(assembler)
         XCTAssertEqual(document.text, CoachPacket.render(built), "the text is the renderer's, for the one input")
         XCTAssertEqual(document.generatedAt, h.clock.now)
-        XCTAssertTrue(document.text.hasSuffix("end of NOOP-COACH-PACKET v1\n"))
+        XCTAssertTrue(document.text.hasSuffix("end of NOOP-COACH-PACKET v2\n"))
         XCTAssertFalse(document.text.hasSuffix("\n\n"))
     }
 

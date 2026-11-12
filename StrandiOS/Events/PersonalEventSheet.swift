@@ -12,6 +12,8 @@ struct PersonalEventSheet: View {
     /// Edit only: the owner asked to delete this event. The list asks once and deletes.
     let onDelete: ((String) -> Void)?
     @Environment(\.dismiss) private var dismiss
+    /// Packet v2 (stage 5 §9.6): the coach packet's flag, for the sentence under the Private switch.
+    @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
 
     init(model: PersonalEventSheetModel, onDelete: ((String) -> Void)? = nil) {
         _model = StateObject(wrappedValue: model)
@@ -33,6 +35,9 @@ struct PersonalEventSheet: View {
                     noteCard
                     privateCard
                     footnote(Text("Private events show as \"Private event\" outside this screen."))
+                    if coachPacketFlag.isEnabled {
+                        footnote(Text("Private events stay out of the coach packet unless you include them in Settings."))
+                    }
                     if let editing = model.editing, let onDelete {
                         Button(role: .destructive) { onDelete(editing.id) } label: {
                             Label { Text("Delete") } icon: { Image(systemName: "trash") }

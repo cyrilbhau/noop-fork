@@ -152,12 +152,12 @@ final class CoachPacketTests: XCTestCase {
 
     func testConstantsAndSectionIdsAreTheSpecifiedOnes() {
         XCTAssertEqual(CoachPacket.formatName, "NOOP-COACH-PACKET")
-        XCTAssertEqual(CoachPacket.formatVersion, 1)
+        XCTAssertEqual(CoachPacket.formatVersion, 2, "packet v2 (§7.12)")
         XCTAssertEqual(CoachPacket.weeklyRowLimit, 8)
         XCTAssertEqual(CoachPacket.workoutRowLimit, 20)
         XCTAssertEqual(CoachPacket.freeTextByteLimit, 48)
         XCTAssertEqual(CoachPacketSection.allCases.map(\.rawValue),
-                       ["scorecard", "weigh-ins", "recovery-sleep", "trends", "activity"])
+                       ["scorecard", "weigh-ins", "intake", "recovery-sleep", "trends", "activity", "events"])
         for section in CoachPacketSection.allCases {
             XCTAssertTrue(section.isOnByDefault, section.rawValue)
         }
@@ -178,7 +178,7 @@ final class CoachPacketTests: XCTestCase {
     // MARK: - Goldens
 
     func testFullFixtureMatchesGoldenG1() {
-        XCTAssertEqual(G.g1.utf8.count, 6221, "the golden must be §7.9 byte for byte")
+        XCTAssertEqual(G.g1.utf8.count, 7_173, "G1 regenerated once as version 2 (§7.12)")
         assertSameText(F.full.text, G.g1)
     }
 
@@ -227,18 +227,18 @@ final class CoachPacketTests: XCTestCase {
         assertSameText(text, G.g1(withSectionsOff: Set(G.sectionOrder.map(\.id))))
         XCTAssertEqual(only("sections: ", in: text), "sections: none")
         XCTAssertEqual(only("switched-off: ", in: text),
-                       "switched-off: scorecard, weigh-ins, recovery-sleep, trends, activity")
+                       "switched-off: scorecard, weigh-ins, intake, recovery-sleep, trends, activity, events")
         XCTAssertEqual(headings(text), ["== NOTES =="])
-        XCTAssertEqual(F.lines(text).count, 8 + 1 + 6)
+        XCTAssertEqual(F.lines(text).count, 8 + 1 + 7)
     }
 
     func testTwoSectionsOffAreListedInTheFixedOrder() {
         var draft = F.full
         draft.sections = [.activity, .weighIns, .trends]
         let text = draft.text
-        assertSameText(text, G.g1(withSectionsOff: ["scorecard", "recovery-sleep"]))
+        assertSameText(text, G.g1(withSectionsOff: ["scorecard", "intake", "recovery-sleep", "events"]))
         XCTAssertEqual(only("sections: ", in: text), "sections: weigh-ins, trends, activity")
-        XCTAssertEqual(only("switched-off: ", in: text), "switched-off: scorecard, recovery-sleep")
+        XCTAssertEqual(only("switched-off: ", in: text), "switched-off: scorecard, intake, recovery-sleep, events")
     }
 
     func testNoDataAtAllMatchesGoldenG2() {
@@ -250,13 +250,13 @@ final class CoachPacketTests: XCTestCase {
     func testHeaderIsExactlyTheEightLines() {
         let lines = F.lines(F.full.text)
         XCTAssertEqual(Array(lines.prefix(9)), [
-            "NOOP-COACH-PACKET v1",
+            "NOOP-COACH-PACKET v2",
             "generated: 2031-03-16T07:42:10+01:00",
             "range: 2031-03-03..2031-03-16 (14 days; the last day is today and is partial)",
-            "sections: scorecard, weigh-ins, recovery-sleep, trends, activity",
+            "sections: scorecard, weigh-ins, intake, recovery-sleep, trends, activity, events",
             "switched-off: none",
-            "not-recorded-by-app: intake, events",
-            "units: kg, cm, hours (h), ms, bpm, steps, kcal, km; dates are YYYY-MM-DD in the phone's time zone",
+            "not-recorded-by-app: none",
+            "units: kg, cm, g, hours (h), ms, bpm, steps, kcal, km; dates are YYYY-MM-DD in the phone's time zone",
             "missing: \"—\" means NOT MEASURED, never zero",
             "",
         ])
@@ -480,16 +480,16 @@ final class CoachPacketTests: XCTestCase {
             ("2031-3-3", "2031-03-16"), ("2031-03-03", "garbage"), ("2031-03-16", "2031-03-15"),
             ("", ""), ("2031-02-30", "2031-03-16"), (" 2031-03-03", "2031-03-16"),
         ]
-        let notes = G.blocks(G.g1)[6]
+        let notes = G.blocks(G.g1)[8]
         for (start, end) in cases {
             var draft = F.full
             draft.rangeStartDay = start
             draft.rangeEndDay = end
             let text = draft.text
             let lines = F.lines(text)
-            XCTAssertEqual(lines.count, 8 + 1 + 6, "\(start)..\(end)")
-            guard lines.count == 15 else { continue }
-            XCTAssertEqual(lines[0], "NOOP-COACH-PACKET v1")
+            XCTAssertEqual(lines.count, 8 + 1 + 7, "\(start)..\(end)")
+            guard lines.count == 16 else { continue }
+            XCTAssertEqual(lines[0], "NOOP-COACH-PACKET v2")
             XCTAssertEqual(lines[1], "generated: 2031-03-16T07:42:10+01:00")
             XCTAssertEqual(lines[2], "range: invalid")
             // SPEC-AMBIGUITY: §6.2 says "the header with `range: invalid`, no sections, and the notes"
@@ -497,13 +497,13 @@ final class CoachPacketTests: XCTestCase {
             // pinned here.
             XCTAssertTrue(lines[3].hasPrefix("sections: "), lines[3])
             XCTAssertTrue(lines[4].hasPrefix("switched-off: "), lines[4])
-            XCTAssertEqual(lines[5], "not-recorded-by-app: intake, events")
+            XCTAssertEqual(lines[5], "not-recorded-by-app: none")
             XCTAssertEqual(lines[6], F.lines(G.g1)[6])
             XCTAssertEqual(lines[7], F.lines(G.g1)[7])
             XCTAssertEqual(lines[8], "")
             XCTAssertEqual(lines[9...].joined(separator: "\n"), notes)
             XCTAssertEqual(headings(text), ["== NOTES =="])
-            XCTAssertTrue(text.hasSuffix("end of NOOP-COACH-PACKET v1\n"))
+            XCTAssertTrue(text.hasSuffix("end of NOOP-COACH-PACKET v2\n"))
         }
     }
 
@@ -522,9 +522,9 @@ final class CoachPacketTests: XCTestCase {
         // Every other section is G1's.
         let blocks = G.blocks(text)
         let golden = G.blocks(G.g1)
-        XCTAssertEqual(blocks.count, 7)
-        guard blocks.count == 7 else { return }
-        for index in [0, 3, 4, 5, 6] {
+        XCTAssertEqual(blocks.count, 9)
+        guard blocks.count == 9 else { return }
+        for index in [0, 3, 4, 5, 6, 7, 8] {
             XCTAssertEqual(blocks[index], golden[index], "block \(index)")
         }
     }
@@ -1474,6 +1474,8 @@ final class CoachPacketTests: XCTestCase {
             copy.restingHrBaseline = draft.restingHrBaseline
             copy.steps = draft.steps
             copy.workouts = draft.workouts
+            copy.intake = draft.intake
+            copy.events = draft.events
             XCTAssertEqual(copy.input, draft.input)
             XCTAssertEqual(Data(CoachPacket.render(copy.input).utf8), Data(first.utf8))
         }
@@ -1639,8 +1641,8 @@ final class CoachPacketTests: XCTestCase {
             draft.workouts = [F.workout("2031-03-08", 9, 30, "hiking", .manual, min: 1e19, hr: 120,
                                         kcal: .greatestFiniteMagnitude, km: 1e19)]
             let text = draft.text
-            XCTAssertEqual(F.lines(text).first, "NOOP-COACH-PACKET v1", "\(value)")
-            XCTAssertTrue(text.hasSuffix("end of NOOP-COACH-PACKET v1\n"), "\(value)")
+            XCTAssertEqual(F.lines(text).first, "NOOP-COACH-PACKET v2", "\(value)")
+            XCTAssertTrue(text.hasSuffix("end of NOOP-COACH-PACKET v2\n"), "\(value)")
             XCTAssertEqual(headings(text), headings(G.g1), "\(value)")
         }
     }
@@ -1669,10 +1671,10 @@ final class CoachPacketTests: XCTestCase {
 
     func testFirstAndLastLinesCarryTheVersion() {
         let first = "\(CoachPacket.formatName) v\(CoachPacket.formatVersion)"
-        XCTAssertEqual(first, "NOOP-COACH-PACKET v1")
+        XCTAssertEqual(first, "NOOP-COACH-PACKET v2")
         for (name, text) in grammarSamples {
-            XCTAssertEqual(F.lines(text).first, "NOOP-COACH-PACKET v1", name)
-            XCTAssertEqual(F.lines(text).last, "end of NOOP-COACH-PACKET v1", name)
+            XCTAssertEqual(F.lines(text).first, "NOOP-COACH-PACKET v2", name)
+            XCTAssertEqual(F.lines(text).last, "end of NOOP-COACH-PACKET v2", name)
         }
     }
 
@@ -1692,7 +1694,7 @@ final class CoachPacketTests: XCTestCase {
             }
         }
         // Every subset of sections keeps the fixed order.
-        for mask in 0..<32 {
+        for mask in 0..<(1 << CoachPacketSection.allCases.count) {
             var sections = Set<CoachPacketSection>()
             var expected: [String] = []
             for (bit, section) in CoachPacketSection.allCases.enumerated() where mask & (1 << bit) != 0 {
@@ -1727,23 +1729,11 @@ final class CoachPacketTests: XCTestCase {
         }
     }
 
-    func testIntakeAndEventsNeverAppearAsSections() {
-        for (name, text) in grammarSamples {
-            XCTAssertFalse(text.contains("== INTAKE =="), name)
-            XCTAssertFalse(text.contains("== EVENTS =="), name)
-            XCTAssertEqual(F.line(5, of: text), "not-recorded-by-app: intake, events", name)
-            XCTAssertFalse(only("sections: ", in: text).contains("intake"), name)
-            XCTAssertFalse(only("sections: ", in: text).contains("events"), name)
-            XCTAssertFalse(only("switched-off: ", in: text).contains("intake"), name)
-            XCTAssertFalse(only("switched-off: ", in: text).contains("events"), name)
-        }
-        XCTAssertNil(CoachPacketSection(rawValue: "intake"))
-        XCTAssertNil(CoachPacketSection(rawValue: "events"))
-        XCTAssertEqual(CoachPacketSection.allCases.count, 5)
-    }
+    // `testIntakeAndEventsNeverAppearAsSections` is replaced by packet v2 (§7.12, "Tests") with
+    // `testVersionTwoNamesNothingAsNotRecorded` and the two feature-off tests in CoachPacketV2Tests.
 
     func testNotesAreConstantAndMakeNoMedicalClaim() {
-        let notes = G.blocks(G.g1)[6]
+        let notes = G.blocks(G.g1)[8]
         for (name, text) in grammarSamples {
             XCTAssertEqual(G.blocks(text).last, notes, name)
         }
@@ -1754,11 +1744,12 @@ final class CoachPacketTests: XCTestCase {
     // MARK: - Size budget
 
     func testFullFixtureIsWithinTheBudget() {
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 7), 9_540)
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 14), 11_080)
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 28), 14_160)
-        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 1), 8_220)
-        XCTAssertEqual(F.full.text.utf8.count, 6_221)
+        // Version 2 (ruling A5): 8000 + 290 × days + the events allowance of 2,000.
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 7), 12_030)
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 14), 14_060)
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 28), 18_120)
+        XCTAssertEqual(CoachPacket.byteBudget(rangeDays: 1), 10_290)
+        XCTAssertEqual(F.full.text.utf8.count, 7_173)
         XCTAssertLessThanOrEqual(F.full.text.utf8.count, CoachPacket.byteBudget(rangeDays: 14))
         XCTAssertLessThanOrEqual(F.empty.text.utf8.count, CoachPacket.byteBudget(rangeDays: 14))
     }
@@ -1913,8 +1904,8 @@ final class CoachPacketTests: XCTestCase {
             let count = CoachPacket.dayKeys(from: draft.rangeStartDay, to: draft.rangeEndDay).count
             XCTAssertEqual(text, CoachPacket.render(draft.input), "round \(round)")
             XCTAssertLessThanOrEqual(text.utf8.count, CoachPacket.byteBudget(rangeDays: count), "round \(round)")
-            XCTAssertEqual(lines.first, "NOOP-COACH-PACKET v1", "round \(round)")
-            XCTAssertEqual(lines.last, "end of NOOP-COACH-PACKET v1", "round \(round)")
+            XCTAssertEqual(lines.first, "NOOP-COACH-PACKET v2", "round \(round)")
+            XCTAssertEqual(lines.last, "end of NOOP-COACH-PACKET v2", "round \(round)")
             XCTAssertTrue(text.hasSuffix("\n") && !text.hasSuffix("\n\n"), "round \(round)")
             XCTAssertFalse(text.contains("\t") || text.contains("\r") || text.contains("\n\n\n"),
                            "round \(round)")
