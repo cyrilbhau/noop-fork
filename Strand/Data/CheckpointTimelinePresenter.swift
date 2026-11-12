@@ -67,6 +67,16 @@ struct CheckpointTimelinePresentation: Equatable {
     var aheadTitle: String
 }
 
+/// The checkpoint sheet's messages for one draft (§10.8).
+struct CheckpointSheetMessages: Equatable {
+    /// Under the main fields: why the title cannot be saved.
+    var titleText: String?
+    /// Under the waypoint weight or the target date's phase: the caption or why it cannot be saved.
+    var fieldText: String?
+    /// The "Edit phase" link beside a waypoint at or beyond the target.
+    var showsEditPhase = false
+}
+
 enum CheckpointTimelinePresenter {
     static var title: String { String(localized: "Timeline") }
 
@@ -159,6 +169,53 @@ enum CheckpointTimelinePresenter {
         case .targetDateNotAfterPhaseStart: return String(localized: "Choose a date after the phase starts")
         case .phaseAlreadyHasTargetDate: return String(localized: "This phase already has a target date")
         }
+    }
+
+    /// Every message the checkpoint sheet shows for a draft (§10.8), so the sheet decides nothing.
+    /// The title's message is chosen for every category, a waypoint included; "Enter a title." waits
+    /// until a title has been typed on a new checkpoint. The field's message is the first issue the
+    /// store finds other than the title's, so a waypoint at or beyond the target says so before a
+    /// title exists.
+    static func sheetMessages(issue: CheckpointIssue?, checkpoint: StoredCheckpoint, weightText: String,
+                              isEditing: Bool, phases: [CutScorecardStoredPhase], unitSystem: UnitSystem,
+                              locale: Locale) -> CheckpointSheetMessages {
+        var shown = CheckpointSheetMessages()
+        switch issue {
+        case .titleTooLong:
+            shown.titleText = sheetIssueText(.titleTooLong, checkpoint: checkpoint, phases: phases,
+                                             unitSystem: unitSystem, locale: locale)
+        case .emptyTitle where isEditing || !checkpoint.title.isEmpty:
+            shown.titleText = sheetIssueText(.emptyTitle, checkpoint: checkpoint, phases: phases,
+                                             unitSystem: unitSystem, locale: locale)
+        default:
+            break
+        }
+        var titled = checkpoint
+        titled.title = "-"
+        let fieldIssue = issue == .emptyTitle || issue == .titleTooLong
+            ? CheckpointTimelineSettings.issue(titled, others: [], phases: phases)
+            : issue
+        let fieldText = { (i: CheckpointIssue?) in
+            sheetIssueText(i, checkpoint: checkpoint, phases: phases, unitSystem: unitSystem, locale: locale)
+        }
+        switch checkpoint.category {
+        case .weightWaypoint:
+            if fieldIssue == .waypointAtOrBeyondTarget, let text = fieldText(fieldIssue) {
+                shown.fieldText = text
+                shown.showsEditPhase = true
+            } else if fieldIssue == .weightMissing || fieldIssue == .weightOutOfRange, !weightText.isEmpty {
+                shown.fieldText = fieldText(fieldIssue)
+            } else {
+                shown.fieldText = waypointCaption
+            }
+        case .targetDate:
+            // `fieldIssue` is checked against no other checkpoint; a duplicate target date is the
+            // store's own issue, found once the title is valid.
+            shown.fieldText = fieldText(fieldIssue)
+        default:
+            break
+        }
+        return shown
     }
 
     /// "Target 94.0 kg" for the phase a target date belongs to, read-only in the sheet.

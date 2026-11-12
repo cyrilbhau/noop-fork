@@ -5,8 +5,8 @@ import StrandDesign
 // Stage 6 (checkpoint timeline), specification §10.8 "Checkpoint sheet", frames H1 to H12 of
 // `design/round-s6-niggle-timeline/`. Title, category, date, "approximate", "done" (only on or before
 // today), a waypoint weight in the display unit (never a target), or the phase a target date belongs
-// to with that phase's own target shown read-only. Every message is the store's `CheckpointIssue`
-// for the draft, worded by the presenter; the sheet decides nothing.
+// to with that phase's own target shown read-only. Every message is chosen and worded by
+// `CheckpointTimelinePresenter.sheetMessages` from the store's `CheckpointIssue` for the draft.
 
 struct CheckpointSheet: View {
     @ObservedObject var model: CheckpointTimelineModel
@@ -58,8 +58,9 @@ struct CheckpointSheet: View {
 
     var body: some View {
         let issue = issue
-        let message = CheckpointTimelinePresenter.sheetIssueText(issue, checkpoint: candidate, phases: model.phasesForChecks,
-                                                                 unitSystem: unitSystem, locale: AppLanguage.activeLocale)
+        let messages = CheckpointTimelinePresenter.sheetMessages(
+            issue: issue, checkpoint: candidate, weightText: draft.weightText, isEditing: editing != nil,
+            phases: model.phasesForChecks, unitSystem: unitSystem, locale: AppLanguage.activeLocale)
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: NoopTheme.Layout.l) {
@@ -91,12 +92,9 @@ struct CheckpointSheet: View {
                             }
                         }
                     }
-                    if draft.checkpoint.category == .weightWaypoint { waypointFields(issue: issue, message: message) }
-                    if draft.checkpoint.category == .targetDate { targetDateFields(message: message) }
-                    if draft.checkpoint.category != .weightWaypoint && draft.checkpoint.category != .targetDate,
-                       let message, !draft.checkpoint.title.isEmpty || editing != nil {
-                        ScorecardFootnote(text: message)
-                    }
+                    if let title = messages.titleText { ScorecardFootnote(text: title) }
+                    if draft.checkpoint.category == .weightWaypoint { waypointFields(messages) }
+                    if draft.checkpoint.category == .targetDate { targetDateFields(message: messages.fieldText) }
                     if editing != nil {
                         Button(role: .destructive) { asksDelete = true } label: {
                             Label { Text(verbatim: NiggleLogPresenter.deleteTitle) } icon: { Image(systemName: "trash") }
@@ -140,7 +138,7 @@ struct CheckpointSheet: View {
     }
 
     @ViewBuilder
-    private func waypointFields(issue: CheckpointIssue?, message: String?) -> some View {
+    private func waypointFields(_ messages: CheckpointSheetMessages) -> some View {
         Stage6FormCard {
             FormKitControlRow("Weight", showsDivider: false) {
                 HStack(spacing: NoopTheme.Layout.xs) {
@@ -152,14 +150,8 @@ struct CheckpointSheet: View {
                 }
             }
         }
-        if issue == .waypointAtOrBeyondTarget, let message {
-            ScorecardFootnote(text: message)
-            editPhaseLink
-        } else if let message, issue == .weightMissing || issue == .weightOutOfRange, !draft.weightText.isEmpty {
-            ScorecardFootnote(text: message)
-        } else {
-            ScorecardFootnote(text: CheckpointTimelinePresenter.waypointCaption)
-        }
+        if let text = messages.fieldText { ScorecardFootnote(text: text) }
+        if messages.showsEditPhase { editPhaseLink }
     }
 
     @ViewBuilder
