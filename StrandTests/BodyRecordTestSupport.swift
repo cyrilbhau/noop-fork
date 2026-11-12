@@ -567,6 +567,7 @@ struct BodyRecordHarness {
                                     now: { nowBox.value })
         let builder = CutScorecardInputBuilder(repository: repo, provider: provider,
                                                settings: CutScorecardSettings(defaults: defaults),
+                                               intake: IntakeProvider(repository: repo, settings: IntakeSettings(defaults: defaults)),
                                                timeZone: { zoneBox.value })
         return BodyRecordHarness(store: store, repo: repo, defaults: defaults, provider: provider,
                                  records: records, weighIns: weighIns, builder: builder, zone: zoneBox,
