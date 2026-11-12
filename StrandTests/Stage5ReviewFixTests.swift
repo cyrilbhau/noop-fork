@@ -97,4 +97,45 @@ final class Stage5ReviewFixTests: XCTestCase {
             }
         }
     }
+
+    // MARK: 2. Today follows the calendar
+
+    private final class Clock {
+        var now: Date
+        var zone: TimeZone
+        init(_ now: Date, _ zone: TimeZone) { self.now = now; self.zone = zone }
+    }
+
+    func testHealthRowFollowsTheDayChangeWithoutAWrite() async throws {
+        let oneDay = Fx.make(Fx.id(1), .travel, "2031-03-12", "2031-03-12", createdAt: 1000)
+        let clock = Clock(Fx.noon("2031-03-12"), Fx.utc)
+        let center = NotificationCenter()
+        let store = PersonalEventStore(defaults: try suite([oneDay]), now: { clock.now })
+        let model = PersonalEventsModel(store: store, now: { clock.now }, timeZone: { clock.zone },
+                                        locale: Fx.british, notificationCenter: center)
+        XCTAssertNotNil(model.presentation.healthRowValue)
+        XCTAssertEqual(model.presentation.now.map(\.id), [oneDay.id])
+
+        clock.now = Fx.noon("2031-03-13")
+        center.post(name: .NSCalendarDayChanged, object: nil)
+        await eventually({ model.presentation.healthRowValue == nil }, "the row stops counting yesterday's event")
+        XCTAssertEqual(model.presentation.earlier.map(\.id), [oneDay.id])
+        XCTAssertEqual(model.presentation.now, [])
+    }
+
+    func testTheScreenFollowsAZoneChangeWithoutAWrite() async throws {
+        // 2031-03-12 at 20:00 UTC is already 2031-03-13 in Kolkata.
+        let tomorrow = Fx.make(Fx.id(2), .deload, "2031-03-13", "2031-03-14", createdAt: 1001)
+        let clock = Clock(Fx.instant("2031-03-12T20:00:00Z"), Fx.utc)
+        let center = NotificationCenter()
+        let store = PersonalEventStore(defaults: try suite([tomorrow]), now: { clock.now })
+        let model = PersonalEventsModel(store: store, now: { clock.now }, timeZone: { clock.zone },
+                                        locale: Fx.british, notificationCenter: center)
+        XCTAssertEqual(model.presentation.upcoming.map(\.id), [tomorrow.id])
+
+        clock.zone = try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
+        center.post(name: .NSSystemTimeZoneDidChange, object: nil)
+        await eventually({ model.presentation.now.map(\.id) == [tomorrow.id] }, "the event has started here")
+        XCTAssertEqual(model.presentation.upcoming, [])
+    }
 }

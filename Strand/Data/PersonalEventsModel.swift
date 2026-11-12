@@ -36,7 +36,8 @@ final class PersonalEventsModel: ObservableObject {
     private var revisionObserver: AnyCancellable?
 
     init(store: PersonalEventStore? = nil, now: @escaping () -> Date = Date.init,
-         timeZone: @escaping () -> TimeZone = { .current }, locale: Locale = AppLanguage.activeLocale) {
+         timeZone: @escaping () -> TimeZone = { .current }, locale: Locale = AppLanguage.activeLocale,
+         notificationCenter: NotificationCenter = .default) {
         self.store = store ?? .shared
         self.now = now
         self.timeZone = timeZone
@@ -44,7 +45,14 @@ final class PersonalEventsModel: ObservableObject {
         presentation = PersonalEventsPresentation(state: .empty, now: [], upcoming: [], earlier: [],
                                                   unreadableEntriesText: nil, healthRowValue: nil)
         reload()
-        revisionObserver = self.store.$revision.dropFirst().sink { [weak self] _ in
+        // A change of the list or the flag, or of the local day (midnight, a new time zone): "today"
+        // is taken again on each reload. The views also reload on returning to the foreground, since
+        // the day notification is not delivered while the app is suspended.
+        revisionObserver = Publishers.Merge3(
+            self.store.$revision.dropFirst().map { _ in () },
+            notificationCenter.publisher(for: .NSCalendarDayChanged).map { _ in () },
+            notificationCenter.publisher(for: .NSSystemTimeZoneDidChange).map { _ in () }
+        ).sink { [weak self] _ in
             // After the change has been published, so the read sees it.
             Task { @MainActor [weak self] in self?.reload() }
         }

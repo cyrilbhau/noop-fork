@@ -18,6 +18,7 @@ struct PersonalEventsView: View {
     @ObservedObject private var flag = PersonalEventStore.flag
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
 
     private let store: PersonalEventStore
     /// The loading skeleton (frame L6). The model reads synchronously, so only the demo shows it.
@@ -118,6 +119,10 @@ struct PersonalEventsView: View {
         }
         .onChangeCompat(of: flag.isEnabled) { enabled in
             if !enabled { dismiss() }
+        }
+        // The day may have changed while the app was suspended; the model takes "today" again.
+        .onChangeCompat(of: scenePhase) { phase in
+            if phase == .active { model.reload() }
         }
     }
 
@@ -330,6 +335,7 @@ private struct PersonalEventRowView: View {
 struct PersonalEventsHealthRowLabel: View {
     let showsDivider: Bool
     @StateObject private var model: PersonalEventsModel
+    @Environment(\.scenePhase) private var scenePhase
 
     /// `model` is for the debug demo; the app reads the shared store.
     init(showsDivider: Bool, model: PersonalEventsModel? = nil) {
@@ -340,5 +346,9 @@ struct PersonalEventsHealthRowLabel: View {
     var body: some View {
         NoopListRow("Events", systemImage: "calendar", color: NoopTheme.textPrimary,
                     value: model.presentation.healthRowValue, showsDivider: showsDivider)
+            // The day may have changed while the app was suspended; the model takes "today" again.
+            .onChangeCompat(of: scenePhase) { phase in
+                if phase == .active { model.reload() }
+            }
     }
 }
