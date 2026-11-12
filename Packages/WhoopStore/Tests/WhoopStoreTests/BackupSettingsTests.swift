@@ -276,6 +276,80 @@ final class BackupSettingsTests: XCTestCase {
         for key in excluded { XCTAssertNil(deviceB.object(forKey: key), "\(key) must not be restored") }
     }
 
+    // MARK: - Stage 5: personal events (stage-5.md §9.4)
+
+    /// The stored list of personal events (two of them private, one unreadable entry) crosses the
+    /// backup as one String, byte for byte, under its own name. Fault F18.
+    func testPersonalEventsRoundTripAsOneString() throws {
+        let items = "[{\"createdAt\":1003,\"endDay\":\"2031-01-22\",\"id\":\"e400000000000000\",\"kind\":\"supplementChange\","
+            + "\"sensitive\":false,\"startDay\":\"2031-01-22\",\"v\":1},"
+            + "{\"createdAt\":1000,\"endDay\":\"2031-03-16\",\"id\":\"e100000000000000\",\"kind\":\"travel\","
+            + "\"note\":\"Fixture trip\",\"sensitive\":false,\"startDay\":\"2031-03-10\",\"v\":1},"
+            + "{\"createdAt\":1005,\"endDay\":\"2031-03-26\",\"id\":\"e600000000000000\",\"kind\":\"custom\","
+            + "\"label\":\"Fixture change\",\"note\":\"Fixture note\",\"sensitive\":true,\"startDay\":\"2031-03-26\",\"v\":1},"
+            + "{\"createdAt\":1100,\"id\":\"00000000000000ff\",\"kind\":\"somethingNew\",\"sensitive\":false,"
+            + "\"startDay\":\"2031-03-01\",\"v\":1}]"
+
+        XCTAssertEqual(BackupSettings.whitelist["personalEvents.items"], .string)
+        XCTAssertEqual(BackupSettings.appleDefaultsKey["personalEvents.items"], "personalEvents.items")
+
+        let data = try XCTUnwrap(BackupSettings.encode(["personalEvents.items": items]))
+        XCTAssertEqual(BackupSettings.decode(data)["personalEvents.items"] as? String, items)
+
+        let deviceA = try freshDefaults()
+        deviceA.set(items, forKey: "personalEvents.items")
+        let snap = BackupSettings.snapshot(from: deviceA)
+        XCTAssertEqual(snap["personalEvents.items"] as? String, items)
+        let deviceB = try freshDefaults()
+        BackupSettings.apply(BackupSettings.decode(try XCTUnwrap(BackupSettings.encode(snap))), to: deviceB)
+        XCTAssertEqual(deviceB.string(forKey: "personalEvents.items"), items, "the string is carried unparsed")
+
+        XCTAssertNil(BackupSettings.encode(["personalEvents.items": 1]), "a value of the wrong kind is dropped")
+        XCTAssertNil(BackupSettings.snapshot(from: try freshDefaults())["personalEvents.items"],
+                     "a never-set key is omitted, not defaulted")
+    }
+
+    /// The feature flag is per install (a `noop.*` toggle). Fault F19. Its packet twin,
+    /// `testPersonalEventsPacketSwitchIsNotExported`, is added by the packet v2 change.
+    func testPersonalEventsFlagIsNotExported() throws {
+        let key = "noop.personalEventsEnabled"
+        XCTAssertNil(BackupSettings.whitelist[key])
+        XCTAssertNil(BackupSettings.appleDefaultsKey[key])
+        XCTAssertFalse(BackupSettings.appleDefaultsKey.values.contains(key))
+        let deviceA = try freshDefaults()
+        deviceA.set(true, forKey: key)
+        XCTAssertNil(BackupSettings.snapshot(from: deviceA)[key])
+        XCTAssertNil(BackupSettings.encode([key: 1]))
+        let deviceB = try freshDefaults()
+        BackupSettings.apply([key: 1], to: deviceB)
+        XCTAssertNil(deviceB.object(forKey: key))
+    }
+
+    func testRestoreWithoutTheKeyLeavesExistingEvents() throws {
+        let existing = "[{\"createdAt\":1001,\"endDay\":\"2031-02-09\",\"id\":\"e200000000000000\",\"kind\":\"deload\","
+            + "\"sensitive\":false,\"startDay\":\"2031-02-03\",\"v\":1}]"
+        let device = try freshDefaults()
+        device.set(existing, forKey: "personalEvents.items")
+        let payload = try XCTUnwrap(BackupSettings.encode(["units.system": "metric"]))
+        BackupSettings.apply(BackupSettings.decode(payload), to: device)
+        XCTAssertEqual(device.string(forKey: "personalEvents.items"), existing)
+    }
+
+    func testRestoreWithTheKeyReplacesTheList() throws {
+        let existing = "[{\"createdAt\":1001,\"endDay\":\"2031-02-09\",\"id\":\"e200000000000000\",\"kind\":\"deload\","
+            + "\"sensitive\":false,\"startDay\":\"2031-02-03\",\"v\":1}]"
+        let incoming = "[{\"createdAt\":1000,\"endDay\":\"2031-03-16\",\"id\":\"e100000000000000\",\"kind\":\"travel\","
+            + "\"note\":\"Fixture trip\",\"sensitive\":false,\"startDay\":\"2031-03-10\",\"v\":1}]"
+        let device = try freshDefaults()
+        device.set(existing, forKey: "personalEvents.items")
+        BackupSettings.apply(BackupSettings.decode(try XCTUnwrap(BackupSettings.encode(["personalEvents.items": incoming]))),
+                             to: device)
+        XCTAssertEqual(device.string(forKey: "personalEvents.items"), incoming, "replaced, not merged")
+        // An empty list is a list: it replaces too.
+        BackupSettings.apply(["personalEvents.items": "[]"], to: device)
+        XCTAssertEqual(device.string(forKey: "personalEvents.items"), "[]")
+    }
+
     // MARK: - Suite-scoped defaults (never the test runner's real domain)
 
     private var suites: [String] = []

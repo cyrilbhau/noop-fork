@@ -23,6 +23,8 @@ struct RedesignHealthView: View {
     @ObservedObject private var scorecardFlag = CutScorecardFlag.shared
     /// The coach packet flag (stage 2 specification §10.1): its row shows only while on.
     @ObservedObject private var coachPacketFlag = CoachPacketSettings.flag
+    // Stage 5: the personal events flag (stage 5 §10.1): its row shows only while on.
+    @ObservedObject private var personalEventsFlag = PersonalEventStore.flag
     @AppStorage(UnitPrefs.temperatureKey) private var temperatureRaw = ""
     @AppStorage(NoopTheme.Keys.ambientIntensity) private var ambientIntensityRaw = AmbientIntensity.balanced.rawValue
 
@@ -484,9 +486,17 @@ struct RedesignHealthView: View {
                 if coachPacketFlag.isEnabled {
                     HealthCoachPacketRow(showsDivider: scorecardFlag.isEnabled)
                 }
+                // Stage 5: Events, the fifth entry of the one order (ruling A1), after Body record and
+                // before Niggle log. With the flag off this row is absent.
+                if personalEventsFlag.isEnabled {
+                    NavigationLink(value: RedesignRoute.personalEvents) {
+                        PersonalEventsHealthRowLabel(showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled)
+                    }
+                }
                 NavigationLink(value: MoreDestination.live) {
                     NoopListRow("Live heart rate", systemImage: "waveform.path.ecg", color: NoopTheme.heart,
-                                showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled)
+                                showsDivider: scorecardFlag.isEnabled || coachPacketFlag.isEnabled
+                                    || personalEventsFlag.isEnabled)   // Stage 5
                 }
                 NavigationLink(value: MoreDestination.explore) {
                     NoopListRow("All metrics", systemImage: "square.grid.2x2", color: NoopTheme.hrv)
