@@ -70,6 +70,13 @@ extension ScorecardDemo {
         options.without = without
         return Fixture.input(options)
     }
+
+    // Stage 6: the scorecard's own evaluation of the one Fixture Person on `today`, which the
+    // timeline demo injects into its scorecard model (stage 6 §12.8), so that demo evaluates nothing.
+    static func fixtureEvaluation(today: String) -> CutScorecardEvaluation {
+        let input = fixtureInput(today: today)
+        return (input: input, result: CutScorecard.evaluate(input))
+    }
 }
 
 // MARK: - The fixture (specification §13)
